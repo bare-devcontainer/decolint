@@ -1,0 +1,5 @@
+{
+  "id": "template-no-devcontainer",
+  "version": "1.0.0",
+  "name": "Example Template (no shipped devcontainer config)"
+}

@@ -1,0 +1,9 @@
+// Config for the e2e test: exercises every kind of severity override against the violations
+// fixture.
+{
+	"rules": {
+		"no-image-latest": "error",
+		"pin-feature-version": "off",
+		"pin-image-digest": "warn"
+	}
+}

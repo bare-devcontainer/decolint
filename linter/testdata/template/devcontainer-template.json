@@ -1,0 +1,12 @@
+{
+  "id": "template",
+  "version": "1.0.0",
+  "name": "Example Template",
+  "options": {
+    "imageVariant": {
+      "type": "string",
+      "default": "24.04",
+      "description": "Ubuntu version"
+    }
+  }
+}

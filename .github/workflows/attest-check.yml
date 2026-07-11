@@ -1,0 +1,106 @@
+name: Attestation Checks
+
+on:
+  pull_request:
+    paths:
+      - .github/workflows/attest-check.yml
+  workflow_dispatch:
+
+permissions: {}
+
+env:
+  CERT_IDENTITY_REGEXP: ^https://github\.com/bare-devcontainer/decolint/\.github/workflows/release\.yml@.*$
+  CERT_OIDC_ISSUER: https://token.actions.githubusercontent.com
+
+jobs:
+  prepare:
+    permissions:
+      contents: read
+    runs-on: ubuntu-slim
+    outputs:
+      tag: ${{ steps.latest.outputs.tag }}
+    steps:
+      - name: Resolve latest release tag
+        id: latest
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          tag=$(gh release view --json tagName -q .tagName)
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "Verifying release \`$tag\`" >> "$GITHUB_STEP_SUMMARY"
+
+  verify:
+    permissions:
+      contents: read
+    needs: prepare
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - goos: linux
+            goarch: amd64
+            ext: tar.gz
+          - goos: linux
+            goarch: arm64
+            ext: tar.gz
+          - goos: darwin
+            goarch: amd64
+            ext: tar.gz
+          - goos: darwin
+            goarch: arm64
+            ext: tar.gz
+          - goos: windows
+            goarch: amd64
+            ext: zip
+          - goos: windows
+            goarch: arm64
+            ext: zip
+    env:
+      TAG: ${{ needs.prepare.outputs.tag }}
+      CHECKSUMS_FILE: decolint_${{ needs.prepare.outputs.tag }}_checksums.txt
+      ARTIFACT: decolint_${{ needs.prepare.outputs.tag }}_${{ matrix.goos }}_${{ matrix.goarch }}.${{ matrix.ext }}
+    steps:
+      - name: Download release artifacts
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          gh release download "$TAG" \
+            --pattern "$CHECKSUMS_FILE" \
+            --pattern "$CHECKSUMS_FILE.sigstore.json" \
+            --pattern "$ARTIFACT"
+      - uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+      - name: Verify checksums file signature with cosign
+        run: |
+          cosign verify-blob \
+            --bundle "$CHECKSUMS_FILE.sigstore.json" \
+            --certificate-identity-regexp "$CERT_IDENTITY_REGEXP" \
+            --certificate-oidc-issuer "$CERT_OIDC_ISSUER" \
+            "$CHECKSUMS_FILE"
+      - name: Verify artifact checksum
+        run: sha256sum --ignore-missing -c "$CHECKSUMS_FILE"
+      - name: Verify build provenance attestation
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh attestation verify "$ARTIFACT" \
+            --repo bare-devcontainer/decolint
+
+  verify-image:
+    permissions:
+      contents: read
+      packages: read
+    needs: prepare
+    runs-on: ubuntu-slim
+    env:
+      TAG: ${{ needs.prepare.outputs.tag }}
+    steps:
+      - name: Verify image provenance attestation
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          version="${TAG#v}"
+          gh attestation verify "oci://ghcr.io/bare-devcontainer/decolint:$version" \
+            --repo bare-devcontainer/decolint

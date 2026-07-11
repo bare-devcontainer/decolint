@@ -1,0 +1,60 @@
+{
+  "name": "Go",
+  "image": "ghcr.io/bare-devcontainer/golang:1.26-trixie@sha256:9bca896a728e282d051ffac7c1a0f6b4ea6b16ce031783d62e15ccae4e17c7ff",
+  "remoteUser": "dev",
+  "init": true,
+  "remoteEnv": {
+    "VISUAL": "code --wait",
+    "EDITOR": "code --wait",
+    "GIT_EDITOR": "code --wait",
+    "GOEXPERIMENT": "jsonv2"
+  },
+  "mounts": [
+    {
+      "source": "${devcontainerId}-golang-pkg-mod",
+      "target": "/home/dev/go/pkg/mod",
+      "type": "volume"
+    },
+    {
+      "source": "${devcontainerId}-golang-build-cache",
+      "target": "/home/dev/.cache/go-build",
+      "type": "volume"
+    }
+  ],
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        // renovate: datasource=github-tags depName=anthropics/claude-code
+        "anthropic.claude-code@2.1.197",
+        // renovate: datasource=github-tags depName=editorconfig/editorconfig-vscode
+        "EditorConfig.EditorConfig@0.18.2",
+        // renovate: datasource=github-tags depName=golang/vscode-go
+        "golang.go@0.54.0"
+      ],
+      "settings": {
+        "json.schemaDownload.trustedDomains": {
+          "https://schemastore.azurewebsites.net/": true,
+          "https://raw.githubusercontent.com/microsoft/vscode/": true,
+          "https://raw.githubusercontent.com/devcontainers/spec/": true,
+          "https://www.schemastore.org/": true,
+          "https://json.schemastore.org/": true,
+          "https://json-schema.org/": true,
+          "https://developer.microsoft.com/json-schemas/": true,
+          "https://docs.renovatebot.com/": true
+        },
+        "go.toolsManagement.autoUpdate": false,
+        "go.toolsManagement.checkForUpdates": "local",
+        "[go]": {
+          "editor.defaultFormatter": "golang.go",
+          "editor.formatOnSave": true,
+          "editor.codeActionsOnSave": {
+            "source.organizeImports": "explicit"
+          }
+        },
+        "gopls": {
+          "ui.semanticTokens": true
+        }
+      }
+    }
+  }
+}

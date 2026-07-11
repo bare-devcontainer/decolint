@@ -1,0 +1,18 @@
+// decolint-ignore-file no-seccomp-unconfined
+{
+	"name": "e2e-violations",
+	"image": "ubuntu:latest",
+	"runArgs": ["--privileged"],
+	"mounts": [
+		"source=/var/run/docker.sock,target=/var/run/docker.sock,type=bind",
+		"source=/home/user/data,target=/data,type=bind"
+	],
+	"securityOpt": ["seccomp=unconfined"],
+	"capAdd": ["ALL"], // decolint-ignore-line no-cap-add-all
+	"forwardPorts": ["db:5432"],
+	"features": {
+		"ghcr.io/devcontainers/features/go": {}
+	},
+	// decolint-ignore-next-line no-app-port
+	"appPort": 3000
+}

@@ -1,0 +1,12 @@
+{
+  "id": "feature",
+  "version": "1.0.0",
+  "name": "Example Feature",
+  "options": {
+    "version": {
+      "type": "string",
+      "default": "stable",
+      "description": "Version to install"
+    }
+  }
+}

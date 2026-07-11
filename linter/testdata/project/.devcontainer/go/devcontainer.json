@@ -1,0 +1,5 @@
+{
+  "name": "project-go",
+  // decolint-ignore-next-line no-image-latest
+  "image": "golang"
+}

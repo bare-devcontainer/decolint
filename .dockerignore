@@ -1,0 +1,7 @@
+.git
+.github
+.devcontainer
+.claude
+bin
+dist
+*.md

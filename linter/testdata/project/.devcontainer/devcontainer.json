@@ -1,0 +1,5 @@
+{
+  // Main development container.
+  "name": "project",
+  "image": "ubuntu:latest"
+}

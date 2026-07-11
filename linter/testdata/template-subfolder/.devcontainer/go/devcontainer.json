@@ -1,0 +1,4 @@
+{
+  "name": "template-subfolder-go",
+  "image": "golang:1.26"
+}

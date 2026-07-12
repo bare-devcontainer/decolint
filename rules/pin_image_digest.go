@@ -21,6 +21,7 @@ var digestSuffix = regexp.MustCompile(`@[a-z0-9]+(?:[+._-][a-z0-9]+)*:[a-zA-Z0-9
 var PinImageDigest = &linter.Rule{
 	ID:          "pin-image-digest",
 	Description: `disallow an "image" property that does not pin the image by content digest (e.g. "image@sha256:...")`,
+	Category:    linter.CategoryReproducibility,
 	FileTypes:   []linter.FileType{linter.Devcontainer},
 	Paths:       []string{"/image"},
 	Check:       checkPinImageDigest,

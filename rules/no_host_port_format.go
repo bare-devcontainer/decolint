@@ -15,6 +15,7 @@ import (
 var NoHostPortFormat = &linter.Rule{
 	ID:          "no-host-port-format",
 	Description: `disallow "host:port" entries in "forwardPorts" and "portsAttributes", which GitHub Codespaces does not support`,
+	Category:    linter.CategoryCorrectness,
 	FileTypes:   []linter.FileType{linter.Devcontainer},
 	Platforms:   []linter.Platform{linter.PlatformCodespaces},
 	Paths:       []string{"/forwardPorts/*", "/portsAttributes/*"},

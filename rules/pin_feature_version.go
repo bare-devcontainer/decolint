@@ -16,6 +16,7 @@ import (
 var PinFeatureVersion = &linter.Rule{
 	ID:          "pin-feature-version",
 	Description: `disallow a Feature reference without an explicit version or with the "latest" version`,
+	Category:    linter.CategoryReproducibility,
 	FileTypes:   []linter.FileType{linter.Devcontainer},
 	Paths:       []string{"/features"},
 	Check:       checkPinFeatureVersion,

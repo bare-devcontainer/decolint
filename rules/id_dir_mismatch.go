@@ -13,6 +13,7 @@ import (
 var IDDirMismatch = &linter.Rule{
 	ID:          "id-dir-mismatch",
 	Description: `disallow a Feature's or Template's "id" that does not match the name of its containing directory`,
+	Category:    linter.CategoryCorrectness,
 	FileTypes:   []linter.FileType{linter.Feature, linter.Template},
 	Paths:       []string{"/id"},
 	Check:       checkIDDirMismatch,

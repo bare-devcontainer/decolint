@@ -14,6 +14,7 @@ import (
 var NoDockerSocketMount = &linter.Rule{
 	ID:          "no-docker-socket-mount",
 	Description: `disallow bind-mounting the host's Docker socket via a devcontainer.json's "mounts" or "runArgs", which grants the container root-equivalent control over the host`,
+	Category:    linter.CategorySecurity,
 	FileTypes:   []linter.FileType{linter.Devcontainer},
 	Paths:       []string{"/mounts/*", "/runArgs/*"},
 	Check:       checkNoDockerSocketMount,

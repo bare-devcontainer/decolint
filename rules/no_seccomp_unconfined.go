@@ -12,6 +12,7 @@ import (
 var NoSeccompUnconfined = &linter.Rule{
 	ID:          "no-seccomp-unconfined",
 	Description: `disallow disabling seccomp confinement via a devcontainer.json's or Feature's "securityOpt" property, or a "--security-opt seccomp=unconfined" entry in a devcontainer.json's "runArgs"`,
+	Category:    linter.CategorySecurity,
 	FileTypes:   []linter.FileType{linter.Devcontainer, linter.Feature},
 	Paths:       []string{"/securityOpt/*", "/runArgs"},
 	Check:       checkNoSeccompUnconfined,

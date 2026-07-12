@@ -10,6 +10,7 @@ import (
 var NoBindMount = &linter.Rule{
 	ID:          "no-bind-mount",
 	Description: `disallow "bind" type entries in "mounts", which GitHub Codespaces silently ignores except for the Docker socket`,
+	Category:    linter.CategoryCorrectness,
 	FileTypes:   []linter.FileType{linter.Devcontainer},
 	Platforms:   []linter.Platform{linter.PlatformCodespaces},
 	Paths:       []string{"/mounts/*"},

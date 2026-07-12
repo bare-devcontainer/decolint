@@ -12,6 +12,7 @@ import (
 var NoCapAddAll = &linter.Rule{
 	ID:          "no-cap-add-all",
 	Description: `disallow granting all Linux capabilities via an "ALL" entry in the "capAdd" property, or a "--cap-add=ALL" entry in a devcontainer.json's "runArgs"`,
+	Category:    linter.CategorySecurity,
 	FileTypes:   []linter.FileType{linter.Devcontainer, linter.Feature},
 	Paths:       []string{"/capAdd/*", "/runArgs"},
 	Check:       checkNoCapAddAll,

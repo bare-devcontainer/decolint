@@ -16,6 +16,7 @@ import (
 var NoSeccompOverride = &linter.Rule{
 	ID:          "no-seccomp-override",
 	Description: `disallow overriding the container runtime's default seccomp profile via a devcontainer.json's or Feature's "securityOpt" property, or a "--security-opt seccomp=..." entry in a devcontainer.json's "runArgs"`,
+	Category:    linter.CategorySecurity,
 	FileTypes:   []linter.FileType{linter.Devcontainer, linter.Feature},
 	Paths:       []string{"/securityOpt/*", "/runArgs/*"},
 	Check:       checkNoSeccompOverride,

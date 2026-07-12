@@ -10,6 +10,7 @@ import (
 var MissingContainerDef = &linter.Rule{
 	ID:          "missing-container-def",
 	Description: `disallow a devcontainer.json that defines none of "image", "build", or "dockerComposeFile"`,
+	Category:    linter.CategoryCorrectness,
 	FileTypes:   []linter.FileType{linter.Devcontainer},
 	Paths:       []string{""},
 	Check:       checkMissingContainerDef,

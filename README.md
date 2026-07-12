@@ -71,7 +71,7 @@ list.
 | `-platform` | comma-separated list of platforms to also lint against (see [Target platforms](#target-platforms)) |
 | `-format` | output format: `text` (default), `json`, or `github` (see [Output formats](#output-formats)) |
 | `-deny-warnings` | also exit non-zero on `warn`-severity findings (see [Exit codes](#exit-codes)) |
-| `-config` | path to a config file overriding rule severities (see [Config file](#config-file)) |
+| `-config` | path to a config file overriding rule and category severities (see [Config file](#config-file)) |
 | `-rules` | print the available rules |
 | `-init` | write a new `.decolint.jsonc` listing every rule at its default severity (see [Config file](#config-file)) |
 
@@ -123,14 +123,16 @@ findings. Exit codes are unaffected by `-format`.
 
 ### Config file
 
-Rule severities can be overridden per project with a JSON/JSONC config
-file. Run `decolint -init` to generate a starting `.decolint.jsonc` in
-the current directory, listing every rule at its default severity, ready
-to edit:
+Rule and category severities can be overridden per project with a
+JSON/JSONC config file. Run `decolint -init` to generate a starting
+`.decolint.jsonc` in the current directory, ready to edit:
 
 ```jsonc
 // .decolint.jsonc
 {
+  "categories": {
+    "security": "error"
+  },
   "rules": {
     "no-image-latest": "error",
     "pin-image-digest": "warn",
@@ -139,53 +141,75 @@ to edit:
 }
 ```
 
-Each entry under `rules` overrides that rule's default severity to
-`error`, `warn`, or `off` (see [Rules](#rules) for the list of rule
-IDs and their defaults); rules with no entry keep their default.
+`categories` sets the severity (`error`, `warn`, or `off`) of every
+rule in a [category](#rule-categories) at once; `rules` sets an
+individual rule's severity and takes precedence over its category.
+
+For the strictest configuration, enable every category:
+
+```jsonc
+// .decolint.jsonc
+{
+  "categories": {
+    "security": "error",
+    "reproducibility": "error",
+    "style": "error"
+  }
+}
+```
 
 decolint looks for `.decolint.jsonc`, then `.decolint.json`, in the current
 directory; the first one found is used. Pass `-config <path>` to use a
 file at a different location instead. It is an error (exit code 2) if
 `-config` points at a file that doesn't exist or fails to parse, or if
-the config references an unknown rule ID. If no `-config` flag is
-given and neither default file exists, decolint proceeds with every
-rule at its default severity.
+the config references an unknown rule ID or category name.
 
 ## Rules
 
-Each rule has a default severity, either `error` or `warn`. A rule can
-also be set to `off` to disable it entirely. Severities can be
-overridden per project with a [config file](#config-file).
+Every rule belongs to one [category](#rule-categories), which sets its
+severity unless overridden by a [config file](#config-file). A rule
+can also optionally target specific platforms (see [Target
+platforms](#target-platforms)); a rule with no target platform applies
+to all platforms.
 
-Each rule also optionally targets specific platforms (see
-[Target platforms](#target-platforms)); a rule with no target platform
-applies to all platforms.
+### Rule categories
 
-<!-- Keep this table sorted by Platform, then Severity (error, warn, off), then ID, in that priority order. -->
-| ID | Platform | Default severity | Description |
+Only `correctness` runs by default; the rest are `off` until enabled:
+
+- `correctness` (default `error`) — the configuration is invalid or
+  does not behave as written.
+- `security` (default `off`) — container runtime privileges and
+  hardening.
+- `reproducibility` (default `off`) — unpinned versions or digests
+  that make the environment change over time.
+- `style` (default `off`) — discouraged or legacy configuration that
+  still works.
+
+<!-- Keep this table sorted by Category (correctness, security, reproducibility, style), then ID, in that priority order. -->
+| ID | Category | Platform | Description |
 | --- | --- | --- | --- |
-| `id-dir-mismatch` | (all) | `error` | disallow a Feature's or Template's `id` that does not match the name of its containing directory |
-| `invalid-semver` | (all) | `error` | disallow a Feature's or Template's `version` that is not a valid semantic version |
-| `missing-build-dockerfile` | (all) | `error` | disallow a devcontainer.json `build` object that is missing `dockerfile` |
-| `missing-compose-service` | (all) | `error` | disallow a devcontainer.json that sets `dockerComposeFile` without `service` |
-| `missing-container-def` | (all) | `error` | disallow a devcontainer.json that defines none of `image`, `build`, or `dockerComposeFile` |
-| `missing-required-props` | (all) | `error` | disallow a Feature's or Template's metadata that is missing a required property (`id`, `version`, or `name`) |
-| `missing-workspace-mount-folder` | (all) | `error` | disallow a devcontainer.json using `image` or `build` that sets only one of `workspaceMount` or `workspaceFolder` |
-| `no-app-port` | (all) | `warn` | disallow the legacy `appPort` property in favor of `forwardPorts` |
-| `no-cap-add-all` | (all) | `warn` | disallow granting all Linux capabilities via an `ALL` entry in a devcontainer.json's or Feature's `capAdd` property, or a `--cap-add=ALL` entry in a devcontainer.json's `runArgs` |
-| `no-docker-socket-mount` | (all) | `warn` | disallow bind-mounting the host's Docker socket via a devcontainer.json's `mounts` or `runArgs`, which grants the container root-equivalent control over the host |
-| `no-image-latest` | (all) | `warn` | disallow container images without an explicit tag or with the `latest` tag |
-| `no-privileged-container` | (all) | `warn` | disallow running the container in privileged mode via a devcontainer.json's or Feature's `privileged` property, or a `--privileged` entry in a devcontainer.json's `runArgs` |
-| `no-seccomp-unconfined` | (all) | `warn` | disallow disabling seccomp confinement via a devcontainer.json's or Feature's `securityOpt` property, or a `--security-opt seccomp=unconfined` entry in a devcontainer.json's `runArgs` |
-| `pin-feature-version` | (all) | `warn` | disallow a Feature reference without an explicit version or with the `latest` version |
-| `no-seccomp-override` | (all) | `off` | disallow overriding the container runtime's default seccomp profile via a devcontainer.json's or Feature's `securityOpt` property, or a `--security-opt seccomp=...` entry in a devcontainer.json's `runArgs` |
-| `pin-image-digest` | (all) | `off` | disallow an `image` property that does not pin the image by content digest (e.g. `image@sha256:...`) |
-| `require-cap-drop-all` | (all) | `off` | require an `ALL` entry in a devcontainer.json's `capDrop` property, or a `--cap-drop=ALL` entry in `runArgs`, dropping every Linux capability |
-| `require-no-new-privileges` | (all) | `off` | require `no-new-privileges` to be set via a devcontainer.json's `securityOpt` property, or a `--security-opt no-new-privileges...` entry in `runArgs` |
-| `require-non-root` | (all) | `off` | require `remoteUser` or, if unset, `containerUser` to be set to a non-root user |
-| `no-host-port-format` | `codespaces` | `error` | disallow `host:port` entries in `forwardPorts` and `portsAttributes`, which GitHub Codespaces does not support |
-| `no-bind-mount` | `codespaces` | `warn` | disallow `bind` type entries in `mounts`, which GitHub Codespaces silently ignores except for the Docker socket |
-| `pin-extension-version` | `vscode`, `codespaces` | `warn` | disallow a `customizations.vscode.extensions` entry without an explicit pinned version |
+| `id-dir-mismatch` | `correctness` | (all) | disallow a Feature's or Template's `id` that does not match the name of its containing directory |
+| `invalid-semver` | `correctness` | (all) | disallow a Feature's or Template's `version` that is not a valid semantic version |
+| `missing-build-dockerfile` | `correctness` | (all) | disallow a devcontainer.json `build` object that is missing `dockerfile` |
+| `missing-compose-service` | `correctness` | (all) | disallow a devcontainer.json that sets `dockerComposeFile` without `service` |
+| `missing-container-def` | `correctness` | (all) | disallow a devcontainer.json that defines none of `image`, `build`, or `dockerComposeFile` |
+| `missing-required-props` | `correctness` | (all) | disallow a Feature's or Template's metadata that is missing a required property (`id`, `version`, or `name`) |
+| `missing-workspace-mount-folder` | `correctness` | (all) | disallow a devcontainer.json using `image` or `build` that sets only one of `workspaceMount` or `workspaceFolder` |
+| `no-bind-mount` | `correctness` | `codespaces` | disallow `bind` type entries in `mounts`, which GitHub Codespaces silently ignores except for the Docker socket |
+| `no-host-port-format` | `correctness` | `codespaces` | disallow `host:port` entries in `forwardPorts` and `portsAttributes`, which GitHub Codespaces does not support |
+| `no-cap-add-all` | `security` | (all) | disallow granting all Linux capabilities via an `ALL` entry in a devcontainer.json's or Feature's `capAdd` property, or a `--cap-add=ALL` entry in a devcontainer.json's `runArgs` |
+| `no-docker-socket-mount` | `security` | (all) | disallow bind-mounting the host's Docker socket via a devcontainer.json's `mounts` or `runArgs`, which grants the container root-equivalent control over the host |
+| `no-privileged-container` | `security` | (all) | disallow running the container in privileged mode via a devcontainer.json's or Feature's `privileged` property, or a `--privileged` entry in a devcontainer.json's `runArgs` |
+| `no-seccomp-override` | `security` | (all) | disallow overriding the container runtime's default seccomp profile via a devcontainer.json's or Feature's `securityOpt` property, or a `--security-opt seccomp=...` entry in a devcontainer.json's `runArgs` |
+| `no-seccomp-unconfined` | `security` | (all) | disallow disabling seccomp confinement via a devcontainer.json's or Feature's `securityOpt` property, or a `--security-opt seccomp=unconfined` entry in a devcontainer.json's `runArgs` |
+| `require-cap-drop-all` | `security` | (all) | require an `ALL` entry in a devcontainer.json's `capDrop` property, or a `--cap-drop=ALL` entry in `runArgs`, dropping every Linux capability |
+| `require-no-new-privileges` | `security` | (all) | require `no-new-privileges` to be set via a devcontainer.json's `securityOpt` property, or a `--security-opt no-new-privileges...` entry in `runArgs` |
+| `require-non-root` | `security` | (all) | require `remoteUser` or, if unset, `containerUser` to be set to a non-root user |
+| `no-image-latest` | `reproducibility` | (all) | disallow container images without an explicit tag or with the `latest` tag |
+| `pin-extension-version` | `reproducibility` | `vscode`, `codespaces` | disallow a `customizations.vscode.extensions` entry without an explicit pinned version |
+| `pin-feature-version` | `reproducibility` | (all) | disallow a Feature reference without an explicit version or with the `latest` version |
+| `pin-image-digest` | `reproducibility` | (all) | disallow an `image` property that does not pin the image by content digest (e.g. `image@sha256:...`) |
+| `no-app-port` | `style` | (all) | disallow the legacy `appPort` property in favor of `forwardPorts` |
 
 ## Suppressing findings
 

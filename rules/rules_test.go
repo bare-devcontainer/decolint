@@ -48,7 +48,7 @@ func TestRegisterRulesUnknownOverrides(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			l := linter.New()
-			err := rules.RegisterRules(l, tt.platforms, tt.overrides)
+			err := rules.RegisterRules(l, tt.platforms, rules.Overrides{Rules: tt.overrides})
 			if (err != nil) != tt.wantErr {
 				t.Fatalf("RegisterRules() error = %v, wantErr %v", err, tt.wantErr)
 			}
@@ -80,7 +80,7 @@ func TestRegisterRulesPlatformFilter(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			l := linter.New()
-			if err := rules.RegisterRules(l, tt.platforms, nil); err != nil {
+			if err := rules.RegisterRules(l, tt.platforms, rules.Overrides{}); err != nil {
 				t.Fatalf("RegisterRules: %v", err)
 			}
 			issues, err := l.Lint(t.Context(), "devcontainer.json", []byte(src), linter.Devcontainer)
@@ -103,7 +103,7 @@ func TestRegisterRulesDefaultOffRule(t *testing.T) {
 	const src = `{"securityOpt": ["seccomp=custom.json"]}`
 
 	l := linter.New()
-	if err := rules.RegisterRules(l, nil, nil); err != nil {
+	if err := rules.RegisterRules(l, nil, rules.Overrides{}); err != nil {
 		t.Fatalf("RegisterRules: %v", err)
 	}
 	issues, err := l.Lint(t.Context(), "devcontainer.json", []byte(src), linter.Devcontainer)
@@ -121,7 +121,7 @@ func TestRegisterRulesOverrideEnablesOffDefaultRule(t *testing.T) {
 	const src = `{"securityOpt": ["seccomp=custom.json"]}`
 
 	l := linter.New()
-	overrides := map[string]linter.Severity{"no-seccomp-override": linter.SeverityError}
+	overrides := rules.Overrides{Rules: map[string]linter.Severity{"no-seccomp-override": linter.SeverityError}}
 	if err := rules.RegisterRules(l, nil, overrides); err != nil {
 		t.Fatalf("RegisterRules: %v", err)
 	}
@@ -156,11 +156,11 @@ func TestRegisterRulesSeverityOverride(t *testing.T) {
 		want      []linter.Issue
 	}{
 		{
+			// no-image-latest is in the reproducibility category, which is off by default, so with
+			// no overrides at all the rule doesn't fire.
 			"no overrides keeps default severity",
 			nil,
-			[]linter.Issue{
-				{Path: "devcontainer.json", Line: 1, Col: 11, RuleID: "no-image-latest", Message: message, Severity: linter.SeverityWarn},
-			},
+			nil,
 		},
 		{
 			"override promotes severity",
@@ -179,7 +179,7 @@ func TestRegisterRulesSeverityOverride(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			l := linter.New()
-			if err := rules.RegisterRules(l, nil, tt.overrides); err != nil {
+			if err := rules.RegisterRules(l, nil, rules.Overrides{Rules: tt.overrides}); err != nil {
 				t.Fatalf("RegisterRules: %v", err)
 			}
 			got, err := l.Lint(t.Context(), "devcontainer.json", []byte(src), linter.Devcontainer)

@@ -10,6 +10,7 @@ import (
 var MissingComposeService = &linter.Rule{
 	ID:          "missing-compose-service",
 	Description: `disallow a devcontainer.json that sets "dockerComposeFile" without "service"`,
+	Category:    linter.CategoryCorrectness,
 	FileTypes:   []linter.FileType{linter.Devcontainer},
 	Paths:       []string{""},
 	Check:       checkMissingComposeService,

@@ -15,8 +15,8 @@ type Options struct {
 	// DenyWarnings, when set, lowers the fail threshold to linter.Warn so that warnings also cause
 	// exit code 1.
 	DenyWarnings bool
-	// Config holds the rule severity overrides resolved from the -config flag (or auto-discovered),
-	// filled in by run after parseOptions returns (see loadConfig).
+	// Config holds the category and rule severity overrides resolved from the -config flag (or
+	// auto-discovered), filled in by run after parseOptions returns (see loadConfig).
 	Config Config
 	// Platforms restricts registered rules to those targeting one of these platforms, plus any rule
 	// with no target platform. If empty, only rules with no target platform are registered.
@@ -48,7 +48,7 @@ func parseOptions(args []string, output io.Writer) (Options, string, error) {
 	fs.StringVar(&platformFlag, "platform", "", "comma-separated target platforms to include in addition to \"all\" (vscode, codespaces)")
 	fs.StringVar(&formatFlag, "format", "text", "output format: text, json, or github")
 	fs.BoolVar(&opts.Version, "version", false, "print version information and exit")
-	fs.BoolVar(&opts.ListRules, "rules", false, "print the built-in rules as a Markdown table (default and current severity, target platforms), then exit")
+	fs.BoolVar(&opts.ListRules, "rules", false, "print the built-in rules as a Markdown table (category, target platforms, current severity), then exit")
 	fs.BoolVar(&opts.Init, "init", false, "write a new .decolint.jsonc config file listing every rule at its default severity, then exit")
 	fs.Usage = func() { _ = usage(fs) }
 	if err := fs.Parse(args); err != nil {

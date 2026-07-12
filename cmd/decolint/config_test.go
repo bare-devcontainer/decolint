@@ -36,6 +36,30 @@ func TestConfigMarshalJSONToSortsRulesByID(t *testing.T) {
 	}
 }
 
+func TestConfigMarshalJSONToWithCategories(t *testing.T) {
+	t.Parallel()
+
+	cfg := Config{
+		Categories: map[string]linter.Severity{
+			"security":        linter.SeverityError,
+			"reproducibility": linter.SeverityWarn,
+		},
+		Rules: map[string]linter.Severity{"no-image-latest": linter.SeverityOff},
+	}
+
+	want := `{"categories":{"reproducibility":"warn","security":"error"},"rules":{"no-image-latest":"off"}}`
+
+	for range 5 {
+		got, err := json.Marshal(cfg)
+		if err != nil {
+			t.Fatalf("json.Marshal: %v", err)
+		}
+		if string(got) != want {
+			t.Errorf("json.Marshal(cfg) = %s, want %s", got, want)
+		}
+	}
+}
+
 func TestParseConfig(t *testing.T) {
 	t.Parallel()
 
@@ -63,7 +87,17 @@ func TestParseConfig(t *testing.T) {
 			}},
 			false,
 		},
+		{
+			"categories and rules",
+			`{"categories": {"security": "error"}, "rules": {"no-image-latest": "off"}}`,
+			Config{
+				Categories: map[string]linter.Severity{"security": linter.SeverityError},
+				Rules:      map[string]linter.Severity{"no-image-latest": linter.SeverityOff},
+			},
+			false,
+		},
 		{"invalid severity", `{"rules": {"no-image-latest": "critical"}}`, Config{}, true},
+		{"invalid category severity", `{"categories": {"security": "critical"}}`, Config{}, true},
 		{"malformed json", `{"rules": {`, Config{}, true},
 	}
 	for _, tt := range tests {

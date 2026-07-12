@@ -8,6 +8,7 @@ import "github.com/bare-devcontainer/decolint/linter"
 var NoAppPort = &linter.Rule{
 	ID:          "no-app-port",
 	Description: `disallow the legacy "appPort" property in favor of "forwardPorts"`,
+	Category:    linter.CategoryStyle,
 	FileTypes:   []linter.FileType{linter.Devcontainer},
 	Paths:       []string{"/appPort"},
 	Check:       checkNoAppPort,

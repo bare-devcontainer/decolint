@@ -18,11 +18,14 @@ make run ARGS="-format=json path/to/dir"
 
 Rules are plain Go code. Declare a
 [`linter.Rule`](linter/rule.go) value in a new file under
-[`rules/`](rules/) and register it, with its default severity, in
-[`rules.RegisterRules`](rules/rules.go).
+[`rules/`](rules/) and add it to the `builtinRuleList` slice in
+[`rules.go`](rules/rules.go).
 
 A rule declares the kinds of configuration files it applies to
 (`linter.Devcontainer`, `linter.Feature`, `linter.Template`), the
+category it belongs to (`linter.CategoryCorrectness`,
+`linter.CategorySecurity`, `linter.CategoryReproducibility`, or
+`linter.CategoryStyle`; every rule must declare exactly one), the
 target platform(s) it applies to (`linter.PlatformVSCode`,
 `linter.PlatformCodespaces`, ...; a nil or empty value means the rule
 applies to every platform), and the JSON Pointer paths it wants to
@@ -30,6 +33,12 @@ inspect. The engine traverses the syntax tree once per matching file
 and calls `Check` for every value matching one of the paths; a `*`
 segment matches any object member name or array index, and the empty
 string matches the document root.
+
+A rule's default severity is not set individually; it comes entirely
+from its category (see `categoryDefaultSeverities` in
+[`rules.go`](rules/rules.go)) — only `CategoryCorrectness` runs by
+default, at `error`. Pick the category that matches the problem the
+rule reports, not the severity you'd like it to have.
 
 ```go
 package rules
@@ -39,6 +48,7 @@ import "github.com/bare-devcontainer/decolint/linter"
 var MyRule = &linter.Rule{
 	ID:          "my-rule",
 	Description: "...",
+	Category:    linter.CategoryCorrectness,
 	FileTypes:   []linter.FileType{linter.Devcontainer},
 	Platforms:   nil, // applies to every platform
 	Paths:       []string{"/mounts/*"},

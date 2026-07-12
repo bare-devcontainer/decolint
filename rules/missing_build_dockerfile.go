@@ -10,6 +10,7 @@ import (
 var MissingBuildDockerfile = &linter.Rule{
 	ID:          "missing-build-dockerfile",
 	Description: `disallow a devcontainer.json "build" object that is missing "dockerfile"`,
+	Category:    linter.CategoryCorrectness,
 	FileTypes:   []linter.FileType{linter.Devcontainer},
 	Paths:       []string{"/build"},
 	Check:       checkMissingBuildDockerfile,

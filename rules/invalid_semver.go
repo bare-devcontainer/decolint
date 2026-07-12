@@ -14,6 +14,7 @@ import (
 var InvalidSemver = &linter.Rule{
 	ID:          "invalid-semver",
 	Description: `disallow a Feature's or Template's "version" that is not a valid semantic version`,
+	Category:    linter.CategoryCorrectness,
 	FileTypes:   []linter.FileType{linter.Feature, linter.Template},
 	Paths:       []string{"/version"},
 	Check:       checkInvalidSemver,

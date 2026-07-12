@@ -12,6 +12,7 @@ import (
 var NoPrivilegedContainer = &linter.Rule{
 	ID:          "no-privileged-container",
 	Description: `disallow running the container in privileged mode via the "privileged" property or a "--privileged" entry in "runArgs"`,
+	Category:    linter.CategorySecurity,
 	FileTypes:   []linter.FileType{linter.Devcontainer, linter.Feature},
 	Paths:       []string{"/privileged", "/runArgs/*"},
 	Check:       checkNoPrivilegedContainer,

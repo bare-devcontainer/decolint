@@ -75,6 +75,11 @@ func walk(v *hujson.Value, pointer string, segs []string, patterns []pattern, vi
 		visit(p.rule, node)
 	}
 
+	// append(segs, seg) below may share segs's backing array across sibling calls, so a later
+	// sibling can overwrite an element a previous sibling appended. This is safe only because
+	// traversal is sequential and no walk call retains segs past its own return (matches reads it
+	// synchronously via the visit callback). Parallelizing this traversal or having Node retain segs
+	// would require copying it first.
 	switch t := v.Value.(type) {
 	case *hujson.Object:
 		for i := range t.Members {

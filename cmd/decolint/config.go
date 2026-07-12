@@ -73,6 +73,15 @@ func writeSeverityMap(enc *jsontext.Encoder, m map[string]linter.Severity) error
 	return enc.WriteToken(jsontext.EndObject)
 }
 
+// mergeConfig returns cfg with any CLI-provided opts fields applied as overrides. Only Platforms
+// has a CLI equivalent (-platform); Categories and Rules are config-file only.
+func mergeConfig(opts Options, cfg Config) Config {
+	if len(opts.Platforms) > 0 {
+		cfg.Platforms = opts.Platforms
+	}
+	return cfg
+}
+
 // defaultConfigNames are the config file names discovered automatically in the current directory
 // when no explicit path is given, in precedence order (first match wins).
 var defaultConfigNames = []string{".decolint.jsonc", ".decolint.json"}

@@ -38,7 +38,7 @@ func TestParseOptionsPlatform(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			opts, _, err := parseOptions(tt.args, io.Discard)
+			opts, err := parseOptions(tt.args, io.Discard)
 			if (err != nil) != tt.wantErr {
 				t.Fatalf("parseOptions(%v) error = %v, wantErr %v", tt.args, err, tt.wantErr)
 			}
@@ -71,7 +71,7 @@ func TestParseOptionsFormat(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			opts, _, err := parseOptions(tt.args, io.Discard)
+			opts, err := parseOptions(tt.args, io.Discard)
 			if (err != nil) != tt.wantErr {
 				t.Fatalf("parseOptions(%v) error = %v, wantErr %v", tt.args, err, tt.wantErr)
 			}
@@ -98,7 +98,7 @@ func TestParseOptionsVersion(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			opts, _, err := parseOptions(tt.args, io.Discard)
+			opts, err := parseOptions(tt.args, io.Discard)
 			if err != nil {
 				t.Fatalf("parseOptions(%v): %v", tt.args, err)
 			}
@@ -122,7 +122,7 @@ func TestParseOptionsListRules(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			opts, _, err := parseOptions(tt.args, io.Discard)
+			opts, err := parseOptions(tt.args, io.Discard)
 			if err != nil {
 				t.Fatalf("parseOptions(%v): %v", tt.args, err)
 			}
@@ -146,7 +146,7 @@ func TestParseOptionsInit(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			opts, _, err := parseOptions(tt.args, io.Discard)
+			opts, err := parseOptions(tt.args, io.Discard)
 			if err != nil {
 				t.Fatalf("parseOptions(%v): %v", tt.args, err)
 			}
@@ -171,12 +171,12 @@ func TestParseOptionsConfig(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			_, configPath, err := parseOptions(tt.args, io.Discard)
+			opts, err := parseOptions(tt.args, io.Discard)
 			if err != nil {
 				t.Fatalf("parseOptions(%v): %v", tt.args, err)
 			}
-			if configPath != tt.want {
-				t.Errorf("configPath = %q, want %q", configPath, tt.want)
+			if opts.ConfigPath != tt.want {
+				t.Errorf("ConfigPath = %q, want %q", opts.ConfigPath, tt.want)
 			}
 		})
 	}
@@ -185,7 +185,7 @@ func TestParseOptionsConfig(t *testing.T) {
 func TestParseOptionsPaths(t *testing.T) {
 	t.Parallel()
 
-	opts, _, err := parseOptions(nil, io.Discard)
+	opts, err := parseOptions(nil, io.Discard)
 	if err != nil {
 		t.Fatalf("parseOptions: %v", err)
 	}

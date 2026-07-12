@@ -111,12 +111,13 @@ var severityEmoji = map[linter.Severity]string{
 }
 
 // rulesTableHeader is the header row of the -rules Markdown table.
-var rulesTableHeader = []string{"Rule ID", "Category", "Platform", "Default", "Current"}
+var rulesTableHeader = []string{"Rule ID", "Category", "Platform", "Current"}
 
 // listRules writes a Markdown table of the built-in rules to output: each rule's ID, category,
-// target platforms (or "(all)"), default severity, and current severity (the default overridden by
-// cfg, if any), in the order rules.Builtin returns them. Columns are padded to a common width so
-// the raw Markdown source itself reads as an aligned table.
+// target platforms (or "(all)"), and current severity (its category's default, overridden by cfg
+// if any), in the order rules.Builtin returns them. A rule's default severity is not listed
+// separately since it is uniform within a category; see the README's Rule categories section.
+// Columns are padded to a common width so the raw Markdown source itself reads as an aligned table.
 func listRules(output io.Writer, cfg Config) error {
 	overrides := rules.Overrides{Categories: cfg.Categories, Rules: cfg.Rules}
 	rows := [][]string{rulesTableHeader}
@@ -133,7 +134,6 @@ func listRules(output io.Writer, cfg Config) error {
 			reg.Rule.ID,
 			reg.Rule.Category.String(),
 			platforms,
-			severityEmoji[reg.DefaultSeverity],
 			severityEmoji[overrides.SeverityFor(reg)],
 		})
 	}

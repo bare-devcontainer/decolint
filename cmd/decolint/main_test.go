@@ -200,13 +200,13 @@ func TestRun_Flags(t *testing.T) {
 		}
 
 		row := mdTableRow(t, out, "no-image-latest")
-		wantRow := []string{"no-image-latest", "reproducibility", "(all)", severityEmoji[linter.SeverityOff], severityEmoji[linter.SeverityOff]}
+		wantRow := []string{"no-image-latest", "reproducibility", "(all)", severityEmoji[linter.SeverityOff]}
 		if diff := cmp.Diff(wantRow, row); diff != "" {
 			t.Errorf("no-image-latest row mismatch (-want +got):\n%s", diff)
 		}
 
 		row = mdTableRow(t, out, "no-bind-mount")
-		wantRow = []string{"no-bind-mount", "correctness", "codespaces", severityEmoji[linter.SeverityError], severityEmoji[linter.SeverityError]}
+		wantRow = []string{"no-bind-mount", "correctness", "codespaces", severityEmoji[linter.SeverityError]}
 		if diff := cmp.Diff(wantRow, row); diff != "" {
 			t.Errorf("no-bind-mount row mismatch (-want +got):\n%s", diff)
 		}
@@ -227,21 +227,21 @@ func TestRun_Flags(t *testing.T) {
 
 		// no-image-latest: default off, overridden to error.
 		row := mdTableRow(t, out, "no-image-latest")
-		wantRow := []string{"no-image-latest", "reproducibility", "(all)", severityEmoji[linter.SeverityOff], severityEmoji[linter.SeverityError]}
+		wantRow := []string{"no-image-latest", "reproducibility", "(all)", severityEmoji[linter.SeverityError]}
 		if diff := cmp.Diff(wantRow, row); diff != "" {
 			t.Errorf("no-image-latest row mismatch (-want +got):\n%s", diff)
 		}
 
 		// pin-feature-version: default off, overridden to off (a no-op, but still an explicit entry).
 		row = mdTableRow(t, out, "pin-feature-version")
-		wantRow = []string{"pin-feature-version", "reproducibility", "(all)", severityEmoji[linter.SeverityOff], severityEmoji[linter.SeverityOff]}
+		wantRow = []string{"pin-feature-version", "reproducibility", "(all)", severityEmoji[linter.SeverityOff]}
 		if diff := cmp.Diff(wantRow, row); diff != "" {
 			t.Errorf("pin-feature-version row mismatch (-want +got):\n%s", diff)
 		}
 
 		// pin-image-digest: default off, overridden to warn.
 		row = mdTableRow(t, out, "pin-image-digest")
-		wantRow = []string{"pin-image-digest", "reproducibility", "(all)", severityEmoji[linter.SeverityOff], severityEmoji[linter.SeverityWarn]}
+		wantRow = []string{"pin-image-digest", "reproducibility", "(all)", severityEmoji[linter.SeverityWarn]}
 		if diff := cmp.Diff(wantRow, row); diff != "" {
 			t.Errorf("pin-image-digest row mismatch (-want +got):\n%s", diff)
 		}
@@ -262,7 +262,7 @@ func TestRun_Flags(t *testing.T) {
 
 		// no-seccomp-override: default off, raised to error by its security category.
 		row := mdTableRow(t, out, "no-seccomp-override")
-		wantRow := []string{"no-seccomp-override", "security", "(all)", severityEmoji[linter.SeverityOff], severityEmoji[linter.SeverityError]}
+		wantRow := []string{"no-seccomp-override", "security", "(all)", severityEmoji[linter.SeverityError]}
 		if diff := cmp.Diff(wantRow, row); diff != "" {
 			t.Errorf("no-seccomp-override row mismatch (-want +got):\n%s", diff)
 		}
@@ -270,7 +270,7 @@ func TestRun_Flags(t *testing.T) {
 		// no-privileged-container: default off, the per-rule override (warn) wins over its category
 		// override (error).
 		row = mdTableRow(t, out, "no-privileged-container")
-		wantRow = []string{"no-privileged-container", "security", "(all)", severityEmoji[linter.SeverityOff], severityEmoji[linter.SeverityWarn]}
+		wantRow = []string{"no-privileged-container", "security", "(all)", severityEmoji[linter.SeverityWarn]}
 		if diff := cmp.Diff(wantRow, row); diff != "" {
 			t.Errorf("no-privileged-container row mismatch (-want +got):\n%s", diff)
 		}

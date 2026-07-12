@@ -123,12 +123,9 @@ findings. Exit codes are unaffected by `-format`.
 
 ### Config file
 
-A rule's default severity comes entirely from the [category](#rule-categories)
-it belongs to: only `correctness` is enabled (`error`) by default,
-and every other category is `off`. Rule and category severities can be
-overridden per project with a JSON/JSONC config file. Run `decolint
--init` to generate a starting `.decolint.jsonc` in the current
-directory, listing every rule at its default severity, ready to edit:
+Rule and category severities can be overridden per project with a
+JSON/JSONC config file. Run `decolint -init` to generate a starting
+`.decolint.jsonc` in the current directory, ready to edit:
 
 ```jsonc
 // .decolint.jsonc
@@ -144,28 +141,19 @@ directory, listing every rule at its default severity, ready to edit:
 }
 ```
 
-Each entry under `categories` overrides the severity of every rule in
-that category at once (see [Rule categories](#rule-categories) for the
-four categories), including categories that are `off` by default, so
-`"security": "error"` enables the whole set of security hardening
-rules in one line.
+`categories` sets the severity (`error`, `warn`, or `off`) of every
+rule in a [category](#rule-categories) at once; `rules` sets an
+individual rule's severity and takes precedence over its category.
 
-Each entry under `rules` overrides that individual rule's severity to
-`error`, `warn`, or `off` (see [Rules](#rules) for the list of rule
-IDs and their categories), taking precedence over any `categories`
-entry for that rule's category, so individual rules can still be tuned
-or opted out.
-
-For the strictest configuration — every version pinned and every
-security rule enforced, on top of the default correctness checks — set
-both hardening-oriented categories to `error`:
+For the strictest configuration, enable every category:
 
 ```jsonc
 // .decolint.jsonc
 {
   "categories": {
+    "security": "error",
     "reproducibility": "error",
-    "security": "error"
+    "style": "error"
   }
 }
 ```
@@ -174,34 +162,28 @@ decolint looks for `.decolint.jsonc`, then `.decolint.json`, in the current
 directory; the first one found is used. Pass `-config <path>` to use a
 file at a different location instead. It is an error (exit code 2) if
 `-config` points at a file that doesn't exist or fails to parse, or if
-the config references an unknown rule ID or category name. If no
-`-config` flag is given and neither default file exists, decolint
-proceeds with every rule at its category's default severity.
+the config references an unknown rule ID or category name.
 
 ## Rules
 
-Every rule belongs to exactly one [category](#rule-categories), which
-determines both its severity (`error`, `warn`, or `off`) and whether
-it runs by default; there is no per-rule default independent of a
-rule's category. Severities can be overridden per project with a
-[config file](#config-file), either per rule or per category.
-
-Each rule also optionally targets specific platforms (see
-[Target platforms](#target-platforms)); a rule with no target platform
-applies to all platforms.
+Every rule belongs to one [category](#rule-categories), which sets its
+severity unless overridden by a [config file](#config-file). A rule
+can also optionally target specific platforms (see [Target
+platforms](#target-platforms)); a rule with no target platform applies
+to all platforms.
 
 ### Rule categories
 
-- `correctness` — the configuration is invalid or does not behave as
-  written. Enabled (`error`) by default: these rules apply to everyone.
-- `security` — container runtime privileges and hardening. `off` by
-  default; set to `error` in a [config file](#config-file) to enforce
-  a hardened dev environment.
-- `reproducibility` — unpinned versions or digests that make the
-  resulting environment change over time. `off` by default; useful for
-  teams and prebuilds.
-- `style` — discouraged or legacy ways of writing configuration that
-  still work. `off` by default.
+Only `correctness` runs by default; the rest are `off` until enabled:
+
+- `correctness` (default `error`) — the configuration is invalid or
+  does not behave as written.
+- `security` (default `off`) — container runtime privileges and
+  hardening.
+- `reproducibility` (default `off`) — unpinned versions or digests
+  that make the environment change over time.
+- `style` (default `off`) — discouraged or legacy configuration that
+  still works.
 
 <!-- Keep this table sorted by Category (correctness, security, reproducibility, style), then ID, in that priority order. -->
 | ID | Category | Platform | Description |

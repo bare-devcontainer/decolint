@@ -48,7 +48,7 @@ func parseOptions(args []string, output io.Writer) (Options, string, error) {
 	fs.StringVar(&platformFlag, "platform", "", "comma-separated target platforms to include in addition to \"all\" (vscode, codespaces)")
 	fs.StringVar(&formatFlag, "format", "text", "output format: text, json, or github")
 	fs.BoolVar(&opts.Version, "version", false, "print version information and exit")
-	fs.BoolVar(&opts.ListRules, "rules", false, "print the built-in rules as a Markdown table (category, target platforms, default and current severity), then exit")
+	fs.BoolVar(&opts.ListRules, "rules", false, "print the built-in rules as a Markdown table (category, target platforms, current severity), then exit")
 	fs.BoolVar(&opts.Init, "init", false, "write a new .decolint.jsonc config file listing every rule at its default severity, then exit")
 	fs.Usage = func() { _ = usage(fs) }
 	if err := fs.Parse(args); err != nil {

@@ -30,7 +30,7 @@ func initConfigFile(output io.Writer) error {
 	}
 
 	var buf bytes.Buffer
-	if err := json.MarshalWrite(&buf, cfg, jsontext.Multiline(true), json.Deterministic(true)); err != nil {
+	if err := json.MarshalWrite(&buf, cfg, jsontext.Multiline(true)); err != nil {
 		return fmt.Errorf("marshal %s: %w", name, err)
 	}
 	buf.WriteByte('\n')

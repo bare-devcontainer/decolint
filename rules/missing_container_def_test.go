@@ -31,7 +31,7 @@ func TestMissingContainerDef(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			assertIssues(t, rules.MissingContainerDef, linter.Error, tt.src, tt.want)
+			assertIssues(t, rules.MissingContainerDef, linter.SeverityError, tt.src, tt.want)
 		})
 	}
 }

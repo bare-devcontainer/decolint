@@ -37,7 +37,7 @@ func TestNoAppPort(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			assertIssues(t, rules.NoAppPort, linter.Warn, tt.src, tt.want)
+			assertIssues(t, rules.NoAppPort, linter.SeverityWarn, tt.src, tt.want)
 		})
 	}
 }

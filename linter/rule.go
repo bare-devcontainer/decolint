@@ -74,20 +74,20 @@ type Context struct {
 type Severity int
 
 const (
-	// Off disables a rule; it produces no findings.
-	Off Severity = iota
-	// Warn marks a finding as a warning.
-	Warn
-	// Error marks a finding as an error.
-	Error
+	// SeverityOff disables a rule; it produces no findings.
+	SeverityOff Severity = iota
+	// SeverityWarn marks a finding as a warning.
+	SeverityWarn
+	// SeverityError marks a finding as an error.
+	SeverityError
 )
 
 // String returns the severity's name, as used in output and configuration files.
 func (s Severity) String() string {
 	switch s {
-	case Error:
+	case SeverityError:
 		return "error"
-	case Warn:
+	case SeverityWarn:
 		return "warn"
 	default:
 		return "off"
@@ -123,11 +123,11 @@ func (s *Severity) UnmarshalJSONFrom(dec *jsontext.Decoder) error {
 func ParseSeverity(name string) (Severity, error) {
 	switch strings.ToLower(name) {
 	case "off":
-		return Off, nil
+		return SeverityOff, nil
 	case "warn":
-		return Warn, nil
+		return SeverityWarn, nil
 	case "error":
-		return Error, nil
+		return SeverityError, nil
 	default:
 		return 0, fmt.Errorf("unknown severity %q (want one of: off, warn, error)", name)
 	}

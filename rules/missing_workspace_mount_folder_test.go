@@ -34,7 +34,7 @@ func TestMissingWorkspaceMountFolder(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			assertIssues(t, rules.MissingWorkspaceMountFolder, linter.Error, tt.src, tt.want)
+			assertIssues(t, rules.MissingWorkspaceMountFolder, linter.SeverityError, tt.src, tt.want)
 		})
 	}
 }

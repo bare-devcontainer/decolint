@@ -57,7 +57,7 @@ func TestNoBindMount(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			assertIssues(t, rules.NoBindMount, linter.Warn, tt.src, tt.want)
+			assertIssues(t, rules.NoBindMount, linter.SeverityWarn, tt.src, tt.want)
 		})
 	}
 }

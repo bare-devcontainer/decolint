@@ -20,26 +20,26 @@ func TestRegisterRulesUnknownOverrides(t *testing.T) {
 		wantErrIDs []string // substrings that must all appear in the error message
 	}{
 		{"nil overrides", nil, nil, false, nil},
-		{"known rule id", nil, map[string]linter.Severity{"no-image-latest": linter.Error}, false, nil},
-		{"unknown rule id", nil, map[string]linter.Severity{"no-image-latst": linter.Error}, true, []string{"no-image-latst"}},
+		{"known rule id", nil, map[string]linter.Severity{"no-image-latest": linter.SeverityError}, false, nil},
+		{"unknown rule id", nil, map[string]linter.Severity{"no-image-latst": linter.SeverityError}, true, []string{"no-image-latst"}},
 		{
 			"multiple unknown ids",
 			nil,
-			map[string]linter.Severity{"zzz-bogus": linter.Error, "aaa-bogus": linter.Warn},
+			map[string]linter.Severity{"zzz-bogus": linter.SeverityError, "aaa-bogus": linter.SeverityWarn},
 			true,
 			[]string{"aaa-bogus", "zzz-bogus"},
 		},
 		{
 			"platform-scoped rule id not selected is not unknown",
 			nil,
-			map[string]linter.Severity{"no-bind-mount": linter.Error},
+			map[string]linter.Severity{"no-bind-mount": linter.SeverityError},
 			false,
 			nil,
 		},
 		{
 			"platform-scoped rule id selected is not unknown",
 			[]linter.Platform{linter.PlatformCodespaces},
-			map[string]linter.Severity{"no-bind-mount": linter.Error},
+			map[string]linter.Severity{"no-bind-mount": linter.SeverityError},
 			false,
 			nil,
 		},
@@ -121,7 +121,7 @@ func TestRegisterRulesOverrideEnablesOffDefaultRule(t *testing.T) {
 	const src = `{"securityOpt": ["seccomp=custom.json"]}`
 
 	l := linter.New()
-	overrides := map[string]linter.Severity{"no-seccomp-override": linter.Error}
+	overrides := map[string]linter.Severity{"no-seccomp-override": linter.SeverityError}
 	if err := rules.RegisterRules(l, nil, overrides); err != nil {
 		t.Fatalf("RegisterRules: %v", err)
 	}
@@ -159,19 +159,19 @@ func TestRegisterRulesSeverityOverride(t *testing.T) {
 			"no overrides keeps default severity",
 			nil,
 			[]linter.Issue{
-				{Path: "devcontainer.json", Line: 1, Col: 11, RuleID: "no-image-latest", Message: message, Severity: linter.Warn},
+				{Path: "devcontainer.json", Line: 1, Col: 11, RuleID: "no-image-latest", Message: message, Severity: linter.SeverityWarn},
 			},
 		},
 		{
 			"override promotes severity",
-			map[string]linter.Severity{"no-image-latest": linter.Error},
+			map[string]linter.Severity{"no-image-latest": linter.SeverityError},
 			[]linter.Issue{
-				{Path: "devcontainer.json", Line: 1, Col: 11, RuleID: "no-image-latest", Message: message, Severity: linter.Error},
+				{Path: "devcontainer.json", Line: 1, Col: 11, RuleID: "no-image-latest", Message: message, Severity: linter.SeverityError},
 			},
 		},
 		{
 			"override disables the rule",
-			map[string]linter.Severity{"no-image-latest": linter.Off},
+			map[string]linter.Severity{"no-image-latest": linter.SeverityOff},
 			nil,
 		},
 	}

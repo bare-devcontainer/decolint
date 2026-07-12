@@ -39,7 +39,7 @@ func TestNoPrivilegedContainer(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			assertIssues(t, rules.NoPrivilegedContainer, linter.Warn, tt.src, tt.want)
+			assertIssues(t, rules.NoPrivilegedContainer, linter.SeverityWarn, tt.src, tt.want)
 		})
 	}
 }
@@ -64,7 +64,7 @@ func TestNoPrivilegedContainerFeature(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			assertIssuesAt(t, rules.NoPrivilegedContainer, linter.Warn, "devcontainer-feature.json", linter.Feature, tt.src, tt.want)
+			assertIssuesAt(t, rules.NoPrivilegedContainer, linter.SeverityWarn, "devcontainer-feature.json", linter.Feature, tt.src, tt.want)
 		})
 	}
 }

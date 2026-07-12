@@ -40,7 +40,7 @@ func TestRequireCapDropAll(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			assertIssues(t, rules.RequireCapDropAll, linter.Warn, tt.src, tt.want)
+			assertIssues(t, rules.RequireCapDropAll, linter.SeverityWarn, tt.src, tt.want)
 		})
 	}
 }

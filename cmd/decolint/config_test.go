@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json/v2"
 	"os"
 	"path/filepath"
 	"testing"
@@ -8,6 +9,32 @@ import (
 	"github.com/bare-devcontainer/decolint/linter"
 	"github.com/google/go-cmp/cmp"
 )
+
+func TestConfigMarshalJSONToSortsRulesByID(t *testing.T) {
+	t.Parallel()
+
+	cfg := Config{Rules: map[string]linter.Severity{
+		"require-non-root":       linter.SeverityOff,
+		"no-image-latest":        linter.SeverityError,
+		"pin-image-digest":       linter.SeverityWarn,
+		"id-dir-mismatch":        linter.SeverityError,
+		"missing-required-props": linter.SeverityError,
+	}}
+
+	want := `{"rules":{"id-dir-mismatch":"error","missing-required-props":"error","no-image-latest":"error","pin-image-digest":"warn","require-non-root":"off"}}`
+
+	// Marshal repeatedly: map iteration order is randomized per run, so this would be flaky if
+	// MarshalJSONTo didn't force a deterministic, ID-sorted order.
+	for range 5 {
+		got, err := json.Marshal(cfg)
+		if err != nil {
+			t.Fatalf("json.Marshal: %v", err)
+		}
+		if string(got) != want {
+			t.Errorf("json.Marshal(cfg) = %s, want %s", got, want)
+		}
+	}
+}
 
 func TestParseConfig(t *testing.T) {
 	t.Parallel()

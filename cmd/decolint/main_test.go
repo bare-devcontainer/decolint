@@ -10,6 +10,7 @@ import (
 
 	"github.com/bare-devcontainer/decolint/format"
 	"github.com/bare-devcontainer/decolint/linter"
+	"github.com/bare-devcontainer/decolint/rules"
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 )
@@ -271,6 +272,56 @@ func TestRun_Flags(t *testing.T) {
 		}
 		if !strings.Contains(stderr.String(), "nonexistent.jsonc") {
 			t.Errorf("stderr = %q, want it to mention the missing path", stderr.String())
+		}
+	})
+}
+
+func TestRunInit(t *testing.T) {
+	// Uses t.Chdir, which cannot be combined with t.Parallel.
+
+	t.Run("writes every rule at its default severity", func(t *testing.T) {
+		t.Chdir(t.TempDir())
+
+		var stdout, stderr bytes.Buffer
+		exitCode := run(t.Context(), []string{"-init"}, &stdout, &stderr)
+		if exitCode != 0 {
+			t.Errorf("exit code = %d, want 0", exitCode)
+		}
+		if stderr.String() != "" {
+			t.Errorf("stderr = %q, want empty", stderr.String())
+		}
+
+		data, err := os.ReadFile(".decolint.jsonc")
+		if err != nil {
+			t.Fatalf("ReadFile(.decolint.jsonc): %v", err)
+		}
+		cfg, err := parseConfig(".decolint.jsonc", data)
+		if err != nil {
+			t.Fatalf("generated config does not parse: %v\ncontent:\n%s", err, data)
+		}
+
+		want := make(map[string]linter.Severity)
+		for _, reg := range rules.Builtin() {
+			want[reg.Rule.ID] = reg.DefaultSeverity
+		}
+		if diff := cmp.Diff(want, cfg.Rules); diff != "" {
+			t.Errorf("Rules mismatch (-want +got):\n%s", diff)
+		}
+	})
+
+	t.Run("refuses to overwrite an existing config", func(t *testing.T) {
+		t.Chdir(t.TempDir())
+		if err := os.WriteFile(".decolint.jsonc", []byte(`{"rules":{}}`), 0o644); err != nil {
+			t.Fatalf("WriteFile: %v", err)
+		}
+
+		var stdout, stderr bytes.Buffer
+		exitCode := run(t.Context(), []string{"-init"}, &stdout, &stderr)
+		if exitCode != 2 {
+			t.Errorf("exit code = %d, want 2", exitCode)
+		}
+		if !strings.Contains(stderr.String(), "already exists") {
+			t.Errorf("stderr = %q, want it to mention the file already exists", stderr.String())
 		}
 	})
 }

@@ -1,9 +1,11 @@
 package main
 
 import (
+	"encoding/json/jsontext"
 	"encoding/json/v2"
 	"fmt"
 	"os"
+	"slices"
 
 	"github.com/bare-devcontainer/decolint/linter"
 	"github.com/tailscale/hujson"
@@ -13,6 +15,39 @@ import (
 type Config struct {
 	// Rules maps a rule ID to the severity it should be overridden to.
 	Rules map[string]linter.Severity `json:"rules"`
+}
+
+// MarshalJSONTo encodes cfg with its rules written in sorted rule-ID order, for use with
+// encoding/json/v2. Map iteration order is otherwise unspecified, so without this, marshaling the
+// same Config twice could produce differently ordered output.
+func (cfg Config) MarshalJSONTo(enc *jsontext.Encoder) error {
+	ids := make([]string, 0, len(cfg.Rules))
+	for id := range cfg.Rules {
+		ids = append(ids, id)
+	}
+	slices.Sort(ids)
+
+	if err := enc.WriteToken(jsontext.BeginObject); err != nil {
+		return err
+	}
+	if err := enc.WriteToken(jsontext.String("rules")); err != nil {
+		return err
+	}
+	if err := enc.WriteToken(jsontext.BeginObject); err != nil {
+		return err
+	}
+	for _, id := range ids {
+		if err := enc.WriteToken(jsontext.String(id)); err != nil {
+			return err
+		}
+		if err := json.MarshalEncode(enc, cfg.Rules[id]); err != nil {
+			return err
+		}
+	}
+	if err := enc.WriteToken(jsontext.EndObject); err != nil {
+		return err
+	}
+	return enc.WriteToken(jsontext.EndObject)
 }
 
 // defaultConfigNames are the config file names discovered automatically in the current directory

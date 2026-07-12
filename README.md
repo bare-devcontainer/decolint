@@ -73,6 +73,7 @@ list.
 | `-deny-warnings` | also exit non-zero on `warn`-severity findings (see [Exit codes](#exit-codes)) |
 | `-config` | path to a config file overriding rule severities (see [Config file](#config-file)) |
 | `-rules` | print the available rules |
+| `-init` | write a new `.decolint.jsonc` listing every rule at its default severity (see [Config file](#config-file)) |
 
 ### Target platforms
 
@@ -123,7 +124,9 @@ findings. Exit codes are unaffected by `-format`.
 ### Config file
 
 Rule severities can be overridden per project with a JSON/JSONC config
-file:
+file. Run `decolint -init` to generate a starting `.decolint.jsonc` in
+the current directory, listing every rule at its default severity, ready
+to edit:
 
 ```jsonc
 // .decolint.jsonc

@@ -65,6 +65,14 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 		return exitCodeSuccess
 	}
 
+	if opts.Init {
+		if err := initConfigFile(stdout); err != nil {
+			_, _ = fmt.Fprintln(stderr, progName+":", err)
+			return exitCodeError
+		}
+		return exitCodeSuccess
+	}
+
 	cfg, err := loadConfig(configPath)
 	if err != nil {
 		_, _ = fmt.Fprintln(stderr, progName+":", err)

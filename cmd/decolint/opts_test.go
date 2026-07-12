@@ -133,6 +133,30 @@ func TestParseOptionsListRules(t *testing.T) {
 	}
 }
 
+func TestParseOptionsInit(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		args []string
+	}{
+		{"single dash", []string{"-init"}},
+		{"double dash", []string{"--init"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			opts, _, err := parseOptions(tt.args, io.Discard)
+			if err != nil {
+				t.Fatalf("parseOptions(%v): %v", tt.args, err)
+			}
+			if !opts.Init {
+				t.Errorf("Init = false, want true")
+			}
+		})
+	}
+}
+
 func TestParseOptionsConfig(t *testing.T) {
 	t.Parallel()
 

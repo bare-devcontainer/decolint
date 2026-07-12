@@ -23,6 +23,9 @@ Rules are plain Go code. Declare a
 
 A rule declares the kinds of configuration files it applies to
 (`linter.Devcontainer`, `linter.Feature`, `linter.Template`), the
+category it belongs to (`linter.CategoryCorrectness`,
+`linter.CategorySecurity`, `linter.CategoryReproducibility`, or
+`linter.CategoryStyle`; every rule must declare exactly one), the
 target platform(s) it applies to (`linter.PlatformVSCode`,
 `linter.PlatformCodespaces`, ...; a nil or empty value means the rule
 applies to every platform), and the JSON Pointer paths it wants to
@@ -39,6 +42,7 @@ import "github.com/bare-devcontainer/decolint/linter"
 var MyRule = &linter.Rule{
 	ID:          "my-rule",
 	Description: "...",
+	Category:    linter.CategoryCorrectness,
 	FileTypes:   []linter.FileType{linter.Devcontainer},
 	Platforms:   nil, // applies to every platform
 	Paths:       []string{"/mounts/*"},

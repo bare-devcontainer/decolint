@@ -13,6 +13,7 @@ import (
 var NoImageLatest = &linter.Rule{
 	ID:          "no-image-latest",
 	Description: `disallow container images without an explicit tag or with the "latest" tag`,
+	Category:    linter.CategoryReproducibility,
 	FileTypes:   []linter.FileType{linter.Devcontainer},
 	Paths:       []string{"/image"},
 	Check:       checkNoImageLatest,

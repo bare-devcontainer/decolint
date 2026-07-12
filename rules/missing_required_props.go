@@ -12,6 +12,7 @@ import (
 var MissingRequiredProps = &linter.Rule{
 	ID:          "missing-required-props",
 	Description: `disallow a Feature's or Template's metadata that is missing a required property ("id", "version", or "name")`,
+	Category:    linter.CategoryCorrectness,
 	FileTypes:   []linter.FileType{linter.Feature, linter.Template},
 	Paths:       []string{""},
 	Check:       checkMissingRequiredProps,

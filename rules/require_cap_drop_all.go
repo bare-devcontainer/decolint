@@ -13,6 +13,7 @@ import (
 var RequireCapDropAll = &linter.Rule{
 	ID:          "require-cap-drop-all",
 	Description: `require an "ALL" entry in a devcontainer.json's "--cap-drop=ALL" entry in "runArgs", dropping every Linux capability`,
+	Category:    linter.CategorySecurity,
 	FileTypes:   []linter.FileType{linter.Devcontainer},
 	Paths:       []string{""},
 	Check:       checkRequireCapDropAll,

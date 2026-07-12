@@ -36,6 +36,57 @@ func TestParsePlatform(t *testing.T) {
 	}
 }
 
+func TestParseCategory(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name    string
+		input   string
+		want    linter.Category
+		wantErr bool
+	}{
+		{"correctness", "correctness", linter.CategoryCorrectness, false},
+		{"security", "security", linter.CategorySecurity, false},
+		{"reproducibility", "reproducibility", linter.CategoryReproducibility, false},
+		{"style", "style", linter.CategoryStyle, false},
+		{"mixed case", "Security", linter.CategorySecurity, false},
+		{"unknown", "bogus", 0, true},
+		{"empty", "", 0, true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			got, err := linter.ParseCategory(tt.input)
+			if (err != nil) != tt.wantErr {
+				t.Fatalf("ParseCategory(%q) error = %v, wantErr %v", tt.input, err, tt.wantErr)
+			}
+			if err == nil && got != tt.want {
+				t.Errorf("ParseCategory(%q) = %v, want %v", tt.input, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestCategoryString(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		category linter.Category
+		want     string
+	}{
+		{linter.CategoryCorrectness, "correctness"},
+		{linter.CategorySecurity, "security"},
+		{linter.CategoryReproducibility, "reproducibility"},
+		{linter.CategoryStyle, "style"},
+		{linter.Category(0), "unknown"}, // the zero value is deliberately not a valid category
+	}
+	for _, tt := range tests {
+		if got := tt.category.String(); got != tt.want {
+			t.Errorf("Category(%d).String() = %q, want %q", tt.category, got, tt.want)
+		}
+	}
+}
+
 func TestParseSeverity(t *testing.T) {
 	t.Parallel()
 

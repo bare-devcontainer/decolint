@@ -111,13 +111,14 @@ var severityEmoji = map[linter.Severity]string{
 }
 
 // rulesTableHeader is the header row of the -rules Markdown table.
-var rulesTableHeader = []string{"Rule ID", "Platform", "Default", "Current"}
+var rulesTableHeader = []string{"Rule ID", "Category", "Platform", "Default", "Current"}
 
-// listRules writes a Markdown table of the built-in rules to output: each rule's ID, target
-// platforms (or "(all)"), default severity, and current severity (the default overridden by cfg,
-// if any), in the order rules.Builtin returns them. Columns are padded to a common width so the
-// raw Markdown source itself reads as an aligned table.
+// listRules writes a Markdown table of the built-in rules to output: each rule's ID, category,
+// target platforms (or "(all)"), default severity, and current severity (the default overridden by
+// cfg, if any), in the order rules.Builtin returns them. Columns are padded to a common width so
+// the raw Markdown source itself reads as an aligned table.
 func listRules(output io.Writer, cfg Config) error {
+	overrides := rules.Overrides{Categories: cfg.Categories, Rules: cfg.Rules}
 	rows := [][]string{rulesTableHeader}
 	for _, reg := range rules.Builtin() {
 		platforms := "(all)"
@@ -128,15 +129,12 @@ func listRules(output io.Writer, cfg Config) error {
 			}
 			platforms = strings.Join(names, ",")
 		}
-		current := reg.DefaultSeverity
-		if s, ok := cfg.Rules[reg.Rule.ID]; ok {
-			current = s
-		}
 		rows = append(rows, []string{
 			reg.Rule.ID,
+			reg.Rule.Category.String(),
 			platforms,
 			severityEmoji[reg.DefaultSeverity],
-			severityEmoji[current],
+			severityEmoji[overrides.SeverityFor(reg)],
 		})
 	}
 	widths := columnWidths(rows)
@@ -230,7 +228,8 @@ func runLint(ctx context.Context, stdout io.Writer, opts Options) (bool, error) 
 	}
 
 	l := linter.New()
-	if err := rules.RegisterRules(l, opts.Platforms, opts.Config.Rules); err != nil {
+	overrides := rules.Overrides{Categories: opts.Config.Categories, Rules: opts.Config.Rules}
+	if err := rules.RegisterRules(l, opts.Platforms, overrides); err != nil {
 		return false, fmt.Errorf("register rules: %w", err)
 	}
 

@@ -1,0 +1,12 @@
+// Config for the e2e test: exercises category-level overrides against the violations fixture.
+// Security rules are raised to error (including the off-by-default hardening rules),
+// reproducibility rules are turned off, and a per-rule entry wins over its category.
+{
+	"categories": {
+		"security": "error",
+		"reproducibility": "off"
+	},
+	"rules": {
+		"no-privileged-container": "warn"
+	}
+}

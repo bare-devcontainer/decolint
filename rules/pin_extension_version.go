@@ -15,6 +15,7 @@ import (
 var PinExtensionVersion = &linter.Rule{
 	ID:          "pin-extension-version",
 	Description: `disallow a "customizations.vscode.extensions" entry without an explicit pinned version`,
+	Category:    linter.CategoryReproducibility,
 	FileTypes:   []linter.FileType{linter.Devcontainer},
 	Platforms:   []linter.Platform{linter.PlatformVSCode, linter.PlatformCodespaces},
 	Paths:       []string{"/customizations/vscode/extensions/*"},

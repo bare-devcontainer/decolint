@@ -16,6 +16,7 @@ import (
 var RequireNonRoot = &linter.Rule{
 	ID:          "require-non-root",
 	Description: `require "remoteUser" or, if unset, "containerUser" to be set to a non-root user`,
+	Category:    linter.CategorySecurity,
 	FileTypes:   []linter.FileType{linter.Devcontainer},
 	Paths:       []string{""},
 	Check:       checkRequireNonRoot,

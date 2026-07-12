@@ -55,6 +55,59 @@ func ParsePlatform(name string) (Platform, error) {
 	}
 }
 
+// Category classifies a rule by the kind of problem it reports. Every rule belongs to exactly one
+// category, so users can adjust the severity of a whole class of rules at once.
+type Category int
+
+const (
+	// The zero value is deliberately not a valid category, so a rule that forgets to declare one
+	// maps to "unknown" and is caught by tests instead of silently landing in the first category.
+
+	// CategoryCorrectness marks a rule that reports configuration that is invalid or does not
+	// behave as written.
+	CategoryCorrectness Category = iota + 1
+	// CategorySecurity marks a rule that reports container runtime privilege and hardening issues.
+	CategorySecurity
+	// CategoryReproducibility marks a rule that reports unpinned versions or digests that make the
+	// resulting environment change over time.
+	CategoryReproducibility
+	// CategoryStyle marks a rule that reports discouraged or legacy configuration that still works.
+	CategoryStyle
+)
+
+// String returns the category's name, as used in configuration files and output.
+func (c Category) String() string {
+	switch c {
+	case CategoryCorrectness:
+		return "correctness"
+	case CategorySecurity:
+		return "security"
+	case CategoryReproducibility:
+		return "reproducibility"
+	case CategoryStyle:
+		return "style"
+	default:
+		return "unknown"
+	}
+}
+
+// ParseCategory parses a category name, matched case-insensitively, into a Category. It returns an
+// error if name does not name a known category.
+func ParseCategory(name string) (Category, error) {
+	switch strings.ToLower(name) {
+	case "correctness":
+		return CategoryCorrectness, nil
+	case "security":
+		return CategorySecurity, nil
+	case "reproducibility":
+		return CategoryReproducibility, nil
+	case "style":
+		return CategoryStyle, nil
+	default:
+		return 0, fmt.Errorf("unknown category %q (want one of: correctness, security, reproducibility, style)", name)
+	}
+}
+
 // Context carries everything a rule needs to inspect a single configuration file.
 type Context struct {
 	// Path is the path of the file being linted.
@@ -164,6 +217,9 @@ type Rule struct {
 	ID string
 	// Description is a short human-readable description of what the rule checks.
 	Description string
+	// Category classifies the kind of problem this rule reports. Every rule must declare exactly
+	// one category; the severity of all rules in a category can be adjusted at once.
+	Category Category
 	// FileTypes are the kinds of configuration files this rule applies to. The rule is only run
 	// against files of these types.
 	FileTypes []FileType

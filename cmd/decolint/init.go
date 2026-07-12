@@ -30,6 +30,11 @@ func initConfigFile(output io.Writer) error {
 	}
 
 	var buf bytes.Buffer
+	buf.WriteString(`// Each entry under "rules" sets that rule's severity: "error", "warn", or "off".
+// Whole categories (correctness, security, reproducibility, style) can be set at once
+// under "categories"; per-rule entries take precedence, e.g.:
+//   "categories": { "security": "error" }
+`)
 	if err := json.MarshalWrite(&buf, cfg, jsontext.Multiline(true)); err != nil {
 		return fmt.Errorf("marshal %s: %w", name, err)
 	}

@@ -94,6 +94,28 @@ func TestRun(t *testing.T) {
 			wantExitCode: 1,
 		},
 		{
+			// categories.jsonc raises security rules to error (enabling the off-by-default
+			// hardening rules), turns reproducibility rules off, and keeps a per-rule override
+			// (no-privileged-container back to warn) winning over its category.
+			name: "violations with category overrides",
+			args: []string{
+				"-platform=vscode,codespaces",
+				"-config=testdata/e2e/categories.jsonc",
+				"testdata/e2e/violations",
+			},
+			want: []firing{
+				{violationsFile, "no-bind-mount", linter.SeverityWarn},
+				{violationsFile, "no-host-port-format", linter.SeverityError},
+				{violationsFile, "no-docker-socket-mount", linter.SeverityError},
+				{violationsFile, "no-privileged-container", linter.SeverityWarn},
+				{violationsFile, "no-seccomp-override", linter.SeverityError},
+				{violationsFile, "require-cap-drop-all", linter.SeverityError},
+				{violationsFile, "require-no-new-privileges", linter.SeverityError},
+				{violationsFile, "require-non-root", linter.SeverityError},
+			},
+			wantExitCode: 1,
+		},
+		{
 			name:         "clean",
 			args:         []string{"-platform=vscode,codespaces", "testdata/e2e/clean"},
 			want:         nil,
@@ -178,13 +200,13 @@ func TestRun_Flags(t *testing.T) {
 		}
 
 		row := mdTableRow(t, out, "no-image-latest")
-		wantRow := []string{"no-image-latest", "(all)", severityEmoji[linter.SeverityWarn], severityEmoji[linter.SeverityWarn]}
+		wantRow := []string{"no-image-latest", "reproducibility", "(all)", severityEmoji[linter.SeverityWarn], severityEmoji[linter.SeverityWarn]}
 		if diff := cmp.Diff(wantRow, row); diff != "" {
 			t.Errorf("no-image-latest row mismatch (-want +got):\n%s", diff)
 		}
 
 		row = mdTableRow(t, out, "no-bind-mount")
-		wantRow = []string{"no-bind-mount", "codespaces", severityEmoji[linter.SeverityWarn], severityEmoji[linter.SeverityWarn]}
+		wantRow = []string{"no-bind-mount", "correctness", "codespaces", severityEmoji[linter.SeverityWarn], severityEmoji[linter.SeverityWarn]}
 		if diff := cmp.Diff(wantRow, row); diff != "" {
 			t.Errorf("no-bind-mount row mismatch (-want +got):\n%s", diff)
 		}
@@ -205,23 +227,51 @@ func TestRun_Flags(t *testing.T) {
 
 		// no-image-latest: default warn, overridden to error.
 		row := mdTableRow(t, out, "no-image-latest")
-		wantRow := []string{"no-image-latest", "(all)", severityEmoji[linter.SeverityWarn], severityEmoji[linter.SeverityError]}
+		wantRow := []string{"no-image-latest", "reproducibility", "(all)", severityEmoji[linter.SeverityWarn], severityEmoji[linter.SeverityError]}
 		if diff := cmp.Diff(wantRow, row); diff != "" {
 			t.Errorf("no-image-latest row mismatch (-want +got):\n%s", diff)
 		}
 
 		// pin-feature-version: default warn, overridden to off.
 		row = mdTableRow(t, out, "pin-feature-version")
-		wantRow = []string{"pin-feature-version", "(all)", severityEmoji[linter.SeverityWarn], severityEmoji[linter.SeverityOff]}
+		wantRow = []string{"pin-feature-version", "reproducibility", "(all)", severityEmoji[linter.SeverityWarn], severityEmoji[linter.SeverityOff]}
 		if diff := cmp.Diff(wantRow, row); diff != "" {
 			t.Errorf("pin-feature-version row mismatch (-want +got):\n%s", diff)
 		}
 
 		// pin-image-digest: default off, overridden to warn.
 		row = mdTableRow(t, out, "pin-image-digest")
-		wantRow = []string{"pin-image-digest", "(all)", severityEmoji[linter.SeverityOff], severityEmoji[linter.SeverityWarn]}
+		wantRow = []string{"pin-image-digest", "reproducibility", "(all)", severityEmoji[linter.SeverityOff], severityEmoji[linter.SeverityWarn]}
 		if diff := cmp.Diff(wantRow, row); diff != "" {
 			t.Errorf("pin-image-digest row mismatch (-want +got):\n%s", diff)
+		}
+	})
+
+	t.Run("-rules with category overrides in -config", func(t *testing.T) {
+		t.Parallel()
+
+		var stdout, stderr bytes.Buffer
+		exitCode := run(t.Context(), []string{"-rules", "-config=testdata/e2e/categories.jsonc"}, &stdout, &stderr)
+		if exitCode != 0 {
+			t.Errorf("exit code = %d, want 0", exitCode)
+		}
+		if stderr.String() != "" {
+			t.Errorf("stderr = %q, want empty", stderr.String())
+		}
+		out := stdout.String()
+
+		// no-seccomp-override: default off, raised to error by its security category.
+		row := mdTableRow(t, out, "no-seccomp-override")
+		wantRow := []string{"no-seccomp-override", "security", "(all)", severityEmoji[linter.SeverityOff], severityEmoji[linter.SeverityError]}
+		if diff := cmp.Diff(wantRow, row); diff != "" {
+			t.Errorf("no-seccomp-override row mismatch (-want +got):\n%s", diff)
+		}
+
+		// no-privileged-container: the per-rule override (warn) wins over its category (error).
+		row = mdTableRow(t, out, "no-privileged-container")
+		wantRow = []string{"no-privileged-container", "security", "(all)", severityEmoji[linter.SeverityWarn], severityEmoji[linter.SeverityWarn]}
+		if diff := cmp.Diff(wantRow, row); diff != "" {
+			t.Errorf("no-privileged-container row mismatch (-want +got):\n%s", diff)
 		}
 	})
 
@@ -386,6 +436,39 @@ func TestRunLint(t *testing.T) {
 		}
 		if runErr != nil && !strings.Contains(runErr.Error(), "no-image-latst") {
 			t.Errorf("err = %q, want it to mention the unknown rule ID", runErr)
+		}
+	})
+
+	t.Run("config category override promotes a warn rule to error", func(t *testing.T) {
+		t.Parallel()
+		dir := writeDevcontainer(t, `{"image": "ubuntu:latest"}`) // no-image-latest is in reproducibility
+
+		var stdout bytes.Buffer
+		opts := Options{
+			Paths:  []string{dir},
+			Format: format.TextFormat{},
+			Config: Config{Categories: map[string]linter.Severity{"reproducibility": linter.SeverityError}},
+		}
+		hasIssue, runErr := runLint(t.Context(), &stdout, opts)
+		if runErr != nil || !hasIssue {
+			t.Errorf("hasIssue = %v, err = %v, want true, nil; stdout: %s", hasIssue, runErr, stdout.String())
+		}
+	})
+
+	t.Run("unknown category name in config", func(t *testing.T) {
+		t.Parallel()
+
+		var stdout bytes.Buffer
+		opts := Options{
+			Format: format.TextFormat{},
+			Config: Config{Categories: map[string]linter.Severity{"secure": linter.SeverityError}},
+		}
+		hasIssue, runErr := runLint(t.Context(), &stdout, opts)
+		if runErr == nil || hasIssue {
+			t.Errorf("hasIssue = %v, err = %v, want false, non-nil", hasIssue, runErr)
+		}
+		if runErr != nil && !strings.Contains(runErr.Error(), "secure") {
+			t.Errorf("err = %q, want it to mention the unknown category name", runErr)
 		}
 	})
 

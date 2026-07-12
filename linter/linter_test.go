@@ -12,7 +12,7 @@ import (
 func lintSrc(t *testing.T, src string) []linter.Issue {
 	t.Helper()
 	l := linter.New()
-	if err := rules.RegisterRules(l, nil, nil); err != nil {
+	if err := rules.RegisterRules(l, nil, rules.Overrides{}); err != nil {
 		t.Fatalf("RegisterRules: %v", err)
 	}
 	issues, err := l.Lint(t.Context(), "devcontainer.json", []byte(src), linter.Devcontainer)
@@ -92,7 +92,7 @@ func TestLintDir(t *testing.T) {
 	t.Parallel()
 
 	l := linter.New()
-	if err := rules.RegisterRules(l, nil, nil); err != nil {
+	if err := rules.RegisterRules(l, nil, rules.Overrides{}); err != nil {
 		t.Fatalf("RegisterRules: %v", err)
 	}
 
@@ -204,7 +204,7 @@ func TestLintParseError(t *testing.T) {
 	t.Parallel()
 
 	l := linter.New()
-	if err := rules.RegisterRules(l, nil, nil); err != nil {
+	if err := rules.RegisterRules(l, nil, rules.Overrides{}); err != nil {
 		t.Fatalf("RegisterRules: %v", err)
 	}
 	if _, err := l.Lint(t.Context(), "bad.json", []byte(`{`), linter.Devcontainer); err == nil {

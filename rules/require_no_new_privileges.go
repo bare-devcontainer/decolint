@@ -13,6 +13,7 @@ import (
 var RequireNoNewPrivileges = &linter.Rule{
 	ID:          "require-no-new-privileges",
 	Description: `require "no-new-privileges" to be set via a devcontainer.json's "securityOpt" property, or a "--security-opt no-new-privileges..." entry in "runArgs"`,
+	Category:    linter.CategorySecurity,
 	FileTypes:   []linter.FileType{linter.Devcontainer},
 	Paths:       []string{""},
 	Check:       checkRequireNoNewPrivileges,

@@ -4,6 +4,7 @@ import (
 	"encoding/json/jsontext"
 	"encoding/json/v2"
 	"fmt"
+	"maps"
 	"os"
 	"slices"
 
@@ -13,39 +14,50 @@ import (
 
 // Config is the on-disk shape of a decolint config file.
 type Config struct {
+	// Categories maps a category name to the severity every rule in that category should be
+	// overridden to. Per-rule entries in Rules take precedence.
+	Categories map[string]linter.Severity `json:"categories"`
 	// Rules maps a rule ID to the severity it should be overridden to.
 	Rules map[string]linter.Severity `json:"rules"`
 }
 
-// MarshalJSONTo encodes cfg with its rules written in sorted rule-ID order, for use with
-// encoding/json/v2. Map iteration order is otherwise unspecified, so without this, marshaling the
-// same Config twice could produce differently ordered output.
+// MarshalJSONTo encodes cfg with its categories and rules written in sorted key order, for use
+// with encoding/json/v2. Map iteration order is otherwise unspecified, so without this, marshaling
+// the same Config twice could produce differently ordered output. The "categories" member is
+// omitted when empty, so generated configs (see initConfigFile) stay minimal.
 func (cfg Config) MarshalJSONTo(enc *jsontext.Encoder) error {
-	ids := make([]string, 0, len(cfg.Rules))
-	for id := range cfg.Rules {
-		ids = append(ids, id)
-	}
-	slices.Sort(ids)
-
 	if err := enc.WriteToken(jsontext.BeginObject); err != nil {
 		return err
+	}
+	if len(cfg.Categories) > 0 {
+		if err := enc.WriteToken(jsontext.String("categories")); err != nil {
+			return err
+		}
+		if err := writeSeverityMap(enc, cfg.Categories); err != nil {
+			return err
+		}
 	}
 	if err := enc.WriteToken(jsontext.String("rules")); err != nil {
 		return err
 	}
+	if err := writeSeverityMap(enc, cfg.Rules); err != nil {
+		return err
+	}
+	return enc.WriteToken(jsontext.EndObject)
+}
+
+// writeSeverityMap encodes m as a JSON object with its members in sorted key order.
+func writeSeverityMap(enc *jsontext.Encoder, m map[string]linter.Severity) error {
 	if err := enc.WriteToken(jsontext.BeginObject); err != nil {
 		return err
 	}
-	for _, id := range ids {
-		if err := enc.WriteToken(jsontext.String(id)); err != nil {
+	for _, key := range slices.Sorted(maps.Keys(m)) {
+		if err := enc.WriteToken(jsontext.String(key)); err != nil {
 			return err
 		}
-		if err := json.MarshalEncode(enc, cfg.Rules[id]); err != nil {
+		if err := json.MarshalEncode(enc, m[key]); err != nil {
 			return err
 		}
-	}
-	if err := enc.WriteToken(jsontext.EndObject); err != nil {
-		return err
 	}
 	return enc.WriteToken(jsontext.EndObject)
 }

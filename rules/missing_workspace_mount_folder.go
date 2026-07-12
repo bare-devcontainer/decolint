@@ -13,6 +13,7 @@ import (
 var MissingWorkspaceMountFolder = &linter.Rule{
 	ID:          "missing-workspace-mount-folder",
 	Description: `disallow a devcontainer.json using "image" or "build" that sets only one of "workspaceMount" or "workspaceFolder"`,
+	Category:    linter.CategoryCorrectness,
 	FileTypes:   []linter.FileType{linter.Devcontainer},
 	Paths:       []string{""},
 	Check:       checkMissingWorkspaceMountFolder,

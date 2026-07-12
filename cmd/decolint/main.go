@@ -51,7 +51,7 @@ func main() {
 // given writers, and returns the process exit code (0 = clean, 1 = issues found, 2 = usage or
 // runtime error).
 func run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
-	opts, configPath, err := parseOptions(args, stderr)
+	opts, err := parseOptions(args, stderr)
 	if err != nil {
 		if err == flag.ErrHelp {
 			return exitCodeSuccess
@@ -73,26 +73,22 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 		return exitCodeSuccess
 	}
 
-	cfg, err := loadConfig(configPath)
+	cfg, err := loadConfig(opts.ConfigPath)
 	if err != nil {
 		_, _ = fmt.Fprintln(stderr, progName+":", err)
 		return exitCodeError
 	}
-	opts.Config = cfg
-	// The -platform flag takes precedence over the config file's "platforms" member.
-	if len(opts.Platforms) == 0 {
-		opts.Platforms = cfg.Platforms
-	}
+	cfg = mergeConfig(opts, cfg)
 
 	if opts.ListRules {
-		if err := listRules(stdout, opts.Config); err != nil {
+		if err := listRules(stdout, cfg); err != nil {
 			_, _ = fmt.Fprintln(stderr, progName+":", err)
 			return exitCodeError
 		}
 		return exitCodeSuccess
 	}
 
-	hasIssue, err := runLint(ctx, stdout, opts)
+	hasIssue, err := runLint(ctx, stdout, opts, cfg)
 	if err != nil {
 		_, _ = fmt.Fprintln(stderr, progName+":", err)
 		return exitCodeError
@@ -225,15 +221,15 @@ Flags:
 	return nil
 }
 
-func runLint(ctx context.Context, stdout io.Writer, opts Options) (bool, error) {
+func runLint(ctx context.Context, stdout io.Writer, opts Options, cfg Config) (bool, error) {
 	threshold := failThreshold
 	if opts.DenyWarnings {
 		threshold = linter.SeverityWarn
 	}
 
 	l := linter.New()
-	overrides := rules.Overrides{Categories: opts.Config.Categories, Rules: opts.Config.Rules}
-	if err := rules.RegisterRules(l, opts.Platforms, overrides); err != nil {
+	overrides := rules.Overrides{Categories: cfg.Categories, Rules: cfg.Rules}
+	if err := rules.RegisterRules(l, cfg.Platforms, overrides); err != nil {
 		return false, fmt.Errorf("register rules: %w", err)
 	}
 

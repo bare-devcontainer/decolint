@@ -35,17 +35,31 @@ type ConfigFile struct {
 	Type FileType
 }
 
+// Transform mutates a parsed configuration file before rules run, e.g. to merge Feature-contributed
+// properties into the effective configuration. It may modify ctx.Root in place; ctx.Src is left
+// untouched, so any node a Transform adds must carry offsets pointing into the original source. An
+// error aborts the lint of that file.
+type Transform func(ctx context.Context, fctx *Context) error
+
 // Linter runs a set of rules against devcontainer configuration files.
 type Linter struct {
 	patterns map[FileType][]pattern
 	// severities holds the effective severity of each rule, keyed by rule ID, as specified when the
 	// rule was registered via RegisterRule.
 	severities map[string]Severity
+	// transform, if set, mutates each parsed file before rules run. See SetTransform.
+	transform Transform
 }
 
 // New returns an empty Linter. Use RegisterRule to add rules to it.
 func New() *Linter {
 	return &Linter{patterns: map[FileType][]pattern{}, severities: map[string]Severity{}}
+}
+
+// SetTransform installs t to run on each parsed file before rules are applied. Only one transform
+// can be installed; a later call replaces the previous one.
+func (l *Linter) SetTransform(t Transform) {
+	l.transform = t
 }
 
 // RegisterRule adds r to the linter, to run at the given severity.
@@ -113,6 +127,11 @@ func (l *Linter) Lint(ctx context.Context, path string, src []byte, fileType Fil
 		return nil, nil
 	}
 	rctx := &Context{Path: path, Type: fileType, Src: src, Root: &root}
+	if l.transform != nil {
+		if err := l.transform(ctx, rctx); err != nil {
+			return nil, fmt.Errorf("transform %s: %w", path, err)
+		}
+	}
 	pos := newPositions(src)
 	ignores := buildIgnoreIndex(&root, pos)
 

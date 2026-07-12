@@ -1,0 +1,9 @@
+{
+	"id": "privileged-feature",
+	"version": "1.0.0",
+	"name": "Privileged Feature",
+	"privileged": true,
+	"mounts": [
+		"source=/var/run/docker.sock,target=/var/run/docker.sock,type=bind"
+	]
+}

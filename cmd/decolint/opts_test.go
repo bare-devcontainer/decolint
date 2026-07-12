@@ -157,6 +157,32 @@ func TestParseOptionsInit(t *testing.T) {
 	}
 }
 
+func TestParseOptionsMergeFeatures(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		args []string
+		want bool
+	}{
+		{"no flag", nil, false},
+		{"single dash", []string{"-merge-features"}, true},
+		{"double dash", []string{"--merge-features"}, true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			opts, _, err := parseOptions(tt.args, io.Discard)
+			if err != nil {
+				t.Fatalf("parseOptions(%v): %v", tt.args, err)
+			}
+			if opts.MergeFeatures != tt.want {
+				t.Errorf("MergeFeatures = %v, want %v", opts.MergeFeatures, tt.want)
+			}
+		})
+	}
+}
+
 func TestParseOptionsConfig(t *testing.T) {
 	t.Parallel()
 

@@ -79,6 +79,25 @@ func TestConfigMarshalJSONToWithPlatforms(t *testing.T) {
 	}
 }
 
+func TestConfigMarshalJSONToWithMergeFeatures(t *testing.T) {
+	t.Parallel()
+
+	cfg := Config{
+		MergeFeatures: true,
+		Rules:         map[string]linter.Severity{"no-image-latest": linter.SeverityError},
+	}
+
+	want := `{"mergeFeatures":true,"rules":{"no-image-latest":"error"}}`
+
+	got, err := json.Marshal(cfg)
+	if err != nil {
+		t.Fatalf("json.Marshal: %v", err)
+	}
+	if string(got) != want {
+		t.Errorf("json.Marshal(cfg) = %s, want %s", got, want)
+	}
+}
+
 func TestParseConfig(t *testing.T) {
 	t.Parallel()
 
@@ -134,6 +153,12 @@ func TestParseConfig(t *testing.T) {
 				Platforms: []linter.Platform{linter.PlatformCodespaces},
 				Rules:     map[string]linter.Severity{"no-image-latest": linter.SeverityError},
 			},
+			false,
+		},
+		{
+			"mergeFeatures",
+			`{"mergeFeatures": true}`,
+			Config{MergeFeatures: true},
 			false,
 		},
 		{"invalid severity", `{"rules": {"no-image-latest": "critical"}}`, Config{}, true},

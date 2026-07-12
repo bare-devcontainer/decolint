@@ -1,12 +1,15 @@
 package linter_test
 
 import (
+	"context"
+	"errors"
 	"path/filepath"
 	"slices"
 	"testing"
 
 	"github.com/bare-devcontainer/decolint/linter"
 	"github.com/bare-devcontainer/decolint/rules"
+	"github.com/tailscale/hujson"
 )
 
 func lintSrc(t *testing.T, src string) []linter.Issue {
@@ -216,6 +219,81 @@ func TestLintParseError(t *testing.T) {
 	if _, err := l.Lint(t.Context(), "bad.json", []byte(`{`), linter.Devcontainer); err == nil {
 		t.Error("Lint on malformed input: got nil error, want parse error")
 	}
+}
+
+// flagRule is a stub Rule that reports the value at "/flag" when it is true, used to observe
+// mutations a Transform makes to the syntax tree.
+var flagRule = &linter.Rule{
+	ID:          "flag-rule",
+	Description: "reports a true /flag value",
+	FileTypes:   []linter.FileType{linter.Devcontainer},
+	Paths:       []string{"/flag"},
+	Check: func(_ *linter.Context, node *linter.Node) []linter.Finding {
+		if lit, ok := node.Value.Value.(hujson.Literal); ok && lit.Bool() {
+			return []linter.Finding{{Message: "flag is true", Offset: node.Value.StartOffset}}
+		}
+		return nil
+	},
+}
+
+func TestLintTransform(t *testing.T) {
+	t.Parallel()
+
+	// The transform adds a synthetic "flag": true member whose offsets point at the "name" member of
+	// the original source, so the finding must resolve to that position.
+	src := "{\n  \"name\": \"test\"\n}"
+
+	t.Run("rules see the transformed tree at anchored positions", func(t *testing.T) {
+		t.Parallel()
+		l := linter.New()
+		l.RegisterRule(flagRule, linter.SeverityWarn)
+		l.SetTransform(func(_ context.Context, fctx *linter.Context) error {
+			obj := fctx.Root.Value.(*hujson.Object)
+			anchor := obj.Members[0].Name.StartOffset
+			obj.Members = append(obj.Members, hujson.ObjectMember{
+				Name:  hujson.Value{Value: hujson.String("flag"), StartOffset: anchor, EndOffset: anchor},
+				Value: hujson.Value{Value: hujson.Bool(true), StartOffset: anchor, EndOffset: anchor},
+			})
+			return nil
+		})
+		issues, err := l.Lint(t.Context(), "devcontainer.json", []byte(src), linter.Devcontainer)
+		if err != nil {
+			t.Fatalf("Lint: %v", err)
+		}
+		if len(issues) != 1 {
+			t.Fatalf("got %d issues %v, want 1", len(issues), issues)
+		}
+		if issues[0].Line != 2 || issues[0].Col != 3 {
+			t.Errorf("position = %d:%d, want 2:3", issues[0].Line, issues[0].Col)
+		}
+	})
+
+	t.Run("transform error aborts the lint", func(t *testing.T) {
+		t.Parallel()
+		l := linter.New()
+		l.RegisterRule(flagRule, linter.SeverityWarn)
+		wantErr := errors.New("fetch failed")
+		l.SetTransform(func(context.Context, *linter.Context) error { return wantErr })
+		if _, err := l.Lint(t.Context(), "devcontainer.json", []byte(src), linter.Devcontainer); !errors.Is(err, wantErr) {
+			t.Errorf("Lint error = %v, want %v", err, wantErr)
+		}
+	})
+
+	t.Run("transform is skipped when no rule applies", func(t *testing.T) {
+		t.Parallel()
+		l := linter.New()
+		called := false
+		l.SetTransform(func(context.Context, *linter.Context) error {
+			called = true
+			return nil
+		})
+		if _, err := l.Lint(t.Context(), "devcontainer.json", []byte(src), linter.Devcontainer); err != nil {
+			t.Fatalf("Lint: %v", err)
+		}
+		if called {
+			t.Error("transform ran although no rule is registered")
+		}
+	})
 }
 
 // panicRule is a stub Rule whose Check always panics, used to verify that the engine survives a

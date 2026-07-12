@@ -1,0 +1,7 @@
+{
+	"name": "e2e-merge",
+	"image": "ubuntu:24.04",
+	"features": {
+		"./privileged-feature": {}
+	}
+}

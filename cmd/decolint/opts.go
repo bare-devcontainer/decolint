@@ -21,6 +21,10 @@ type Options struct {
 	// Platforms restricts registered rules to those targeting one of these platforms, plus any rule
 	// with no target platform. If empty, only rules with no target platform are registered.
 	Platforms []linter.Platform
+	// MergeFeatures, when set, fetches the Features referenced in each devcontainer.json and lints
+	// the merged (effective) configuration instead of the raw file. The config file's
+	// "mergeFeatures" member can enable it as well (see run).
+	MergeFeatures bool
 	// Format selects how lint issues are written to stdout.
 	Format Format
 	// Version, when set, causes the program to print its version and exit.
@@ -47,6 +51,7 @@ func parseOptions(args []string, output io.Writer) (Options, string, error) {
 	fs.StringVar(&configPathFlag, "config", "", "path to a config file (default: auto-discover .decolint.jsonc or .decolint.json in the current directory)")
 	fs.StringVar(&platformFlag, "platform", "", "comma-separated target platforms to include in addition to \"all\" (vscode, codespaces); overrides the config file's \"platforms\" member")
 	fs.StringVar(&formatFlag, "format", "text", "output format: text, json, or github")
+	fs.BoolVar(&opts.MergeFeatures, "merge-features", false, "fetch the Features referenced in \"features\" and lint the merged (effective) configuration")
 	fs.BoolVar(&opts.Version, "version", false, "print version information and exit")
 	fs.BoolVar(&opts.ListRules, "rules", false, "print the built-in rules as a Markdown table (category, target platforms, current severity), then exit")
 	fs.BoolVar(&opts.Init, "init", false, "write a new .decolint.jsonc config file listing every rule at its default severity, then exit")

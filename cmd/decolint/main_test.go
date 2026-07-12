@@ -27,6 +27,8 @@ func TestRun(t *testing.T) {
 
 	// violationsFile is where every firing in the violations fixture is reported.
 	const violationsFile = "testdata/e2e/violations/.devcontainer/devcontainer.json"
+	// mergeFile is where every firing in the merge fixture is reported.
+	const mergeFile = "testdata/e2e/merge/.devcontainer/devcontainer.json"
 
 	tests := []struct {
 		name         string
@@ -145,6 +147,35 @@ func TestRun(t *testing.T) {
 			args:         []string{"-platform=vscode,codespaces", "testdata/e2e/clean"},
 			want:         nil,
 			wantExitCode: 0,
+		},
+		{
+			// With -merge-features, the local Feature's contributions (privileged mode and a Docker
+			// socket mount) become part of the effective configuration and trip the security rules
+			// merge.jsonc enables.
+			name: "merge features",
+			args: []string{"-merge-features", "-config=testdata/e2e/merge.jsonc", "testdata/e2e/merge"},
+			want: []firing{
+				{mergeFile, "no-docker-socket-mount", linter.SeverityError},
+				{mergeFile, "no-privileged-container", linter.SeverityError},
+			},
+			wantExitCode: 1,
+		},
+		{
+			// Without the flag only the raw file is linted, and the raw file is clean.
+			name:         "merge features disabled",
+			args:         []string{"-config=testdata/e2e/merge.jsonc", "testdata/e2e/merge"},
+			want:         nil,
+			wantExitCode: 0,
+		},
+		{
+			// merge-on.jsonc enables merging via the config file's "mergeFeatures" member.
+			name: "merge features enabled by config",
+			args: []string{"-config=testdata/e2e/merge-on.jsonc", "testdata/e2e/merge"},
+			want: []firing{
+				{mergeFile, "no-docker-socket-mount", linter.SeverityError},
+				{mergeFile, "no-privileged-container", linter.SeverityError},
+			},
+			wantExitCode: 1,
 		},
 	}
 	for _, tt := range tests {
@@ -511,6 +542,47 @@ func TestRunLint(t *testing.T) {
 		hasIssue, runErr := runLint(t.Context(), &stdout, opts)
 		if runErr != nil || hasIssue {
 			t.Errorf("hasIssue = %v, err = %v, want false, nil; stdout: %s", hasIssue, runErr, stdout.String())
+		}
+	})
+}
+
+func TestRunMergeFeatures(t *testing.T) {
+	t.Parallel()
+
+	t.Run("findings point at the feature reference", func(t *testing.T) {
+		t.Parallel()
+
+		var stdout, stderr bytes.Buffer
+		args := []string{"-format=json", "-merge-features", "-config=testdata/e2e/merge.jsonc", "testdata/e2e/merge"}
+		exitCode := run(t.Context(), args, &stdout, &stderr)
+		if exitCode != 1 {
+			t.Fatalf("exit code = %d, want 1; stderr: %s", exitCode, stderr.String())
+		}
+
+		var issues []linter.Issue
+		if err := json.Unmarshal(stdout.Bytes(), &issues); err != nil {
+			t.Fatalf("output is not a JSON issue array: %v\noutput: %s", err, stdout.String())
+		}
+		// The fixture references "./privileged-feature" on line 5; every merged-in property must be
+		// reported there.
+		for _, issue := range issues {
+			if issue.Line != 5 {
+				t.Errorf("issue %s reported at line %d, want 5 (the feature reference)", issue.RuleID, issue.Line)
+			}
+		}
+	})
+
+	t.Run("unresolvable feature is a runtime error", func(t *testing.T) {
+		t.Parallel()
+		dir := writeDevcontainer(t, `{"image": "ubuntu:24.04", "features": {"./missing": {}}}`)
+
+		var stdout, stderr bytes.Buffer
+		exitCode := run(t.Context(), []string{"-merge-features", dir}, &stdout, &stderr)
+		if exitCode != 2 {
+			t.Errorf("exit code = %d, want 2", exitCode)
+		}
+		if !strings.Contains(stderr.String(), "./missing") {
+			t.Errorf("stderr = %q, want it to mention the unresolvable feature", stderr.String())
 		}
 	})
 }

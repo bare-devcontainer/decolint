@@ -72,6 +72,7 @@ list.
 | `-format` | output format: `text` (default), `json`, or `github` (see [Output formats](#output-formats)) |
 | `-deny-warnings` | also exit non-zero on `warn`-severity findings (see [Exit codes](#exit-codes)) |
 | `-config` | path to a config file overriding rule and category severities (see [Config file](#config-file)) |
+| `-merge-features` | fetch the Features referenced in `features` and lint the merged configuration (see [Merging Features](#merging-features)) |
 | `-rules` | print the available rules |
 | `-init` | write a new `.decolint.jsonc` listing every rule at its default severity (see [Config file](#config-file)) |
 
@@ -90,6 +91,46 @@ decolint -platform=vscode,codespaces
 Target platforms can also be declared in the [config
 file](#config-file) with the `platforms` member; the `-platform` flag,
 when given, takes precedence.
+
+### Merging Features
+
+The [Features](https://containers.dev/implementors/features/) a
+`devcontainer.json` references contribute configuration of their own —
+`containerEnv`, `mounts`, `capAdd`, `securityOpt`, `privileged`,
+`init`, `customizations`, and lifecycle hooks — which the Dev
+Container tooling merges into the effective configuration following
+the specification's [merge
+logic](https://containers.dev/implementors/spec/#merge-logic). By
+default decolint lints only the raw file, so an issue introduced by a
+Feature (say, one that sets `privileged: true` or bind-mounts the
+Docker socket) goes unnoticed.
+
+Pass `-merge-features` (or set `"mergeFeatures": true` in the [config
+file](#config-file)) to fetch every referenced Feature, merge the
+properties it contributes, and lint the merged configuration instead:
+
+```console
+decolint -merge-features -config .decolint.jsonc
+```
+
+- OCI references (e.g. `ghcr.io/devcontainers/features/node:1`) are
+  pulled from the registry with anonymous access, direct HTTP(S)
+  tarball URIs are downloaded, and relative paths (e.g.
+  `./my-feature`) are read from disk.
+- Features referenced by a Feature's `dependsOn` are resolved
+  recursively and contribute their properties as well; installation
+  order follows `dependsOn`, `installsAfter`, and
+  `overrideFeatureInstallOrder`.
+- Findings on merged-in properties are reported at the referencing
+  entry in `features`, so the usual [suppression
+  comments](#suppressing-findings) on that line apply to them.
+- A Feature that cannot be fetched (network failure, unknown
+  reference, private registry) is an error (exit code 2).
+
+Fetched metadata is cached in memory for the duration of the run, but
+not on disk. Note that Feature `options` never affect the merged
+configuration, and variable substitutions (e.g. `${devcontainerId}`)
+in contributed values are merged literally.
 
 ### Output formats
 
@@ -152,7 +193,9 @@ rule in a [category](#rule-categories) at once; `rules` sets an
 individual rule's severity and takes precedence over its category.
 `platforms` lists the [target platforms](#target-platforms) whose
 rules run in addition to platform-agnostic ones; the `-platform` flag,
-when given, takes precedence over it.
+when given, takes precedence over it. `mergeFeatures` set to `true`
+enables [merging Features](#merging-features), same as the
+`-merge-features` flag.
 
 For the strictest configuration, enable every category:
 

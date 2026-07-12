@@ -17,6 +17,9 @@ type Config struct {
 	// Platforms lists target platforms whose rules are linted in addition to platform-agnostic
 	// ones. The -platform flag, when given, takes precedence.
 	Platforms []linter.Platform `json:"platforms"`
+	// MergeFeatures, when true, fetches the Features referenced in each devcontainer.json and
+	// lints the merged (effective) configuration. The -merge-features flag can enable it as well.
+	MergeFeatures bool `json:"mergeFeatures"`
 	// Categories maps a category name to the severity every rule in that category should be
 	// overridden to. Per-rule entries in Rules take precedence.
 	Categories map[string]linter.Severity `json:"categories"`
@@ -26,8 +29,9 @@ type Config struct {
 
 // MarshalJSONTo encodes cfg with its categories and rules written in sorted key order, for use
 // with encoding/json/v2. Map iteration order is otherwise unspecified, so without this, marshaling
-// the same Config twice could produce differently ordered output. The "platforms" and "categories"
-// members are omitted when empty, so generated configs (see initConfigFile) stay minimal.
+// the same Config twice could produce differently ordered output. The "platforms",
+// "mergeFeatures", and "categories" members are omitted when empty or false, so generated configs
+// (see initConfigFile) stay minimal.
 func (cfg Config) MarshalJSONTo(enc *jsontext.Encoder) error {
 	if err := enc.WriteToken(jsontext.BeginObject); err != nil {
 		return err
@@ -37,6 +41,14 @@ func (cfg Config) MarshalJSONTo(enc *jsontext.Encoder) error {
 			return err
 		}
 		if err := json.MarshalEncode(enc, cfg.Platforms); err != nil {
+			return err
+		}
+	}
+	if cfg.MergeFeatures {
+		if err := enc.WriteToken(jsontext.String("mergeFeatures")); err != nil {
+			return err
+		}
+		if err := enc.WriteToken(jsontext.Bool(true)); err != nil {
 			return err
 		}
 	}

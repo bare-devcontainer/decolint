@@ -9,9 +9,11 @@ import (
 	"io"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"strings"
 	"syscall"
 
+	"github.com/bare-devcontainer/decolint/feature"
 	"github.com/bare-devcontainer/decolint/linter"
 	"github.com/bare-devcontainer/decolint/rules"
 )
@@ -83,6 +85,9 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 	if len(opts.Platforms) == 0 {
 		opts.Platforms = cfg.Platforms
 	}
+	// The -merge-features flag and the config file's "mergeFeatures" member can each enable
+	// merging; the flag cannot turn it back off.
+	opts.MergeFeatures = opts.MergeFeatures || cfg.MergeFeatures
 
 	if opts.ListRules {
 		if err := listRules(stdout, opts.Config); err != nil {
@@ -235,6 +240,16 @@ func runLint(ctx context.Context, stdout io.Writer, opts Options) (bool, error) 
 	overrides := rules.Overrides{Categories: opts.Config.Categories, Rules: opts.Config.Rules}
 	if err := rules.RegisterRules(l, opts.Platforms, overrides); err != nil {
 		return false, fmt.Errorf("register rules: %w", err)
+	}
+	if opts.MergeFeatures {
+		// One Fetcher per run, so a Feature shared by several files is fetched at most once.
+		fetcher := feature.NewFetcher()
+		l.SetTransform(func(ctx context.Context, fctx *linter.Context) error {
+			if fctx.Type != linter.Devcontainer {
+				return nil
+			}
+			return feature.Merge(ctx, fetcher, filepath.Dir(fctx.Path), fctx.Root)
+		})
 	}
 
 	var allIssues []linter.Issue

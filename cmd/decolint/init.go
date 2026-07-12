@@ -37,6 +37,9 @@ func initConfigFile(output io.Writer) error {
 // "platforms" lists target platforms whose rules run in addition to
 // platform-agnostic ones (the -platform flag takes precedence), e.g.:
 //   "platforms": ["vscode", "codespaces"]
+// "mergeFeatures", when true, fetches the Features referenced in each
+// devcontainer.json and lints the merged (effective) configuration, e.g.:
+//   "mergeFeatures": true
 `)
 	if err := json.MarshalWrite(&buf, cfg, jsontext.Multiline(true)); err != nil {
 		return fmt.Errorf("marshal %s: %w", name, err)

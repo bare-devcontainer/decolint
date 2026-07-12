@@ -38,13 +38,12 @@ func (CodespacesNoHostPortFormat) Paths() []string {
 }
 
 // Check implements [linter.Rule].
-func (r CodespacesNoHostPortFormat) Check(_ *linter.Context, node *linter.Node) []linter.Finding {
+func (CodespacesNoHostPortFormat) Check(_ *linter.Context, node *linter.Node) []linter.Finding {
 	if key, ok := strings.CutPrefix(node.Pointer, "/portsAttributes/"); ok {
 		if !isHostPort(key) {
 			return nil
 		}
 		return []linter.Finding{{
-			RuleID:  r.ID(),
 			Message: fmt.Sprintf(`"portsAttributes" key %q uses "host:port" format; Codespaces only supports a bare port number`, key),
 			Offset:  node.Value.StartOffset,
 		}}
@@ -59,7 +58,6 @@ func (r CodespacesNoHostPortFormat) Check(_ *linter.Context, node *linter.Node) 
 		return nil
 	}
 	return []linter.Finding{{
-		RuleID:  r.ID(),
 		Message: fmt.Sprintf(`"forwardPorts" entry %q uses "host:port" format; Codespaces only supports a bare port number`, port),
 		Offset:  node.Value.StartOffset,
 	}}

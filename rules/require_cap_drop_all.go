@@ -32,7 +32,7 @@ func (RequireCapDropAll) Platforms() []linter.Platform { return nil }
 func (RequireCapDropAll) Paths() []string { return []string{""} }
 
 // Check implements [linter.Rule].
-func (r RequireCapDropAll) Check(_ *linter.Context, node *linter.Node) []linter.Finding {
+func (RequireCapDropAll) Check(_ *linter.Context, node *linter.Node) []linter.Finding {
 	obj, ok := node.Value.Value.(*hujson.Object)
 	if !ok {
 		return nil
@@ -48,7 +48,6 @@ func (r RequireCapDropAll) Check(_ *linter.Context, node *linter.Node) []linter.
 	}
 
 	return []linter.Finding{{
-		RuleID:  r.ID(),
 		Message: `"ALL" is not set via "capDrop" or "runArgs", leaving the container with its default Linux capabilities`,
 		Offset:  node.Value.StartOffset,
 	}}

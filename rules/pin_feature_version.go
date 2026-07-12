@@ -35,7 +35,7 @@ func (PinFeatureVersion) Platforms() []linter.Platform { return nil }
 func (PinFeatureVersion) Paths() []string { return []string{"/features"} }
 
 // Check implements [linter.Rule].
-func (r PinFeatureVersion) Check(_ *linter.Context, node *linter.Node) []linter.Finding {
+func (PinFeatureVersion) Check(_ *linter.Context, node *linter.Node) []linter.Finding {
 	obj, ok := node.Value.Value.(*hujson.Object)
 	if !ok {
 		return nil
@@ -56,13 +56,11 @@ func (r PinFeatureVersion) Check(_ *linter.Context, node *linter.Node) []linter.
 		switch {
 		case !hasTag:
 			findings = append(findings, linter.Finding{
-				RuleID:  r.ID(),
 				Message: fmt.Sprintf("feature %q has no explicit version; pin a specific version", ref),
 				Offset:  m.Name.StartOffset,
 			})
 		case tag == "latest":
 			findings = append(findings, linter.Finding{
-				RuleID:  r.ID(),
 				Message: fmt.Sprintf("feature %q uses the \"latest\" version; pin a specific version", ref),
 				Offset:  m.Name.StartOffset,
 			})

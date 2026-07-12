@@ -29,7 +29,7 @@ func (MissingContainerDef) Platforms() []linter.Platform { return nil }
 func (MissingContainerDef) Paths() []string { return []string{""} }
 
 // Check implements [linter.Rule].
-func (r MissingContainerDef) Check(_ *linter.Context, node *linter.Node) []linter.Finding {
+func (MissingContainerDef) Check(_ *linter.Context, node *linter.Node) []linter.Finding {
 	obj, ok := node.Value.Value.(*hujson.Object)
 	if !ok {
 		return nil
@@ -40,7 +40,6 @@ func (r MissingContainerDef) Check(_ *linter.Context, node *linter.Node) []linte
 		}
 	}
 	return []linter.Finding{{
-		RuleID:  r.ID(),
 		Message: `devcontainer.json must define one of "image", "build", or "dockerComposeFile"`,
 		Offset:  node.Value.StartOffset,
 	}}

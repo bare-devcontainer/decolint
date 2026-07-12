@@ -29,13 +29,12 @@ func (MissingBuildDockerfile) Platforms() []linter.Platform { return nil }
 func (MissingBuildDockerfile) Paths() []string { return []string{"/build"} }
 
 // Check implements [linter.Rule].
-func (r MissingBuildDockerfile) Check(_ *linter.Context, node *linter.Node) []linter.Finding {
+func (MissingBuildDockerfile) Check(_ *linter.Context, node *linter.Node) []linter.Finding {
 	obj, ok := node.Value.Value.(*hujson.Object)
 	if !ok || hasMember(obj, "dockerfile") {
 		return nil
 	}
 	return []linter.Finding{{
-		RuleID:  r.ID(),
 		Message: `"build" is missing "dockerfile"`,
 		Offset:  node.Value.StartOffset,
 	}}

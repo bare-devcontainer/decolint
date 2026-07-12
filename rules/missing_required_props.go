@@ -31,7 +31,7 @@ func (MissingRequiredProps) Platforms() []linter.Platform { return nil }
 func (MissingRequiredProps) Paths() []string { return []string{""} }
 
 // Check implements [linter.Rule].
-func (r MissingRequiredProps) Check(_ *linter.Context, node *linter.Node) []linter.Finding {
+func (MissingRequiredProps) Check(_ *linter.Context, node *linter.Node) []linter.Finding {
 	obj, ok := node.Value.Value.(*hujson.Object)
 	if !ok {
 		return nil
@@ -42,7 +42,6 @@ func (r MissingRequiredProps) Check(_ *linter.Context, node *linter.Node) []lint
 			continue
 		}
 		findings = append(findings, linter.Finding{
-			RuleID:  r.ID(),
 			Message: fmt.Sprintf("required property %q is missing", name),
 			Offset:  node.Value.StartOffset,
 		})

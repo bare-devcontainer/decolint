@@ -40,7 +40,7 @@ func (PinImageDigest) Platforms() []linter.Platform { return nil }
 func (PinImageDigest) Paths() []string { return []string{"/image"} }
 
 // Check implements [linter.Rule].
-func (r PinImageDigest) Check(_ *linter.Context, node *linter.Node) []linter.Finding {
+func (PinImageDigest) Check(_ *linter.Context, node *linter.Node) []linter.Finding {
 	lit, ok := node.Value.Value.(hujson.Literal)
 	if !ok || lit.Kind() != '"' {
 		return nil
@@ -50,7 +50,6 @@ func (r PinImageDigest) Check(_ *linter.Context, node *linter.Node) []linter.Fin
 		return nil
 	}
 	return []linter.Finding{{
-		RuleID:  r.ID(),
 		Message: fmt.Sprintf("image %q is not pinned by digest; add an \"@sha256:...\" digest", image),
 		Offset:  node.Value.StartOffset,
 	}}

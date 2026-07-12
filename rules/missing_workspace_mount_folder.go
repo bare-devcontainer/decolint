@@ -32,7 +32,7 @@ func (MissingWorkspaceMountFolder) Platforms() []linter.Platform { return nil }
 func (MissingWorkspaceMountFolder) Paths() []string { return []string{""} }
 
 // Check implements [linter.Rule].
-func (r MissingWorkspaceMountFolder) Check(_ *linter.Context, node *linter.Node) []linter.Finding {
+func (MissingWorkspaceMountFolder) Check(_ *linter.Context, node *linter.Node) []linter.Finding {
 	obj, ok := node.Value.Value.(*hujson.Object)
 	if !ok || (!hasMember(obj, "image") && !hasMember(obj, "build")) {
 		return nil
@@ -49,7 +49,6 @@ func (r MissingWorkspaceMountFolder) Check(_ *linter.Context, node *linter.Node)
 		present, missing = "workspaceFolder", "workspaceMount"
 	}
 	return []linter.Finding{{
-		RuleID:  r.ID(),
 		Message: fmt.Sprintf("devcontainer.json sets %q but is missing %q", present, missing),
 		Offset:  node.Value.StartOffset,
 	}}

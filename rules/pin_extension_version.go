@@ -38,7 +38,7 @@ func (PinExtensionVersion) Paths() []string {
 }
 
 // Check implements [linter.Rule].
-func (r PinExtensionVersion) Check(_ *linter.Context, node *linter.Node) []linter.Finding {
+func (PinExtensionVersion) Check(_ *linter.Context, node *linter.Node) []linter.Finding {
 	lit, ok := node.Value.Value.(hujson.Literal)
 	if !ok || lit.Kind() != '"' {
 		return nil
@@ -48,7 +48,6 @@ func (r PinExtensionVersion) Check(_ *linter.Context, node *linter.Node) []linte
 		return nil
 	}
 	return []linter.Finding{{
-		RuleID:  r.ID(),
 		Message: fmt.Sprintf("extension %q has no explicit version; pin a specific version", ref),
 		Offset:  node.Value.StartOffset,
 	}}

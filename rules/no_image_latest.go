@@ -32,7 +32,7 @@ func (NoImageLatest) Platforms() []linter.Platform { return nil }
 func (NoImageLatest) Paths() []string { return []string{"/image"} }
 
 // Check implements [linter.Rule].
-func (r NoImageLatest) Check(_ *linter.Context, node *linter.Node) []linter.Finding {
+func (NoImageLatest) Check(_ *linter.Context, node *linter.Node) []linter.Finding {
 	lit, ok := node.Value.Value.(hujson.Literal)
 	if !ok || lit.Kind() != '"' {
 		return nil
@@ -43,13 +43,11 @@ func (r NoImageLatest) Check(_ *linter.Context, node *linter.Node) []linter.Find
 	switch {
 	case !hasTag:
 		return []linter.Finding{{
-			RuleID:  r.ID(),
 			Message: fmt.Sprintf("image %q has no explicit tag; pin a specific version", image),
 			Offset:  node.Value.StartOffset,
 		}}
 	case tag == "latest":
 		return []linter.Finding{{
-			RuleID:  r.ID(),
 			Message: fmt.Sprintf("image %q uses the \"latest\" tag; pin a specific version", image),
 			Offset:  node.Value.StartOffset,
 		}}

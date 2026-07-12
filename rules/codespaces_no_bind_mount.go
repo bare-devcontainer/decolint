@@ -31,13 +31,12 @@ func (CodespacesNoBindMount) Platforms() []linter.Platform {
 func (CodespacesNoBindMount) Paths() []string { return []string{"/mounts/*"} }
 
 // Check implements [linter.Rule].
-func (r CodespacesNoBindMount) Check(_ *linter.Context, node *linter.Node) []linter.Finding {
+func (CodespacesNoBindMount) Check(_ *linter.Context, node *linter.Node) []linter.Finding {
 	mountType, source, ok := parseMount(node.Value)
 	if !ok || mountType != "bind" || source == dockerSocketPath {
 		return nil
 	}
 	return []linter.Finding{{
-		RuleID:  r.ID(),
 		Message: `"mounts" entry uses the "bind" type, which GitHub Codespaces silently ignores`,
 		Offset:  node.Value.StartOffset,
 	}}

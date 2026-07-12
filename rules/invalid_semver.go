@@ -37,7 +37,7 @@ func (InvalidSemver) Paths() []string { return []string{"/version"} }
 var semverPattern = regexp.MustCompile(`^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-((?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*)(?:\.(?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*))*))?(?:\+([0-9a-zA-Z-]+(?:\.[0-9a-zA-Z-]+)*))?$`)
 
 // Check implements [linter.Rule].
-func (r InvalidSemver) Check(_ *linter.Context, node *linter.Node) []linter.Finding {
+func (InvalidSemver) Check(_ *linter.Context, node *linter.Node) []linter.Finding {
 	lit, ok := node.Value.Value.(hujson.Literal)
 	if !ok || lit.Kind() != '"' {
 		return nil
@@ -47,7 +47,6 @@ func (r InvalidSemver) Check(_ *linter.Context, node *linter.Node) []linter.Find
 		return nil
 	}
 	return []linter.Finding{{
-		RuleID:  r.ID(),
 		Message: fmt.Sprintf("version %q is not a valid semantic version (see https://semver.org/)", version),
 		Offset:  node.Value.StartOffset,
 	}}

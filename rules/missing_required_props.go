@@ -9,29 +9,15 @@ import (
 
 // MissingRequiredProps reports a Feature's or Template's metadata when it is missing a required
 // property ("id", "version", or "name").
-type MissingRequiredProps struct{}
-
-// ID implements [linter.Rule].
-func (MissingRequiredProps) ID() string { return "missing-required-props" }
-
-// Description implements [linter.Rule].
-func (MissingRequiredProps) Description() string {
-	return `disallow a Feature's or Template's metadata that is missing a required property ("id", "version", or "name")`
+var MissingRequiredProps = &linter.Rule{
+	ID:          "missing-required-props",
+	Description: `disallow a Feature's or Template's metadata that is missing a required property ("id", "version", or "name")`,
+	FileTypes:   []linter.FileType{linter.Feature, linter.Template},
+	Paths:       []string{""},
+	Check:       checkMissingRequiredProps,
 }
 
-// FileTypes implements [linter.Rule].
-func (MissingRequiredProps) FileTypes() []linter.FileType {
-	return []linter.FileType{linter.Feature, linter.Template}
-}
-
-// Platforms implements [linter.Rule].
-func (MissingRequiredProps) Platforms() []linter.Platform { return nil }
-
-// Paths implements [linter.Rule].
-func (MissingRequiredProps) Paths() []string { return []string{""} }
-
-// Check implements [linter.Rule].
-func (MissingRequiredProps) Check(_ *linter.Context, node *linter.Node) []linter.Finding {
+func checkMissingRequiredProps(_ *linter.Context, node *linter.Node) []linter.Finding {
 	obj, ok := node.Value.Value.(*hujson.Object)
 	if !ok {
 		return nil

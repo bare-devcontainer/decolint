@@ -16,15 +16,15 @@ make run ARGS="-format=json path/to/dir"
 
 ## Adding a rule
 
-Rules are plain Go code. Implement the
-[`linter.Rule`](linter/rule.go) interface in a new file under
+Rules are plain Go code. Declare a
+[`linter.Rule`](linter/rule.go) value in a new file under
 [`rules/`](rules/) and register it, with its default severity, in
 [`rules.RegisterRules`](rules/rules.go).
 
 A rule declares the kinds of configuration files it applies to
 (`linter.Devcontainer`, `linter.Feature`, `linter.Template`), the
 target platform(s) it applies to (`linter.PlatformVSCode`,
-`linter.PlatformCodespaces`, ...; a nil or empty result means the rule
+`linter.PlatformCodespaces`, ...; a nil or empty value means the rule
 applies to every platform), and the JSON Pointer paths it wants to
 inspect. The engine traverses the syntax tree once per matching file
 and calls `Check` for every value matching one of the paths; a `*`
@@ -36,20 +36,16 @@ package rules
 
 import "github.com/bare-devcontainer/decolint/linter"
 
-type MyRule struct{}
-
-func (MyRule) ID() string          { return "my-rule" }
-func (MyRule) Description() string { return "..." }
-
-func (MyRule) FileTypes() []linter.FileType {
-	return []linter.FileType{linter.Devcontainer}
+var MyRule = &linter.Rule{
+	ID:          "my-rule",
+	Description: "...",
+	FileTypes:   []linter.FileType{linter.Devcontainer},
+	Platforms:   nil, // applies to every platform
+	Paths:       []string{"/mounts/*"},
+	Check:       checkMyRule,
 }
 
-func (MyRule) Platforms() []linter.Platform { return nil } // applies to every platform
-
-func (MyRule) Paths() []string { return []string{"/mounts/*"} }
-
-func (r MyRule) Check(ctx *linter.Context, node *linter.Node) []linter.Finding {
+func checkMyRule(ctx *linter.Context, node *linter.Node) []linter.Finding {
 	// node.Value is the HuJSON value at node.Pointer. Set each
 	// finding's Offset to the offending value's StartOffset so the
 	// engine can resolve it to a line and column.

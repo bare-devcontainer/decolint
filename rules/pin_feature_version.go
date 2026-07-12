@@ -13,29 +13,15 @@ import (
 // they resolve to changes over time. Local path Features (e.g. "./my-feature") and direct tarball
 // URIs (e.g. "https://.../devcontainer-feature.tgz") have no version tag to pin and are not
 // checked.
-type PinFeatureVersion struct{}
-
-// ID implements [linter.Rule].
-func (PinFeatureVersion) ID() string { return "pin-feature-version" }
-
-// Description implements [linter.Rule].
-func (PinFeatureVersion) Description() string {
-	return `disallow a Feature reference without an explicit version or with the "latest" version`
+var PinFeatureVersion = &linter.Rule{
+	ID:          "pin-feature-version",
+	Description: `disallow a Feature reference without an explicit version or with the "latest" version`,
+	FileTypes:   []linter.FileType{linter.Devcontainer},
+	Paths:       []string{"/features"},
+	Check:       checkPinFeatureVersion,
 }
 
-// FileTypes implements [linter.Rule].
-func (PinFeatureVersion) FileTypes() []linter.FileType {
-	return []linter.FileType{linter.Devcontainer}
-}
-
-// Platforms implements [linter.Rule].
-func (PinFeatureVersion) Platforms() []linter.Platform { return nil }
-
-// Paths implements [linter.Rule].
-func (PinFeatureVersion) Paths() []string { return []string{"/features"} }
-
-// Check implements [linter.Rule].
-func (PinFeatureVersion) Check(_ *linter.Context, node *linter.Node) []linter.Finding {
+func checkPinFeatureVersion(_ *linter.Context, node *linter.Node) []linter.Finding {
 	obj, ok := node.Value.Value.(*hujson.Object)
 	if !ok {
 		return nil

@@ -214,22 +214,21 @@ func TestLintParseError(t *testing.T) {
 
 // panicRule is a stub Rule whose Check always panics, used to verify that the engine survives a
 // defective rule instead of letting it abort the whole run.
-type panicRule struct{}
-
-func (panicRule) ID() string                   { return "panic-rule" }
-func (panicRule) Description() string          { return "always panics" }
-func (panicRule) FileTypes() []linter.FileType { return []linter.FileType{linter.Devcontainer} }
-func (panicRule) Platforms() []linter.Platform { return nil }
-func (panicRule) Paths() []string              { return []string{""} }
-func (panicRule) Check(*linter.Context, *linter.Node) []linter.Finding {
-	panic("boom")
+var panicRule = &linter.Rule{
+	ID:          "panic-rule",
+	Description: "always panics",
+	FileTypes:   []linter.FileType{linter.Devcontainer},
+	Paths:       []string{""},
+	Check: func(*linter.Context, *linter.Node) []linter.Finding {
+		panic("boom")
+	},
 }
 
 func TestLintRulePanicIsRecovered(t *testing.T) {
 	t.Parallel()
 
 	l := linter.New()
-	l.RegisterRule(panicRule{}, linter.Error)
+	l.RegisterRule(panicRule, linter.Error)
 	issues, err := l.Lint(t.Context(), "devcontainer.json", []byte(`{}`), linter.Devcontainer)
 	if err != nil {
 		t.Fatalf("Lint: %v", err)

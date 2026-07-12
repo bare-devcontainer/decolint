@@ -42,7 +42,7 @@ func TestMissingRequiredProps(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			assertIssuesAt(t, rules.MissingRequiredProps{}, linter.Error, tt.path, tt.fileType, tt.src, tt.want)
+			assertIssuesAt(t, rules.MissingRequiredProps, linter.Error, tt.path, tt.fileType, tt.src, tt.want)
 		})
 	}
 }

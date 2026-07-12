@@ -9,31 +9,15 @@ import (
 // container in privileged mode, either via the "privileged" property or, in a devcontainer.json, a
 // "--privileged" entry in "runArgs". Privileged mode disables the container's isolation from the
 // host, which is a significant security risk.
-type NoPrivilegedContainer struct{}
-
-// ID implements [linter.Rule].
-func (NoPrivilegedContainer) ID() string { return "no-privileged-container" }
-
-// Description implements [linter.Rule].
-func (NoPrivilegedContainer) Description() string {
-	return `disallow running the container in privileged mode via the "privileged" property or a "--privileged" entry in "runArgs"`
+var NoPrivilegedContainer = &linter.Rule{
+	ID:          "no-privileged-container",
+	Description: `disallow running the container in privileged mode via the "privileged" property or a "--privileged" entry in "runArgs"`,
+	FileTypes:   []linter.FileType{linter.Devcontainer, linter.Feature},
+	Paths:       []string{"/privileged", "/runArgs/*"},
+	Check:       checkNoPrivilegedContainer,
 }
 
-// FileTypes implements [linter.Rule].
-func (NoPrivilegedContainer) FileTypes() []linter.FileType {
-	return []linter.FileType{linter.Devcontainer, linter.Feature}
-}
-
-// Platforms implements [linter.Rule].
-func (NoPrivilegedContainer) Platforms() []linter.Platform { return nil }
-
-// Paths implements [linter.Rule].
-func (NoPrivilegedContainer) Paths() []string {
-	return []string{"/privileged", "/runArgs/*"}
-}
-
-// Check implements [linter.Rule].
-func (NoPrivilegedContainer) Check(ctx *linter.Context, node *linter.Node) []linter.Finding {
+func checkNoPrivilegedContainer(ctx *linter.Context, node *linter.Node) []linter.Finding {
 	lit, ok := node.Value.Value.(hujson.Literal)
 	if !ok {
 		return nil

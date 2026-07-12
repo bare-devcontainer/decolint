@@ -12,33 +12,16 @@ import (
 // CodespacesNoHostPortFormat reports "forwardPorts" entries and "portsAttributes" keys written in
 // "host:port" format. The Dev Container spec allows that format, but GitHub Codespaces only
 // supports a bare port number in either property.
-type CodespacesNoHostPortFormat struct{}
-
-// ID implements [linter.Rule].
-func (CodespacesNoHostPortFormat) ID() string { return "codespaces-no-host-port-format" }
-
-// Description implements [linter.Rule].
-func (CodespacesNoHostPortFormat) Description() string {
-	return `disallow "host:port" entries in "forwardPorts" and "portsAttributes", which GitHub Codespaces does not support`
+var CodespacesNoHostPortFormat = &linter.Rule{
+	ID:          "codespaces-no-host-port-format",
+	Description: `disallow "host:port" entries in "forwardPorts" and "portsAttributes", which GitHub Codespaces does not support`,
+	FileTypes:   []linter.FileType{linter.Devcontainer},
+	Platforms:   []linter.Platform{linter.PlatformCodespaces},
+	Paths:       []string{"/forwardPorts/*", "/portsAttributes/*"},
+	Check:       checkCodespacesNoHostPortFormat,
 }
 
-// FileTypes implements [linter.Rule].
-func (CodespacesNoHostPortFormat) FileTypes() []linter.FileType {
-	return []linter.FileType{linter.Devcontainer}
-}
-
-// Platforms implements [linter.Rule].
-func (CodespacesNoHostPortFormat) Platforms() []linter.Platform {
-	return []linter.Platform{linter.PlatformCodespaces}
-}
-
-// Paths implements [linter.Rule].
-func (CodespacesNoHostPortFormat) Paths() []string {
-	return []string{"/forwardPorts/*", "/portsAttributes/*"}
-}
-
-// Check implements [linter.Rule].
-func (CodespacesNoHostPortFormat) Check(_ *linter.Context, node *linter.Node) []linter.Finding {
+func checkCodespacesNoHostPortFormat(_ *linter.Context, node *linter.Node) []linter.Finding {
 	if key, ok := strings.CutPrefix(node.Pointer, "/portsAttributes/"); ok {
 		if !isHostPort(key) {
 			return nil

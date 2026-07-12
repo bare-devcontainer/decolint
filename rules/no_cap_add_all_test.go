@@ -46,7 +46,7 @@ func TestNoCapAddAll(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			assertIssues(t, rules.NoCapAddAll{}, linter.Warn, tt.src, tt.want)
+			assertIssues(t, rules.NoCapAddAll, linter.Warn, tt.src, tt.want)
 		})
 	}
 }
@@ -71,7 +71,7 @@ func TestNoCapAddAllFeature(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			assertIssuesAt(t, rules.NoCapAddAll{}, linter.Warn, "devcontainer-feature.json", linter.Feature, tt.src, tt.want)
+			assertIssuesAt(t, rules.NoCapAddAll, linter.Warn, "devcontainer-feature.json", linter.Feature, tt.src, tt.want)
 		})
 	}
 }

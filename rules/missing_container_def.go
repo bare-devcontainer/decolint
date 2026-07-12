@@ -7,29 +7,15 @@ import (
 
 // MissingContainerDef reports a devcontainer.json that defines none of "image", "build", or
 // "dockerComposeFile", leaving no way to build a container.
-type MissingContainerDef struct{}
-
-// ID implements [linter.Rule].
-func (MissingContainerDef) ID() string { return "missing-container-def" }
-
-// Description implements [linter.Rule].
-func (MissingContainerDef) Description() string {
-	return `disallow a devcontainer.json that defines none of "image", "build", or "dockerComposeFile"`
+var MissingContainerDef = &linter.Rule{
+	ID:          "missing-container-def",
+	Description: `disallow a devcontainer.json that defines none of "image", "build", or "dockerComposeFile"`,
+	FileTypes:   []linter.FileType{linter.Devcontainer},
+	Paths:       []string{""},
+	Check:       checkMissingContainerDef,
 }
 
-// FileTypes implements [linter.Rule].
-func (MissingContainerDef) FileTypes() []linter.FileType {
-	return []linter.FileType{linter.Devcontainer}
-}
-
-// Platforms implements [linter.Rule].
-func (MissingContainerDef) Platforms() []linter.Platform { return nil }
-
-// Paths implements [linter.Rule].
-func (MissingContainerDef) Paths() []string { return []string{""} }
-
-// Check implements [linter.Rule].
-func (MissingContainerDef) Check(_ *linter.Context, node *linter.Node) []linter.Finding {
+func checkMissingContainerDef(_ *linter.Context, node *linter.Node) []linter.Finding {
 	obj, ok := node.Value.Value.(*hujson.Object)
 	if !ok {
 		return nil

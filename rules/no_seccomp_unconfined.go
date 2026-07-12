@@ -9,31 +9,15 @@ import (
 // seccomp confinement, either via the "securityOpt" property or, in a devcontainer.json, a
 // "--security-opt seccomp=unconfined" entry in "runArgs". Running unconfined removes a key layer of
 // kernel-level syscall filtering that isolates the container from the host.
-type NoSeccompUnconfined struct{}
-
-// ID implements [linter.Rule].
-func (NoSeccompUnconfined) ID() string { return "no-seccomp-unconfined" }
-
-// Description implements [linter.Rule].
-func (NoSeccompUnconfined) Description() string {
-	return `disallow disabling seccomp confinement via a devcontainer.json's or Feature's "securityOpt" property, or a "--security-opt seccomp=unconfined" entry in a devcontainer.json's "runArgs"`
+var NoSeccompUnconfined = &linter.Rule{
+	ID:          "no-seccomp-unconfined",
+	Description: `disallow disabling seccomp confinement via a devcontainer.json's or Feature's "securityOpt" property, or a "--security-opt seccomp=unconfined" entry in a devcontainer.json's "runArgs"`,
+	FileTypes:   []linter.FileType{linter.Devcontainer, linter.Feature},
+	Paths:       []string{"/securityOpt/*", "/runArgs"},
+	Check:       checkNoSeccompUnconfined,
 }
 
-// FileTypes implements [linter.Rule].
-func (NoSeccompUnconfined) FileTypes() []linter.FileType {
-	return []linter.FileType{linter.Devcontainer, linter.Feature}
-}
-
-// Platforms implements [linter.Rule].
-func (NoSeccompUnconfined) Platforms() []linter.Platform { return nil }
-
-// Paths implements [linter.Rule].
-func (NoSeccompUnconfined) Paths() []string {
-	return []string{"/securityOpt/*", "/runArgs"}
-}
-
-// Check implements [linter.Rule].
-func (NoSeccompUnconfined) Check(ctx *linter.Context, node *linter.Node) []linter.Finding {
+func checkNoSeccompUnconfined(ctx *linter.Context, node *linter.Node) []linter.Finding {
 	if node.Pointer == "/runArgs" {
 		arr, ok := node.Value.Value.(*hujson.Array)
 		if !ok || !runArgsApplicable(ctx) {

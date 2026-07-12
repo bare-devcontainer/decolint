@@ -13,29 +13,15 @@ import (
 // own default user) when unset. Both properties are therefore consulted: "remoteUser" is checked
 // first, falling back to "containerUser" only when "remoteUser" is unset. It is off by default
 // because most configs don't set either property and enabling it by default would be noisy.
-type RequireNonRoot struct{}
-
-// ID implements [linter.Rule].
-func (RequireNonRoot) ID() string { return "require-non-root" }
-
-// Description implements [linter.Rule].
-func (RequireNonRoot) Description() string {
-	return `require "remoteUser" or, if unset, "containerUser" to be set to a non-root user`
+var RequireNonRoot = &linter.Rule{
+	ID:          "require-non-root",
+	Description: `require "remoteUser" or, if unset, "containerUser" to be set to a non-root user`,
+	FileTypes:   []linter.FileType{linter.Devcontainer},
+	Paths:       []string{""},
+	Check:       checkRequireNonRoot,
 }
 
-// FileTypes implements [linter.Rule].
-func (RequireNonRoot) FileTypes() []linter.FileType {
-	return []linter.FileType{linter.Devcontainer}
-}
-
-// Platforms implements [linter.Rule].
-func (RequireNonRoot) Platforms() []linter.Platform { return nil }
-
-// Paths implements [linter.Rule].
-func (RequireNonRoot) Paths() []string { return []string{""} }
-
-// Check implements [linter.Rule].
-func (RequireNonRoot) Check(_ *linter.Context, node *linter.Node) []linter.Finding {
+func checkRequireNonRoot(_ *linter.Context, node *linter.Node) []linter.Finding {
 	obj, ok := node.Value.Value.(*hujson.Object)
 	if !ok {
 		return nil

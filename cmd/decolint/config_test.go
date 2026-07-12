@@ -255,3 +255,54 @@ func TestLoadConfigDiscovery(t *testing.T) {
 		})
 	}
 }
+
+func TestMergeConfig(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		opts Options
+		cfg  Config
+		want Config
+	}{
+		{
+			"CLI platform overrides config file platforms",
+			Options{Platforms: []linter.Platform{linter.PlatformVSCode}},
+			Config{Platforms: []linter.Platform{linter.PlatformCodespaces}},
+			Config{Platforms: []linter.Platform{linter.PlatformVSCode}},
+		},
+		{
+			"CLI platform unset falls back to config file platforms",
+			Options{},
+			Config{Platforms: []linter.Platform{linter.PlatformCodespaces}},
+			Config{Platforms: []linter.Platform{linter.PlatformCodespaces}},
+		},
+		{
+			"CLI merge-features flag enables it",
+			Options{MergeFeatures: true},
+			Config{},
+			Config{MergeFeatures: true},
+		},
+		{
+			"config file mergeFeatures member enables it",
+			Options{},
+			Config{MergeFeatures: true},
+			Config{MergeFeatures: true},
+		},
+		{
+			"CLI flag does not disable config file mergeFeatures",
+			Options{MergeFeatures: false},
+			Config{MergeFeatures: true},
+			Config{MergeFeatures: true},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			got := mergeConfig(tt.opts, tt.cfg)
+			if diff := cmp.Diff(tt.want, got); diff != "" {
+				t.Errorf("mergeConfig() mismatch (-want +got):\n%s", diff)
+			}
+		})
+	}
+}

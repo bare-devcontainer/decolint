@@ -8,22 +8,24 @@ import (
 	"github.com/bare-devcontainer/decolint/linter"
 )
 
-// Options holds the parsed command-line arguments.
+// Options holds the parsed command-line arguments. It is purely the CLI's view of the world; see
+// Config for the on-disk config file's shape, and mergeConfig for how the two are reconciled.
 type Options struct {
 	// Paths are the directories to lint.
 	Paths []string
 	// DenyWarnings, when set, lowers the fail threshold to linter.Warn so that warnings also cause
 	// exit code 1.
 	DenyWarnings bool
-	// Config holds the category and rule severity overrides resolved from the -config flag (or
-	// auto-discovered), filled in by run after parseOptions returns (see loadConfig).
-	Config Config
+	// ConfigPath is the raw -config flag value (empty if not given), resolved into a Config by
+	// loadConfig.
+	ConfigPath string
 	// Platforms restricts registered rules to those targeting one of these platforms, plus any rule
-	// with no target platform. If empty, only rules with no target platform are registered.
+	// with no target platform. If empty, only rules with no target platform are registered, unless
+	// overridden by the config file's "platforms" member (see mergeConfig).
 	Platforms []linter.Platform
 	// MergeFeatures, when set, fetches the Features referenced in each devcontainer.json and lints
 	// the merged (effective) configuration instead of the raw file. The config file's
-	// "mergeFeatures" member can enable it as well (see run).
+	// "mergeFeatures" member can enable it as well (see mergeConfig).
 	MergeFeatures bool
 	// Format selects how lint issues are written to stdout.
 	Format Format
@@ -36,19 +38,16 @@ type Options struct {
 	Init bool
 }
 
-// parseOptions parses args into Options. Flag errors and usage text are written to output. The
-// second return value is the raw -config flag value (empty if not given); it is not part of
-// Options because resolving it into a Config requires file I/O, unlike every other Options field.
-func parseOptions(args []string, output io.Writer) (Options, string, error) {
+// parseOptions parses args into Options. Flag errors and usage text are written to output.
+func parseOptions(args []string, output io.Writer) (Options, error) {
 	var opts Options
 	var platformFlag string
 	var formatFlag string
-	var configPathFlag string
 
 	fs := flag.NewFlagSet(progName, flag.ContinueOnError)
 	fs.SetOutput(output)
 	fs.BoolVar(&opts.DenyWarnings, "deny-warnings", false, "treat warnings as failures (exit code 1)")
-	fs.StringVar(&configPathFlag, "config", "", "path to a config file (default: auto-discover .decolint.jsonc or .decolint.json in the current directory)")
+	fs.StringVar(&opts.ConfigPath, "config", "", "path to a config file (default: auto-discover .decolint.jsonc or .decolint.json in the current directory)")
 	fs.StringVar(&platformFlag, "platform", "", "comma-separated target platforms to include in addition to \"all\" (vscode, codespaces); overrides the config file's \"platforms\" member")
 	fs.StringVar(&formatFlag, "format", "text", "output format: text, json, or github")
 	fs.BoolVar(&opts.MergeFeatures, "merge-features", false, "fetch the Features referenced in \"features\" and lint the merged (effective) configuration")
@@ -57,18 +56,18 @@ func parseOptions(args []string, output io.Writer) (Options, string, error) {
 	fs.BoolVar(&opts.Init, "init", false, "write a new .decolint.jsonc config file listing every rule at its default severity, then exit")
 	fs.Usage = func() { _ = usage(fs) }
 	if err := fs.Parse(args); err != nil {
-		return Options{}, "", err
+		return Options{}, err
 	}
 
 	platforms, err := parsePlatforms(platformFlag)
 	if err != nil {
-		return Options{}, "", err
+		return Options{}, err
 	}
 	opts.Platforms = platforms
 
 	format, err := parseFormat(formatFlag)
 	if err != nil {
-		return Options{}, "", err
+		return Options{}, err
 	}
 	opts.Format = format
 
@@ -77,7 +76,7 @@ func parseOptions(args []string, output io.Writer) (Options, string, error) {
 		opts.Paths = []string{"."}
 	}
 
-	return opts, configPathFlag, nil
+	return opts, nil
 }
 
 // parsePlatforms parses a comma-separated list of platform names into a slice of linter.Platform.

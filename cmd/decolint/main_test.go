@@ -441,7 +441,7 @@ func TestRunLint(t *testing.T) {
 		dir := writeDevcontainer(t, `{"image": "ubuntu:latest"}`)
 
 		var stdout bytes.Buffer
-		hasIssue, runErr := runLint(t.Context(), &stdout, Options{Paths: []string{dir}, Format: format.TextFormat{}})
+		hasIssue, runErr := runLint(t.Context(), &stdout, Options{Paths: []string{dir}, Format: format.TextFormat{}}, Config{})
 		if runErr != nil || hasIssue {
 			t.Errorf("hasIssue = %v, err = %v, want false, nil; stdout: %s", hasIssue, runErr, stdout.String())
 		}
@@ -455,9 +455,9 @@ func TestRunLint(t *testing.T) {
 		opts := Options{
 			Paths:  []string{dir},
 			Format: format.TextFormat{},
-			Config: Config{Rules: map[string]linter.Severity{"no-image-latest": linter.SeverityError}},
 		}
-		hasIssue, runErr := runLint(t.Context(), &stdout, opts)
+		cfg := Config{Rules: map[string]linter.Severity{"no-image-latest": linter.SeverityError}}
+		hasIssue, runErr := runLint(t.Context(), &stdout, opts, cfg)
 		if runErr != nil || !hasIssue {
 			t.Errorf("hasIssue = %v, err = %v, want true, nil; stdout: %s", hasIssue, runErr, stdout.String())
 		}
@@ -471,9 +471,9 @@ func TestRunLint(t *testing.T) {
 		opts := Options{
 			Paths:  []string{dir},
 			Format: format.TextFormat{},
-			Config: Config{Rules: map[string]linter.Severity{"missing-container-def": linter.SeverityOff}},
 		}
-		hasIssue, runErr := runLint(t.Context(), &stdout, opts)
+		cfg := Config{Rules: map[string]linter.Severity{"missing-container-def": linter.SeverityOff}}
+		hasIssue, runErr := runLint(t.Context(), &stdout, opts, cfg)
 		if runErr != nil || hasIssue {
 			t.Errorf("hasIssue = %v, err = %v, want false, nil; stdout: %s", hasIssue, runErr, stdout.String())
 		}
@@ -485,9 +485,9 @@ func TestRunLint(t *testing.T) {
 		var stdout bytes.Buffer
 		opts := Options{
 			Format: format.TextFormat{},
-			Config: Config{Rules: map[string]linter.Severity{"no-image-latst": linter.SeverityError}},
 		}
-		hasIssue, runErr := runLint(t.Context(), &stdout, opts)
+		cfg := Config{Rules: map[string]linter.Severity{"no-image-latst": linter.SeverityError}}
+		hasIssue, runErr := runLint(t.Context(), &stdout, opts, cfg)
 		if runErr == nil || hasIssue {
 			t.Errorf("hasIssue = %v, err = %v, want false, non-nil", hasIssue, runErr)
 		}
@@ -504,9 +504,9 @@ func TestRunLint(t *testing.T) {
 		opts := Options{
 			Paths:  []string{dir},
 			Format: format.TextFormat{},
-			Config: Config{Categories: map[string]linter.Severity{"reproducibility": linter.SeverityError}},
 		}
-		hasIssue, runErr := runLint(t.Context(), &stdout, opts)
+		cfg := Config{Categories: map[string]linter.Severity{"reproducibility": linter.SeverityError}}
+		hasIssue, runErr := runLint(t.Context(), &stdout, opts, cfg)
 		if runErr != nil || !hasIssue {
 			t.Errorf("hasIssue = %v, err = %v, want true, nil; stdout: %s", hasIssue, runErr, stdout.String())
 		}
@@ -518,9 +518,9 @@ func TestRunLint(t *testing.T) {
 		var stdout bytes.Buffer
 		opts := Options{
 			Format: format.TextFormat{},
-			Config: Config{Categories: map[string]linter.Severity{"secure": linter.SeverityError}},
 		}
-		hasIssue, runErr := runLint(t.Context(), &stdout, opts)
+		cfg := Config{Categories: map[string]linter.Severity{"secure": linter.SeverityError}}
+		hasIssue, runErr := runLint(t.Context(), &stdout, opts, cfg)
 		if runErr == nil || hasIssue {
 			t.Errorf("hasIssue = %v, err = %v, want false, non-nil", hasIssue, runErr)
 		}
@@ -537,9 +537,9 @@ func TestRunLint(t *testing.T) {
 		opts := Options{
 			Paths:  []string{dir},
 			Format: format.TextFormat{},
-			Config: Config{Rules: map[string]linter.Severity{"no-bind-mount": linter.SeverityError}},
 		}
-		hasIssue, runErr := runLint(t.Context(), &stdout, opts)
+		cfg := Config{Rules: map[string]linter.Severity{"no-bind-mount": linter.SeverityError}}
+		hasIssue, runErr := runLint(t.Context(), &stdout, opts, cfg)
 		if runErr != nil || hasIssue {
 			t.Errorf("hasIssue = %v, err = %v, want false, nil; stdout: %s", hasIssue, runErr, stdout.String())
 		}

@@ -49,12 +49,12 @@ func New() *Linter {
 }
 
 // RegisterRule adds r to the linter, to run at the given severity.
-func (l *Linter) RegisterRule(r Rule, severity Severity) {
-	l.severities[r.ID()] = severity
+func (l *Linter) RegisterRule(r *Rule, severity Severity) {
+	l.severities[r.ID] = severity
 	if severity == Off {
 		return
 	}
-	for _, t := range r.FileTypes() {
+	for _, t := range r.FileTypes {
 		l.patterns[t] = append(l.patterns[t], compilePatterns(r)...)
 	}
 }
@@ -117,8 +117,8 @@ func (l *Linter) Lint(ctx context.Context, path string, src []byte, fileType Fil
 	ignores := buildIgnoreIndex(&root, pos)
 
 	var issues []Issue
-	walk(&root, "", nil, patterns, func(r Rule, node *Node) {
-		id := r.ID()
+	walk(&root, "", nil, patterns, func(r *Rule, node *Node) {
+		id := r.ID
 		severity := l.severities[id]
 		for _, f := range safeCheck(r, rctx, node) {
 			line, col := pos.lineCol(f.Offset)
@@ -151,7 +151,7 @@ func (l *Linter) Lint(ctx context.Context, path string, src []byte, fileType Fil
 // safeCheck calls r.Check and recovers from any panic, so that a defect in one rule (e.g. a nil
 // dereference on an unexpected value shape) is reported as that rule's finding instead of aborting
 // the rest of the lint run.
-func safeCheck(r Rule, rctx *Context, node *Node) (findings []Finding) {
+func safeCheck(r *Rule, rctx *Context, node *Node) (findings []Finding) {
 	defer func() {
 		if rec := recover(); rec != nil {
 			findings = []Finding{{

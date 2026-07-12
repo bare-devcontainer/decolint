@@ -151,32 +151,32 @@ type Finding struct {
 	Offset int
 }
 
-// Rule is a single lint rule. Implementations must be safe for concurrent use; Check may be called
-// for multiple files.
+// Rule is a single lint rule.
 //
 // A rule declares the kinds of configuration files it applies to via FileTypes and the JSON Pointer
 // paths it is interested in via Paths. The lint engine traverses the HuJSON syntax tree of each
 // matching file exactly once and calls Check for every value matching one of its paths. The syntax
 // tree preserves comments and byte offsets, so findings can point at the exact location of the
 // offending value.
-type Rule interface {
-	// ID returns the unique identifier of the rule, used in output and in ignore directives (e.g.
+type Rule struct {
+	// ID is the unique identifier of the rule, used in output and in ignore directives (e.g.
 	// "no-image-latest").
-	ID() string
-	// Description returns a short human-readable description of what the rule checks.
-	Description() string
-	// FileTypes returns the kinds of configuration files this rule applies to. The rule is only run
+	ID string
+	// Description is a short human-readable description of what the rule checks.
+	Description string
+	// FileTypes are the kinds of configuration files this rule applies to. The rule is only run
 	// against files of these types.
-	FileTypes() []FileType
-	// Platforms returns the target platforms this rule applies to. A nil or empty result means the
-	// rule applies to every platform and always runs, regardless of which platforms are selected when
-	// the linter is configured.
-	Platforms() []Platform
-	// Paths returns the JSON Pointer patterns of the values this rule wants to inspect. A "*" segment
+	FileTypes []FileType
+	// Platforms are the target platforms this rule applies to. A nil or empty value means the rule
+	// applies to every platform and always runs, regardless of which platforms are selected when the
+	// linter is configured.
+	Platforms []Platform
+	// Paths are the JSON Pointer patterns of the values this rule wants to inspect. A "*" segment
 	// matches any object member name or array index (e.g. "/mounts/*"); the empty string matches the
 	// document root.
-	Paths() []string
+	Paths []string
 	// Check inspects one value matching Paths and returns any findings. It is called at most once per
-	// rule for a given value, even if several patterns match it.
-	Check(ctx *Context, node *Node) []Finding
+	// rule for a given value, even if several patterns match it. Check must be safe for concurrent
+	// use, since it may be called for multiple files.
+	Check func(ctx *Context, node *Node) []Finding
 }

@@ -48,7 +48,7 @@ func TestNoSeccompOverride(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			assertIssues(t, rules.NoSeccompOverride{}, linter.Warn, tt.src, tt.want)
+			assertIssues(t, rules.NoSeccompOverride, linter.Warn, tt.src, tt.want)
 		})
 	}
 }
@@ -72,7 +72,7 @@ func TestNoSeccompOverrideFeature(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			assertIssuesAt(t, rules.NoSeccompOverride{}, linter.Warn, "devcontainer-feature.json", linter.Feature, tt.src, tt.want)
+			assertIssuesAt(t, rules.NoSeccompOverride, linter.Warn, "devcontainer-feature.json", linter.Feature, tt.src, tt.want)
 		})
 	}
 }

@@ -10,29 +10,15 @@ import (
 // Without it, processes in the container can gain additional privileges through setuid/setgid
 // binaries. It is off by default because most configs don't set it and enabling it by default would
 // be noisy.
-type RequireNoNewPrivileges struct{}
-
-// ID implements [linter.Rule].
-func (RequireNoNewPrivileges) ID() string { return "require-no-new-privileges" }
-
-// Description implements [linter.Rule].
-func (RequireNoNewPrivileges) Description() string {
-	return `require "no-new-privileges" to be set via a devcontainer.json's "securityOpt" property, or a "--security-opt no-new-privileges..." entry in "runArgs"`
+var RequireNoNewPrivileges = &linter.Rule{
+	ID:          "require-no-new-privileges",
+	Description: `require "no-new-privileges" to be set via a devcontainer.json's "securityOpt" property, or a "--security-opt no-new-privileges..." entry in "runArgs"`,
+	FileTypes:   []linter.FileType{linter.Devcontainer},
+	Paths:       []string{""},
+	Check:       checkRequireNoNewPrivileges,
 }
 
-// FileTypes implements [linter.Rule].
-func (RequireNoNewPrivileges) FileTypes() []linter.FileType {
-	return []linter.FileType{linter.Devcontainer}
-}
-
-// Platforms implements [linter.Rule].
-func (RequireNoNewPrivileges) Platforms() []linter.Platform { return nil }
-
-// Paths implements [linter.Rule].
-func (RequireNoNewPrivileges) Paths() []string { return []string{""} }
-
-// Check implements [linter.Rule].
-func (RequireNoNewPrivileges) Check(_ *linter.Context, node *linter.Node) []linter.Finding {
+func checkRequireNoNewPrivileges(_ *linter.Context, node *linter.Node) []linter.Finding {
 	obj, ok := node.Value.Value.(*hujson.Object)
 	if !ok {
 		return nil

@@ -12,33 +12,16 @@ import (
 // explicit version (e.g. "publisher.name@1.2.3"). Without a pinned version, the VS Code Dev
 // Containers extension and GitHub Codespaces always install the latest published version, which is
 // not reproducible.
-type PinExtensionVersion struct{}
-
-// ID implements [linter.Rule].
-func (PinExtensionVersion) ID() string { return "pin-extension-version" }
-
-// Description implements [linter.Rule].
-func (PinExtensionVersion) Description() string {
-	return `disallow a "customizations.vscode.extensions" entry without an explicit pinned version`
+var PinExtensionVersion = &linter.Rule{
+	ID:          "pin-extension-version",
+	Description: `disallow a "customizations.vscode.extensions" entry without an explicit pinned version`,
+	FileTypes:   []linter.FileType{linter.Devcontainer},
+	Platforms:   []linter.Platform{linter.PlatformVSCode, linter.PlatformCodespaces},
+	Paths:       []string{"/customizations/vscode/extensions/*"},
+	Check:       checkPinExtensionVersion,
 }
 
-// FileTypes implements [linter.Rule].
-func (PinExtensionVersion) FileTypes() []linter.FileType {
-	return []linter.FileType{linter.Devcontainer}
-}
-
-// Platforms implements [linter.Rule].
-func (PinExtensionVersion) Platforms() []linter.Platform {
-	return []linter.Platform{linter.PlatformVSCode, linter.PlatformCodespaces}
-}
-
-// Paths implements [linter.Rule].
-func (PinExtensionVersion) Paths() []string {
-	return []string{"/customizations/vscode/extensions/*"}
-}
-
-// Check implements [linter.Rule].
-func (PinExtensionVersion) Check(_ *linter.Context, node *linter.Node) []linter.Finding {
+func checkPinExtensionVersion(_ *linter.Context, node *linter.Node) []linter.Finding {
 	lit, ok := node.Value.Value.(hujson.Literal)
 	if !ok || lit.Kind() != '"' {
 		return nil

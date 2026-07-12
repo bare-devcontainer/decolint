@@ -10,29 +10,15 @@ import (
 // MissingWorkspaceMountFolder reports a devcontainer.json that uses "image" or "build" and sets
 // only one of "workspaceMount" or "workspaceFolder", leaving the tool unable to tell where the
 // overridden mount lands inside the container.
-type MissingWorkspaceMountFolder struct{}
-
-// ID implements [linter.Rule].
-func (MissingWorkspaceMountFolder) ID() string { return "missing-workspace-mount-folder" }
-
-// Description implements [linter.Rule].
-func (MissingWorkspaceMountFolder) Description() string {
-	return `disallow a devcontainer.json using "image" or "build" that sets only one of "workspaceMount" or "workspaceFolder"`
+var MissingWorkspaceMountFolder = &linter.Rule{
+	ID:          "missing-workspace-mount-folder",
+	Description: `disallow a devcontainer.json using "image" or "build" that sets only one of "workspaceMount" or "workspaceFolder"`,
+	FileTypes:   []linter.FileType{linter.Devcontainer},
+	Paths:       []string{""},
+	Check:       checkMissingWorkspaceMountFolder,
 }
 
-// FileTypes implements [linter.Rule].
-func (MissingWorkspaceMountFolder) FileTypes() []linter.FileType {
-	return []linter.FileType{linter.Devcontainer}
-}
-
-// Platforms implements [linter.Rule].
-func (MissingWorkspaceMountFolder) Platforms() []linter.Platform { return nil }
-
-// Paths implements [linter.Rule].
-func (MissingWorkspaceMountFolder) Paths() []string { return []string{""} }
-
-// Check implements [linter.Rule].
-func (MissingWorkspaceMountFolder) Check(_ *linter.Context, node *linter.Node) []linter.Finding {
+func checkMissingWorkspaceMountFolder(_ *linter.Context, node *linter.Node) []linter.Finding {
 	obj, ok := node.Value.Value.(*hujson.Object)
 	if !ok || (!hasMember(obj, "image") && !hasMember(obj, "build")) {
 		return nil

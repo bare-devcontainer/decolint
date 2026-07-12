@@ -13,31 +13,15 @@ import (
 // [NoSeccompUnconfined], which only flags disabling seccomp entirely, this rule flags any override,
 // including a custom profile, since it replaces the runtime's vetted default. It is off by default
 // because many projects legitimately ship a custom profile.
-type NoSeccompOverride struct{}
-
-// ID implements [linter.Rule].
-func (NoSeccompOverride) ID() string { return "no-seccomp-override" }
-
-// Description implements [linter.Rule].
-func (NoSeccompOverride) Description() string {
-	return `disallow overriding the container runtime's default seccomp profile via a devcontainer.json's or Feature's "securityOpt" property, or a "--security-opt seccomp=..." entry in a devcontainer.json's "runArgs"`
+var NoSeccompOverride = &linter.Rule{
+	ID:          "no-seccomp-override",
+	Description: `disallow overriding the container runtime's default seccomp profile via a devcontainer.json's or Feature's "securityOpt" property, or a "--security-opt seccomp=..." entry in a devcontainer.json's "runArgs"`,
+	FileTypes:   []linter.FileType{linter.Devcontainer, linter.Feature},
+	Paths:       []string{"/securityOpt/*", "/runArgs/*"},
+	Check:       checkNoSeccompOverride,
 }
 
-// FileTypes implements [linter.Rule].
-func (NoSeccompOverride) FileTypes() []linter.FileType {
-	return []linter.FileType{linter.Devcontainer, linter.Feature}
-}
-
-// Platforms implements [linter.Rule].
-func (NoSeccompOverride) Platforms() []linter.Platform { return nil }
-
-// Paths implements [linter.Rule].
-func (NoSeccompOverride) Paths() []string {
-	return []string{"/securityOpt/*", "/runArgs/*"}
-}
-
-// Check implements [linter.Rule].
-func (NoSeccompOverride) Check(ctx *linter.Context, node *linter.Node) []linter.Finding {
+func checkNoSeccompOverride(ctx *linter.Context, node *linter.Node) []linter.Finding {
 	lit, ok := node.Value.Value.(hujson.Literal)
 	if !ok || lit.Kind() != '"' {
 		return nil

@@ -16,24 +16,17 @@ func parseValue(t *testing.T, src string) hujson.Value {
 	return v
 }
 
-// pathSpy is a stub Rule that subscribes to the given paths. Check is a no-op; tests observe what
-// walk visits via their own visit callback instead.
-type pathSpy struct {
-	id    string
-	paths []string
+// pathSpy returns a stub Rule that subscribes to the given paths. Check is a no-op; tests observe
+// what walk visits via their own visit callback instead.
+func pathSpy(id string, paths []string) *Rule {
+	return &Rule{
+		ID:          id,
+		Description: "records visited paths",
+		FileTypes:   []FileType{Devcontainer},
+		Paths:       paths,
+		Check:       func(*Context, *Node) []Finding { return nil },
+	}
 }
-
-func (s pathSpy) ID() string          { return s.id }
-func (s pathSpy) Description() string { return "records visited paths" }
-func (s pathSpy) Paths() []string     { return s.paths }
-
-func (s pathSpy) FileTypes() []FileType {
-	return []FileType{Devcontainer}
-}
-
-func (pathSpy) Platforms() []Platform { return nil }
-
-func (pathSpy) Check(*Context, *Node) []Finding { return nil }
 
 func TestWalkDispatch(t *testing.T) {
 	t.Parallel()
@@ -74,8 +67,8 @@ func TestWalkDispatch(t *testing.T) {
 			t.Parallel()
 			var calls []string
 			root := parseValue(t, src)
-			patterns := compilePatterns(pathSpy{id: "spy", paths: tt.paths})
-			walk(&root, "", nil, patterns, func(_ Rule, node *Node) {
+			patterns := compilePatterns(pathSpy("spy", tt.paths))
+			walk(&root, "", nil, patterns, func(_ *Rule, node *Node) {
 				calls = append(calls, node.Pointer)
 			})
 			if !slices.Equal(calls, tt.want) {
@@ -93,12 +86,12 @@ func TestWalkSingleTraversal(t *testing.T) {
 	src := `{ "image": "ubuntu:24.04" }`
 	root := parseValue(t, src)
 	patterns := append(
-		compilePatterns(pathSpy{id: "a", paths: []string{"/image"}}),
-		compilePatterns(pathSpy{id: "b", paths: []string{"/image"}})...,
+		compilePatterns(pathSpy("a", []string{"/image"})),
+		compilePatterns(pathSpy("b", []string{"/image"}))...,
 	)
 	var callsA, callsB []string
-	walk(&root, "", nil, patterns, func(r Rule, node *Node) {
-		switch r.ID() {
+	walk(&root, "", nil, patterns, func(r *Rule, node *Node) {
+		switch r.ID {
 		case "a":
 			callsA = append(callsA, node.Pointer)
 		case "b":

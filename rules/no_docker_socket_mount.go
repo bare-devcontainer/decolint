@@ -11,38 +11,22 @@ import (
 // into the container, either via a "mounts" entry or a "-v"/"--volume"/"--mount" entry in
 // "runArgs". Anything with access to the socket can control the host's Docker daemon, which is
 // effectively root-equivalent access to the host.
-type NoDockerSocketMount struct{}
-
-// ID implements [linter.Rule].
-func (NoDockerSocketMount) ID() string { return "no-docker-socket-mount" }
-
-// Description implements [linter.Rule].
-func (NoDockerSocketMount) Description() string {
-	return `disallow bind-mounting the host's Docker socket via a devcontainer.json's "mounts" or "runArgs", which grants the container root-equivalent control over the host`
+var NoDockerSocketMount = &linter.Rule{
+	ID:          "no-docker-socket-mount",
+	Description: `disallow bind-mounting the host's Docker socket via a devcontainer.json's "mounts" or "runArgs", which grants the container root-equivalent control over the host`,
+	FileTypes:   []linter.FileType{linter.Devcontainer},
+	Paths:       []string{"/mounts/*", "/runArgs/*"},
+	Check:       checkNoDockerSocketMount,
 }
 
-// FileTypes implements [linter.Rule].
-func (NoDockerSocketMount) FileTypes() []linter.FileType {
-	return []linter.FileType{linter.Devcontainer}
-}
-
-// Platforms implements [linter.Rule].
-func (NoDockerSocketMount) Platforms() []linter.Platform { return nil }
-
-// Paths implements [linter.Rule].
-func (NoDockerSocketMount) Paths() []string {
-	return []string{"/mounts/*", "/runArgs/*"}
-}
-
-// Check implements [linter.Rule].
-func (r NoDockerSocketMount) Check(_ *linter.Context, node *linter.Node) []linter.Finding {
+func checkNoDockerSocketMount(_ *linter.Context, node *linter.Node) []linter.Finding {
 	if strings.HasPrefix(node.Pointer, "/mounts/") {
-		return r.checkMount(node)
+		return checkDockerSocketMount(node)
 	}
-	return r.checkRunArg(node)
+	return checkDockerSocketRunArg(node)
 }
 
-func (NoDockerSocketMount) checkMount(node *linter.Node) []linter.Finding {
+func checkDockerSocketMount(node *linter.Node) []linter.Finding {
 	_, source, ok := parseMount(node.Value)
 	if !ok || source != dockerSocketPath {
 		return nil
@@ -53,7 +37,7 @@ func (NoDockerSocketMount) checkMount(node *linter.Node) []linter.Finding {
 	}}
 }
 
-func (NoDockerSocketMount) checkRunArg(node *linter.Node) []linter.Finding {
+func checkDockerSocketRunArg(node *linter.Node) []linter.Finding {
 	lit, ok := node.Value.Value.(hujson.Literal)
 	if !ok || lit.Kind() != '"' || !runArgMountsDockerSocket(lit.String()) {
 		return nil

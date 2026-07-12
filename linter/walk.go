@@ -10,14 +10,14 @@ import (
 
 // pattern is one compiled entry of a rule's Paths.
 type pattern struct {
-	rule     Rule
+	rule     *Rule
 	segments []string // unescaped segments; "*" matches any segment
 }
 
 // compilePatterns compiles the path patterns of a rule.
-func compilePatterns(r Rule) []pattern {
+func compilePatterns(r *Rule) []pattern {
 	var out []pattern
-	for _, p := range r.Paths() {
+	for _, p := range r.Paths {
 		out = append(out, pattern{rule: r, segments: splitPointer(p)})
 	}
 	return out
@@ -60,18 +60,17 @@ func matches(pat, segs []string) bool {
 // pair where one of the rule's patterns matches the value's path. A rule is visited at most once
 // per value. pointer and segs describe the location of v; they must be "" and nil for the document
 // root.
-func walk(v *hujson.Value, pointer string, segs []string, patterns []pattern, visit func(Rule, *Node)) {
+func walk(v *hujson.Value, pointer string, segs []string, patterns []pattern, visit func(*Rule, *Node)) {
 	node := &Node{Pointer: pointer, Value: v}
-	var called []string
+	var called []*Rule
 	for _, p := range patterns {
 		if !matches(p.segments, segs) {
 			continue
 		}
-		id := p.rule.ID()
-		if slices.Contains(called, id) {
+		if slices.Contains(called, p.rule) {
 			continue
 		}
-		called = append(called, id)
+		called = append(called, p.rule)
 		visit(p.rule, node)
 	}
 

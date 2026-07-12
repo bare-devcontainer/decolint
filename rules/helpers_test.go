@@ -12,7 +12,7 @@ import (
 // severity, exercising the same path-matching and traversal logic the linter uses in production,
 // and fails the test if the resulting issues don't match want. Issues are compared irrespective of
 // order.
-func assertIssues(t *testing.T, r linter.Rule, severity linter.Severity, src string, want []linter.Issue) {
+func assertIssues(t *testing.T, r *linter.Rule, severity linter.Severity, src string, want []linter.Issue) {
 	t.Helper()
 	assertIssuesAt(t, r, severity, "devcontainer.json", linter.Devcontainer, src, want)
 }
@@ -20,7 +20,7 @@ func assertIssues(t *testing.T, r linter.Rule, severity linter.Severity, src str
 // assertIssuesAt is like assertIssues but lets the caller control the path and file type src is
 // linted as, e.g. to exercise rules that depend on the containing directory or apply only to
 // Features or Templates.
-func assertIssuesAt(t *testing.T, r linter.Rule, severity linter.Severity, path string, fileType linter.FileType, src string, want []linter.Issue) {
+func assertIssuesAt(t *testing.T, r *linter.Rule, severity linter.Severity, path string, fileType linter.FileType, src string, want []linter.Issue) {
 	t.Helper()
 
 	l := linter.New()

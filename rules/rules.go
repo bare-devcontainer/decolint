@@ -1,7 +1,7 @@
-// Package rules provides the built-in lint rules bundled with decolint. See [linter.Rule]
-// for the interface they implement.
+// Package rules provides the built-in lint rules bundled with decolint. See [linter.Rule] for the
+// fields a rule declares.
 //
-// To add a new rule, implement [linter.Rule] in a new file in this package and register it in
+// To add a new rule, declare a [linter.Rule] value in a new file in this package and register it in
 // RegisterRules.
 package rules
 
@@ -15,35 +15,35 @@ import (
 
 // ruleReg pairs a built-in rule with the severity it's registered at by default.
 type ruleReg struct {
-	rule     linter.Rule
+	rule     *linter.Rule
 	severity linter.Severity
 }
 
 // builtinRules lists the built-in rules, in a deterministic order (alphabetically by rule ID), along
 // with their default severities.
 var builtinRules = []ruleReg{
-	{CodespacesNoBindMount{}, linter.Warn},
-	{CodespacesNoHostPortFormat{}, linter.Error},
-	{IDDirMismatch{}, linter.Error},
-	{InvalidSemver{}, linter.Error},
-	{MissingBuildDockerfile{}, linter.Error},
-	{MissingComposeService{}, linter.Error},
-	{MissingContainerDef{}, linter.Error},
-	{MissingRequiredProps{}, linter.Error},
-	{MissingWorkspaceMountFolder{}, linter.Error},
-	{NoAppPort{}, linter.Warn},
-	{NoCapAddAll{}, linter.Warn},
-	{NoDockerSocketMount{}, linter.Warn},
-	{NoImageLatest{}, linter.Warn},
-	{NoPrivilegedContainer{}, linter.Warn},
-	{NoSeccompOverride{}, linter.Off},
-	{NoSeccompUnconfined{}, linter.Warn},
-	{PinExtensionVersion{}, linter.Warn},
-	{PinFeatureVersion{}, linter.Warn},
-	{PinImageDigest{}, linter.Off},
-	{RequireCapDropAll{}, linter.Off},
-	{RequireNoNewPrivileges{}, linter.Off},
-	{RequireNonRoot{}, linter.Off},
+	{CodespacesNoBindMount, linter.Warn},
+	{CodespacesNoHostPortFormat, linter.Error},
+	{IDDirMismatch, linter.Error},
+	{InvalidSemver, linter.Error},
+	{MissingBuildDockerfile, linter.Error},
+	{MissingComposeService, linter.Error},
+	{MissingContainerDef, linter.Error},
+	{MissingRequiredProps, linter.Error},
+	{MissingWorkspaceMountFolder, linter.Error},
+	{NoAppPort, linter.Warn},
+	{NoCapAddAll, linter.Warn},
+	{NoDockerSocketMount, linter.Warn},
+	{NoImageLatest, linter.Warn},
+	{NoPrivilegedContainer, linter.Warn},
+	{NoSeccompOverride, linter.Off},
+	{NoSeccompUnconfined, linter.Warn},
+	{PinExtensionVersion, linter.Warn},
+	{PinFeatureVersion, linter.Warn},
+	{PinImageDigest, linter.Off},
+	{RequireCapDropAll, linter.Off},
+	{RequireNoNewPrivileges, linter.Off},
+	{RequireNonRoot, linter.Off},
 }
 
 // RegisterRules registers the built-in rules whose target platform matches platforms on l, in a
@@ -63,11 +63,11 @@ func RegisterRules(l *linter.Linter, platforms []linter.Platform, overrides map[
 	}
 
 	for _, reg := range builtinRules {
-		if !platformEnabled(reg.rule.Platforms(), platforms) {
+		if !platformEnabled(reg.rule.Platforms, platforms) {
 			continue
 		}
 		severity := reg.severity
-		if s, ok := overrides[reg.rule.ID()]; ok {
+		if s, ok := overrides[reg.rule.ID]; ok {
 			severity = s
 		}
 		l.RegisterRule(reg.rule, severity)
@@ -81,7 +81,7 @@ func RegisterRules(l *linter.Linter, platforms []linter.Platform, overrides map[
 func unknownOverrides(overrides map[string]linter.Severity) []string {
 	var unknown []string
 	for id := range overrides {
-		if !slices.ContainsFunc(builtinRules, func(reg ruleReg) bool { return reg.rule.ID() == id }) {
+		if !slices.ContainsFunc(builtinRules, func(reg ruleReg) bool { return reg.rule.ID == id }) {
 			unknown = append(unknown, id)
 		}
 	}

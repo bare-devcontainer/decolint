@@ -42,6 +42,30 @@ func (p Platform) String() string {
 	}
 }
 
+// MarshalJSONTo encodes the platform as its name (see String), for use with encoding/json/v2.
+func (p Platform) MarshalJSONTo(enc *jsontext.Encoder) error {
+	return enc.WriteToken(jsontext.String(p.String()))
+}
+
+// UnmarshalJSONFrom decodes a platform from its name (see ParsePlatform), for use with
+// encoding/json/v2.
+func (p *Platform) UnmarshalJSONFrom(dec *jsontext.Decoder) error {
+	tok, err := dec.ReadToken()
+	if err != nil {
+		return err
+	}
+	if tok.Kind() != '"' {
+		return fmt.Errorf("unmarshal platform: unexpected token kind %q", tok.Kind())
+	}
+
+	platform, err := ParsePlatform(tok.String())
+	if err != nil {
+		return fmt.Errorf("unmarshal platform: %w", err)
+	}
+	*p = platform
+	return nil
+}
+
 // ParsePlatform parses a platform name, matched case-insensitively, into a Platform. It returns an
 // error if name does not name a known platform.
 func ParsePlatform(name string) (Platform, error) {

@@ -60,6 +60,25 @@ func TestConfigMarshalJSONToWithCategories(t *testing.T) {
 	}
 }
 
+func TestConfigMarshalJSONToWithPlatforms(t *testing.T) {
+	t.Parallel()
+
+	cfg := Config{
+		Platforms: []linter.Platform{linter.PlatformVSCode, linter.PlatformCodespaces},
+		Rules:     map[string]linter.Severity{"no-image-latest": linter.SeverityError},
+	}
+
+	want := `{"platforms":["vscode","codespaces"],"rules":{"no-image-latest":"error"}}`
+
+	got, err := json.Marshal(cfg)
+	if err != nil {
+		t.Fatalf("json.Marshal: %v", err)
+	}
+	if string(got) != want {
+		t.Errorf("json.Marshal(cfg) = %s, want %s", got, want)
+	}
+}
+
 func TestParseConfig(t *testing.T) {
 	t.Parallel()
 
@@ -96,8 +115,30 @@ func TestParseConfig(t *testing.T) {
 			},
 			false,
 		},
+		{
+			"single platform",
+			`{"platforms": ["vscode"]}`,
+			Config{Platforms: []linter.Platform{linter.PlatformVSCode}},
+			false,
+		},
+		{
+			"multiple platforms with mixed case",
+			`{"platforms": ["VSCode", "codespaces"]}`,
+			Config{Platforms: []linter.Platform{linter.PlatformVSCode, linter.PlatformCodespaces}},
+			false,
+		},
+		{
+			"platforms with rules",
+			`{"platforms": ["codespaces"], "rules": {"no-image-latest": "error"}}`,
+			Config{
+				Platforms: []linter.Platform{linter.PlatformCodespaces},
+				Rules:     map[string]linter.Severity{"no-image-latest": linter.SeverityError},
+			},
+			false,
+		},
 		{"invalid severity", `{"rules": {"no-image-latest": "critical"}}`, Config{}, true},
 		{"invalid category severity", `{"categories": {"security": "critical"}}`, Config{}, true},
+		{"unknown platform", `{"platforms": ["intellij"]}`, Config{}, true},
 		{"malformed json", `{"rules": {`, Config{}, true},
 	}
 	for _, tt := range tests {

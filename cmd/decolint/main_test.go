@@ -116,6 +116,31 @@ func TestRun(t *testing.T) {
 			wantExitCode: 1,
 		},
 		{
+			// platforms.jsonc selects vscode and codespaces via the config file's "platforms"
+			// member, so the same platform-scoped correctness rules fire as in the "violations"
+			// case, without any -platform flag.
+			name: "violations with platforms from config",
+			args: []string{"-config=testdata/e2e/platforms.jsonc", "testdata/e2e/violations"},
+			want: []firing{
+				{violationsFile, "no-bind-mount", linter.SeverityError},
+				{violationsFile, "no-host-port-format", linter.SeverityError},
+			},
+			wantExitCode: 1,
+		},
+		{
+			// The -platform flag overrides the config's "platforms" member. The fixture's firing
+			// rules are codespaces-scoped, so narrowing the selection to vscode via the flag
+			// silences everything platforms.jsonc would otherwise enable.
+			name: "platform flag overrides config platforms",
+			args: []string{
+				"-platform=vscode",
+				"-config=testdata/e2e/platforms.jsonc",
+				"testdata/e2e/violations",
+			},
+			want:         nil,
+			wantExitCode: 0,
+		},
+		{
 			name:         "clean",
 			args:         []string{"-platform=vscode,codespaces", "testdata/e2e/clean"},
 			want:         nil,

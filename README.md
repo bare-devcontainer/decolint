@@ -87,6 +87,10 @@ rules scoped to specific platforms:
 decolint -platform=vscode,codespaces
 ```
 
+Target platforms can also be declared in the [config
+file](#config-file) with the `platforms` member; the `-platform` flag,
+when given, takes precedence.
+
 ### Output formats
 
 By default, findings are printed one per line, with the rule's
@@ -123,13 +127,15 @@ findings. Exit codes are unaffected by `-format`.
 
 ### Config file
 
-Rule and category severities can be overridden per project with a
-JSON/JSONC config file. Run `decolint -init` to generate a starting
-`.decolint.jsonc` in the current directory, ready to edit:
+Rule and category severities, as well as target platforms, can be set
+per project with a JSON/JSONC config file. Run `decolint -init` to
+generate a starting `.decolint.jsonc` in the current directory, ready
+to edit:
 
 ```jsonc
 // .decolint.jsonc
 {
+  "platforms": ["vscode"],
   "categories": {
     "security": "error"
   },
@@ -144,6 +150,9 @@ JSON/JSONC config file. Run `decolint -init` to generate a starting
 `categories` sets the severity (`error`, `warn`, or `off`) of every
 rule in a [category](#rule-categories) at once; `rules` sets an
 individual rule's severity and takes precedence over its category.
+`platforms` lists the [target platforms](#target-platforms) whose
+rules run in addition to platform-agnostic ones; the `-platform` flag,
+when given, takes precedence over it.
 
 For the strictest configuration, enable every category:
 

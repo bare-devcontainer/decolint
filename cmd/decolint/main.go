@@ -79,6 +79,10 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 		return exitCodeError
 	}
 	opts.Config = cfg
+	// The -platform flag takes precedence over the config file's "platforms" member.
+	if len(opts.Platforms) == 0 {
+		opts.Platforms = cfg.Platforms
+	}
 
 	if opts.ListRules {
 		if err := listRules(stdout, opts.Config); err != nil {

@@ -11,7 +11,9 @@
     "allow": [
       "Read(//workspaces)",
       "Edit(//workspaces)",
-      "Bash(make *)"
+      "Bash(make *)",
+      "Bash(go build *)",
+      "Bash(go test *)"
     ],
     "deny": [
       "Edit(//**/.env)",

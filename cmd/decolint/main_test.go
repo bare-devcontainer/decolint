@@ -158,6 +158,72 @@ func TestRun_Flags(t *testing.T) {
 		}
 	})
 
+	t.Run("-rules", func(t *testing.T) {
+		t.Parallel()
+
+		var stdout, stderr bytes.Buffer
+		exitCode := run(t.Context(), []string{"-rules"}, &stdout, &stderr)
+		if exitCode != 0 {
+			t.Errorf("exit code = %d, want 0", exitCode)
+		}
+		if stderr.String() != "" {
+			t.Errorf("stderr = %q, want empty", stderr.String())
+		}
+		out := stdout.String()
+
+		header := mdTableRow(t, out, rulesTableHeader[0])
+		if diff := cmp.Diff(rulesTableHeader, header); diff != "" {
+			t.Errorf("header row mismatch (-want +got):\n%s", diff)
+		}
+
+		row := mdTableRow(t, out, "no-image-latest")
+		wantRow := []string{"no-image-latest", "(all)", severityEmoji[linter.Warn], severityEmoji[linter.Warn]}
+		if diff := cmp.Diff(wantRow, row); diff != "" {
+			t.Errorf("no-image-latest row mismatch (-want +got):\n%s", diff)
+		}
+
+		row = mdTableRow(t, out, "codespaces-no-bind-mount")
+		wantRow = []string{"codespaces-no-bind-mount", "codespaces", severityEmoji[linter.Warn], severityEmoji[linter.Warn]}
+		if diff := cmp.Diff(wantRow, row); diff != "" {
+			t.Errorf("codespaces-no-bind-mount row mismatch (-want +got):\n%s", diff)
+		}
+	})
+
+	t.Run("-rules with -config", func(t *testing.T) {
+		t.Parallel()
+
+		var stdout, stderr bytes.Buffer
+		exitCode := run(t.Context(), []string{"-rules", "-config=testdata/e2e/override.jsonc"}, &stdout, &stderr)
+		if exitCode != 0 {
+			t.Errorf("exit code = %d, want 0", exitCode)
+		}
+		if stderr.String() != "" {
+			t.Errorf("stderr = %q, want empty", stderr.String())
+		}
+		out := stdout.String()
+
+		// no-image-latest: default warn, overridden to error.
+		row := mdTableRow(t, out, "no-image-latest")
+		wantRow := []string{"no-image-latest", "(all)", severityEmoji[linter.Warn], severityEmoji[linter.Error]}
+		if diff := cmp.Diff(wantRow, row); diff != "" {
+			t.Errorf("no-image-latest row mismatch (-want +got):\n%s", diff)
+		}
+
+		// pin-feature-version: default warn, overridden to off.
+		row = mdTableRow(t, out, "pin-feature-version")
+		wantRow = []string{"pin-feature-version", "(all)", severityEmoji[linter.Warn], severityEmoji[linter.Off]}
+		if diff := cmp.Diff(wantRow, row); diff != "" {
+			t.Errorf("pin-feature-version row mismatch (-want +got):\n%s", diff)
+		}
+
+		// pin-image-digest: default off, overridden to warn.
+		row = mdTableRow(t, out, "pin-image-digest")
+		wantRow = []string{"pin-image-digest", "(all)", severityEmoji[linter.Off], severityEmoji[linter.Warn]}
+		if diff := cmp.Diff(wantRow, row); diff != "" {
+			t.Errorf("pin-image-digest row mismatch (-want +got):\n%s", diff)
+		}
+	})
+
 	t.Run("-help", func(t *testing.T) {
 		t.Parallel()
 
@@ -287,6 +353,28 @@ func TestRunLint(t *testing.T) {
 			t.Errorf("hasIssue = %v, err = %v, want false, nil; stdout: %s", hasIssue, runErr, stdout.String())
 		}
 	})
+}
+
+// mdTableRow finds the row of a Markdown table in out whose first cell, after trimming the padding
+// listRules adds for alignment, equals key, and returns its cells trimmed of that padding. It fails
+// the test if no such row exists.
+func mdTableRow(t *testing.T, out, key string) []string {
+	t.Helper()
+	for line := range strings.Lines(out) {
+		line = strings.TrimSpace(line)
+		if !strings.HasPrefix(line, "|") {
+			continue
+		}
+		cells := strings.Split(strings.Trim(line, "|"), "|")
+		for i, cell := range cells {
+			cells[i] = strings.TrimSpace(cell)
+		}
+		if len(cells) > 0 && cells[0] == key {
+			return cells
+		}
+	}
+	t.Fatalf("no table row starting with %q in:\n%s", key, out)
+	return nil
 }
 
 // writeDevcontainer writes a minimal devcontainer.json, with the given body as its content, at the

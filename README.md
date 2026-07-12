@@ -72,6 +72,7 @@ list.
 | `-format` | output format: `text` (default), `json`, or `github` (see [Output formats](#output-formats)) |
 | `-deny-warnings` | also exit non-zero on `warn`-severity findings (see [Exit codes](#exit-codes)) |
 | `-config` | path to a config file overriding rule severities (see [Config file](#config-file)) |
+| `-rules` | print the available rules |
 
 ### Target platforms
 

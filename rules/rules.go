@@ -13,15 +13,17 @@ import (
 	"github.com/bare-devcontainer/decolint/linter"
 )
 
-// ruleReg pairs a built-in rule with the severity it's registered at by default.
-type ruleReg struct {
-	rule     *linter.Rule
-	severity linter.Severity
+// Registration pairs a built-in rule with the severity it's registered at by default.
+type Registration struct {
+	// Rule is the built-in rule.
+	Rule *linter.Rule
+	// DefaultSeverity is the severity Rule is registered at unless overridden.
+	DefaultSeverity linter.Severity
 }
 
 // builtinRules lists the built-in rules, in a deterministic order (alphabetically by rule ID), along
 // with their default severities.
-var builtinRules = []ruleReg{
+var builtinRules = []Registration{
 	{CodespacesNoBindMount, linter.Warn},
 	{CodespacesNoHostPortFormat, linter.Error},
 	{IDDirMismatch, linter.Error},
@@ -63,16 +65,23 @@ func RegisterRules(l *linter.Linter, platforms []linter.Platform, overrides map[
 	}
 
 	for _, reg := range builtinRules {
-		if !platformEnabled(reg.rule.Platforms, platforms) {
+		if !platformEnabled(reg.Rule.Platforms, platforms) {
 			continue
 		}
-		severity := reg.severity
-		if s, ok := overrides[reg.rule.ID]; ok {
+		severity := reg.DefaultSeverity
+		if s, ok := overrides[reg.Rule.ID]; ok {
 			severity = s
 		}
-		l.RegisterRule(reg.rule, severity)
+		l.RegisterRule(reg.Rule, severity)
 	}
 	return nil
+}
+
+// Builtin returns the built-in rules and their default severities, in the same deterministic order
+// as RegisterRules uses. It is a copy of the internal registry; callers may not mutate the built-in
+// rules through it.
+func Builtin() []Registration {
+	return slices.Clone(builtinRules)
 }
 
 // unknownOverrides returns the sorted set of keys in overrides that do not match any built-in rule
@@ -81,7 +90,7 @@ func RegisterRules(l *linter.Linter, platforms []linter.Platform, overrides map[
 func unknownOverrides(overrides map[string]linter.Severity) []string {
 	var unknown []string
 	for id := range overrides {
-		if !slices.ContainsFunc(builtinRules, func(reg ruleReg) bool { return reg.rule.ID == id }) {
+		if !slices.ContainsFunc(builtinRules, func(reg Registration) bool { return reg.Rule.ID == id }) {
 			unknown = append(unknown, id)
 		}
 	}

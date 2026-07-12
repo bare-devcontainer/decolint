@@ -14,6 +14,7 @@
 ## Workflows
 
 - Use `make` to run workflows locally. Run `make help` to see the full list of available targets.
+- Run `make lint` after making changes to ensure code quality.
 
 ## GitHub Actions
 

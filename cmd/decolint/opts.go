@@ -25,6 +25,8 @@ type Options struct {
 	Format Format
 	// Version, when set, causes the program to print its version and exit.
 	Version bool
+	// ListRules, when set, causes the program to print the built-in rules and exit.
+	ListRules bool
 }
 
 // parseOptions parses args into Options. Flag errors and usage text are written to output. The
@@ -43,6 +45,7 @@ func parseOptions(args []string, output io.Writer) (Options, string, error) {
 	fs.StringVar(&platformFlag, "platform", "", "comma-separated target platforms to include in addition to \"all\" (vscode, codespaces)")
 	fs.StringVar(&formatFlag, "format", "text", "output format: text, json, or github")
 	fs.BoolVar(&opts.Version, "version", false, "print version information and exit")
+	fs.BoolVar(&opts.ListRules, "rules", false, "print the built-in rules as a Markdown table (default and current severity, target platforms), then exit")
 	fs.Usage = func() { _ = usage(fs) }
 	if err := fs.Parse(args); err != nil {
 		return Options{}, "", err

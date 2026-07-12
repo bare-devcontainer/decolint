@@ -34,6 +34,9 @@ func initConfigFile(output io.Writer) error {
 // Whole categories (correctness, security, reproducibility, style) can be set at once
 // under "categories"; per-rule entries take precedence, e.g.:
 //   "categories": { "security": "error" }
+// "platforms" lists target platforms whose rules run in addition to
+// platform-agnostic ones (the -platform flag takes precedence), e.g.:
+//   "platforms": ["vscode", "codespaces"]
 `)
 	if err := json.MarshalWrite(&buf, cfg, jsontext.Multiline(true)); err != nil {
 		return fmt.Errorf("marshal %s: %w", name, err)

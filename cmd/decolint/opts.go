@@ -45,7 +45,7 @@ func parseOptions(args []string, output io.Writer) (Options, string, error) {
 	fs.SetOutput(output)
 	fs.BoolVar(&opts.DenyWarnings, "deny-warnings", false, "treat warnings as failures (exit code 1)")
 	fs.StringVar(&configPathFlag, "config", "", "path to a config file (default: auto-discover .decolint.jsonc or .decolint.json in the current directory)")
-	fs.StringVar(&platformFlag, "platform", "", "comma-separated target platforms to include in addition to \"all\" (vscode, codespaces)")
+	fs.StringVar(&platformFlag, "platform", "", "comma-separated target platforms to include in addition to \"all\" (vscode, codespaces); overrides the config file's \"platforms\" member")
 	fs.StringVar(&formatFlag, "format", "text", "output format: text, json, or github")
 	fs.BoolVar(&opts.Version, "version", false, "print version information and exit")
 	fs.BoolVar(&opts.ListRules, "rules", false, "print the built-in rules as a Markdown table (category, target platforms, current severity), then exit")

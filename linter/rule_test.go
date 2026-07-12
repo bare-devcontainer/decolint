@@ -166,6 +166,54 @@ func TestSeverityJSON(t *testing.T) {
 	})
 }
 
+func TestPlatformJSON(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		platform linter.Platform
+		want     string
+	}{
+		{linter.PlatformVSCode, `"vscode"`},
+		{linter.PlatformCodespaces, `"codespaces"`},
+	}
+	for _, tt := range tests {
+		t.Run(tt.want, func(t *testing.T) {
+			t.Parallel()
+			got, err := json.Marshal(tt.platform)
+			if err != nil {
+				t.Fatalf("Marshal(%v): %v", tt.platform, err)
+			}
+			if string(got) != tt.want {
+				t.Errorf("Marshal(%v) = %s, want %s", tt.platform, got, tt.want)
+			}
+
+			var p linter.Platform
+			if err := json.Unmarshal(got, &p); err != nil {
+				t.Fatalf("Unmarshal(%s): %v", got, err)
+			}
+			if p != tt.platform {
+				t.Errorf("Unmarshal(%s) = %v, want %v", got, p, tt.platform)
+			}
+		})
+	}
+
+	t.Run("invalid platform name", func(t *testing.T) {
+		t.Parallel()
+		var p linter.Platform
+		if err := json.Unmarshal([]byte(`"intellij"`), &p); err == nil {
+			t.Error("Unmarshal(\"intellij\"): got nil error, want an error")
+		}
+	})
+
+	t.Run("non-string token", func(t *testing.T) {
+		t.Parallel()
+		var p linter.Platform
+		if err := json.Unmarshal([]byte(`1`), &p); err == nil {
+			t.Error("Unmarshal(1): got nil error, want an error")
+		}
+	})
+}
+
 func TestPlatformString(t *testing.T) {
 	t.Parallel()
 

@@ -24,8 +24,6 @@ type Registration struct {
 // builtinRules lists the built-in rules, in a deterministic order (alphabetically by rule ID), along
 // with their default severities.
 var builtinRules = []Registration{
-	{CodespacesNoBindMount, linter.Warn},
-	{CodespacesNoHostPortFormat, linter.Error},
 	{IDDirMismatch, linter.Error},
 	{InvalidSemver, linter.Error},
 	{MissingBuildDockerfile, linter.Error},
@@ -34,8 +32,10 @@ var builtinRules = []Registration{
 	{MissingRequiredProps, linter.Error},
 	{MissingWorkspaceMountFolder, linter.Error},
 	{NoAppPort, linter.Warn},
+	{NoBindMount, linter.Warn},
 	{NoCapAddAll, linter.Warn},
 	{NoDockerSocketMount, linter.Warn},
+	{NoHostPortFormat, linter.Error},
 	{NoImageLatest, linter.Warn},
 	{NoPrivilegedContainer, linter.Warn},
 	{NoSeccompOverride, linter.Off},

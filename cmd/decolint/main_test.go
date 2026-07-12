@@ -40,14 +40,14 @@ func TestRun(t *testing.T) {
 				// The fixture uses every ignore directive kind, each suppressing a rule that would
 				// otherwise fire: decolint-ignore-file (no-seccomp-unconfined), decolint-ignore-line
 				// (no-cap-add-all), and decolint-ignore-next-line (no-app-port).
-				{violationsFile, "codespaces-no-bind-mount", linter.Warn},
-				{violationsFile, "codespaces-no-host-port-format", linter.Error},
+				{violationsFile, "no-bind-mount", linter.Warn},
+				{violationsFile, "no-host-port-format", linter.Error},
 				{violationsFile, "no-docker-socket-mount", linter.Warn},
 				{violationsFile, "no-image-latest", linter.Warn},
 				{violationsFile, "no-privileged-container", linter.Warn},
 				{violationsFile, "pin-feature-version", linter.Warn},
 			},
-			wantExitCode: 1, // codespaces-no-host-port-format is an error by default
+			wantExitCode: 1, // no-host-port-format is an error by default
 		},
 		{
 			// Without a platform selection the codespaces-scoped rules are not registered, and with
@@ -83,8 +83,8 @@ func TestRun(t *testing.T) {
 				"testdata/e2e/violations",
 			},
 			want: []firing{
-				{violationsFile, "codespaces-no-bind-mount", linter.Warn},
-				{violationsFile, "codespaces-no-host-port-format", linter.Error},
+				{violationsFile, "no-bind-mount", linter.Warn},
+				{violationsFile, "no-host-port-format", linter.Error},
 				{violationsFile, "no-docker-socket-mount", linter.Warn},
 				{violationsFile, "no-image-latest", linter.Error},
 				{violationsFile, "no-privileged-container", linter.Warn},
@@ -182,10 +182,10 @@ func TestRun_Flags(t *testing.T) {
 			t.Errorf("no-image-latest row mismatch (-want +got):\n%s", diff)
 		}
 
-		row = mdTableRow(t, out, "codespaces-no-bind-mount")
-		wantRow = []string{"codespaces-no-bind-mount", "codespaces", severityEmoji[linter.Warn], severityEmoji[linter.Warn]}
+		row = mdTableRow(t, out, "no-bind-mount")
+		wantRow = []string{"no-bind-mount", "codespaces", severityEmoji[linter.Warn], severityEmoji[linter.Warn]}
 		if diff := cmp.Diff(wantRow, row); diff != "" {
-			t.Errorf("codespaces-no-bind-mount row mismatch (-want +got):\n%s", diff)
+			t.Errorf("no-bind-mount row mismatch (-want +got):\n%s", diff)
 		}
 	})
 
@@ -346,7 +346,7 @@ func TestRunLint(t *testing.T) {
 		opts := Options{
 			Paths:  []string{dir},
 			Format: format.TextFormat{},
-			Config: Config{Rules: map[string]linter.Severity{"codespaces-no-bind-mount": linter.Error}},
+			Config: Config{Rules: map[string]linter.Severity{"no-bind-mount": linter.Error}},
 		}
 		hasIssue, runErr := runLint(t.Context(), &stdout, opts)
 		if runErr != nil || hasIssue {

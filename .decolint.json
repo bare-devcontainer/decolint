@@ -1,4 +1,5 @@
 {
+  "platforms": ["vscode"],
   "categories": {
     "reproducibility": "error",
     "security": "error"

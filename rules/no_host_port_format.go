@@ -9,19 +9,19 @@ import (
 	"github.com/tailscale/hujson"
 )
 
-// CodespacesNoHostPortFormat reports "forwardPorts" entries and "portsAttributes" keys written in
+// NoHostPortFormat reports "forwardPorts" entries and "portsAttributes" keys written in
 // "host:port" format. The Dev Container spec allows that format, but GitHub Codespaces only
 // supports a bare port number in either property.
-var CodespacesNoHostPortFormat = &linter.Rule{
-	ID:          "codespaces-no-host-port-format",
+var NoHostPortFormat = &linter.Rule{
+	ID:          "no-host-port-format",
 	Description: `disallow "host:port" entries in "forwardPorts" and "portsAttributes", which GitHub Codespaces does not support`,
 	FileTypes:   []linter.FileType{linter.Devcontainer},
 	Platforms:   []linter.Platform{linter.PlatformCodespaces},
 	Paths:       []string{"/forwardPorts/*", "/portsAttributes/*"},
-	Check:       checkCodespacesNoHostPortFormat,
+	Check:       checkNoHostPortFormat,
 }
 
-func checkCodespacesNoHostPortFormat(_ *linter.Context, node *linter.Node) []linter.Finding {
+func checkNoHostPortFormat(_ *linter.Context, node *linter.Node) []linter.Finding {
 	if key, ok := strings.CutPrefix(node.Pointer, "/portsAttributes/"); ok {
 		if !isHostPort(key) {
 			return nil

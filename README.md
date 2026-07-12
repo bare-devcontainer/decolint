@@ -72,6 +72,7 @@ list.
 | `-format` | output format: `text` (default), `json`, or `github` (see [Output formats](#output-formats)) |
 | `-deny-warnings` | also exit non-zero on `warn`-severity findings (see [Exit codes](#exit-codes)) |
 | `-config` | path to a config file overriding rule severities (see [Config file](#config-file)) |
+| `-rules` | print the available rules |
 
 ### Target platforms
 
@@ -179,8 +180,8 @@ applies to all platforms.
 | `require-cap-drop-all` | (all) | `off` | require an `ALL` entry in a devcontainer.json's `capDrop` property, or a `--cap-drop=ALL` entry in `runArgs`, dropping every Linux capability |
 | `require-no-new-privileges` | (all) | `off` | require `no-new-privileges` to be set via a devcontainer.json's `securityOpt` property, or a `--security-opt no-new-privileges...` entry in `runArgs` |
 | `require-non-root` | (all) | `off` | require `remoteUser` or, if unset, `containerUser` to be set to a non-root user |
-| `codespaces-no-host-port-format` | `codespaces` | `error` | disallow `host:port` entries in `forwardPorts` and `portsAttributes`, which GitHub Codespaces does not support |
-| `codespaces-no-bind-mount` | `codespaces` | `warn` | disallow `bind` type entries in `mounts`, which GitHub Codespaces silently ignores except for the Docker socket |
+| `no-host-port-format` | `codespaces` | `error` | disallow `host:port` entries in `forwardPorts` and `portsAttributes`, which GitHub Codespaces does not support |
+| `no-bind-mount` | `codespaces` | `warn` | disallow `bind` type entries in `mounts`, which GitHub Codespaces silently ignores except for the Docker socket |
 | `pin-extension-version` | `vscode`, `codespaces` | `warn` | disallow a `customizations.vscode.extensions` entry without an explicit pinned version |
 
 ## Suppressing findings

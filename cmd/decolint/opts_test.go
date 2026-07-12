@@ -109,6 +109,30 @@ func TestParseOptionsVersion(t *testing.T) {
 	}
 }
 
+func TestParseOptionsListRules(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		args []string
+	}{
+		{"single dash", []string{"-rules"}},
+		{"double dash", []string{"--rules"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			opts, _, err := parseOptions(tt.args, io.Discard)
+			if err != nil {
+				t.Fatalf("parseOptions(%v): %v", tt.args, err)
+			}
+			if !opts.ListRules {
+				t.Errorf("ListRules = false, want true")
+			}
+		})
+	}
+}
+
 func TestParseOptionsConfig(t *testing.T) {
 	t.Parallel()
 

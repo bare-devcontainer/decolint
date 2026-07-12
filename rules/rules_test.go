@@ -32,14 +32,14 @@ func TestRegisterRulesUnknownOverrides(t *testing.T) {
 		{
 			"platform-scoped rule id not selected is not unknown",
 			nil,
-			map[string]linter.Severity{"codespaces-no-bind-mount": linter.Error},
+			map[string]linter.Severity{"no-bind-mount": linter.Error},
 			false,
 			nil,
 		},
 		{
 			"platform-scoped rule id selected is not unknown",
 			[]linter.Platform{linter.PlatformCodespaces},
-			map[string]linter.Severity{"codespaces-no-bind-mount": linter.Error},
+			map[string]linter.Severity{"no-bind-mount": linter.Error},
 			false,
 			nil,
 		},
@@ -64,7 +64,7 @@ func TestRegisterRulesUnknownOverrides(t *testing.T) {
 func TestRegisterRulesPlatformFilter(t *testing.T) {
 	t.Parallel()
 
-	// codespaces-no-bind-mount is scoped to PlatformCodespaces, so it should only fire when that
+	// no-bind-mount is scoped to PlatformCodespaces, so it should only fire when that
 	// platform is selected.
 	const src = `{"mounts": ["source=/host,target=/data,type=bind"]}`
 
@@ -87,9 +87,9 @@ func TestRegisterRulesPlatformFilter(t *testing.T) {
 			if err != nil {
 				t.Fatalf("Lint: %v", err)
 			}
-			fired := ruleFired(issues, "codespaces-no-bind-mount")
+			fired := ruleFired(issues, "no-bind-mount")
 			if fired != tt.wantFired {
-				t.Errorf("codespaces-no-bind-mount fired = %v, want %v (issues: %v)", fired, tt.wantFired, issues)
+				t.Errorf("no-bind-mount fired = %v, want %v (issues: %v)", fired, tt.wantFired, issues)
 			}
 		})
 	}

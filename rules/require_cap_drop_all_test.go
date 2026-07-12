@@ -17,34 +17,21 @@ func TestRequireCapDropAll(t *testing.T) {
 	}{
 		{"no capDrop or runArgs", `{"name": "test"}`, []linter.Issue{
 			{Path: "devcontainer.json", Line: 1, Col: 1, RuleID: "require-cap-drop-all",
-				Message: `"ALL" is not set via "capDrop" or "runArgs", leaving the container with its default Linux capabilities`},
+				Message: `"ALL" is not set via "runArgs", leaving the container with its default Linux capabilities`},
 		}},
-
-		// "capDrop"
-		{"capDrop with ALL", `{"capDrop": ["ALL"]}`, nil},
-		{"capDrop without ALL", `{"capDrop": ["SYS_PTRACE"]}`, []linter.Issue{
-			{Path: "devcontainer.json", Line: 1, Col: 1, RuleID: "require-cap-drop-all",
-				Message: `"ALL" is not set via "capDrop" or "runArgs", leaving the container with its default Linux capabilities`},
-		}},
-		{"capDrop not an array", `{"capDrop": "ALL"}`, []linter.Issue{
-			{Path: "devcontainer.json", Line: 1, Col: 1, RuleID: "require-cap-drop-all",
-				Message: `"ALL" is not set via "capDrop" or "runArgs", leaving the container with its default Linux capabilities`},
-		}},
-
-		// "runArgs"
 		{"runArgs with cap-drop=ALL", `{"runArgs": ["--cap-drop=ALL"]}`, nil},
 		{"runArgs with cap-drop ALL two tokens", `{"runArgs": ["--cap-drop", "ALL"]}`, nil},
 		{"runArgs without cap-drop=ALL", `{"runArgs": ["--init", "--cap-add=SYS_PTRACE"]}`, []linter.Issue{
 			{Path: "devcontainer.json", Line: 1, Col: 1, RuleID: "require-cap-drop-all",
-				Message: `"ALL" is not set via "capDrop" or "runArgs", leaving the container with its default Linux capabilities`},
+				Message: `"ALL" is not set via "runArgs", leaving the container with its default Linux capabilities`},
 		}},
 		{"runArgs with cap-add ALL is not cap-drop", `{"runArgs": ["--cap-add", "ALL"]}`, []linter.Issue{
 			{Path: "devcontainer.json", Line: 1, Col: 1, RuleID: "require-cap-drop-all",
-				Message: `"ALL" is not set via "capDrop" or "runArgs", leaving the container with its default Linux capabilities`},
+				Message: `"ALL" is not set via "runArgs", leaving the container with its default Linux capabilities`},
 		}},
 		{"runArgs not an array", `{"runArgs": "--cap-drop=ALL"}`, []linter.Issue{
 			{Path: "devcontainer.json", Line: 1, Col: 1, RuleID: "require-cap-drop-all",
-				Message: `"ALL" is not set via "capDrop" or "runArgs", leaving the container with its default Linux capabilities`},
+				Message: `"ALL" is not set via "runArgs", leaving the container with its default Linux capabilities`},
 		}},
 
 		// document root

@@ -40,14 +40,14 @@ func TestRun(t *testing.T) {
 				// The fixture uses every ignore directive kind, each suppressing a rule that would
 				// otherwise fire: decolint-ignore-file (no-seccomp-unconfined), decolint-ignore-line
 				// (no-cap-add-all), and decolint-ignore-next-line (no-app-port).
-				{violationsFile, "codespaces-no-bind-mount", linter.Warn},
-				{violationsFile, "codespaces-no-host-port-format", linter.Error},
+				{violationsFile, "no-bind-mount", linter.Warn},
+				{violationsFile, "no-host-port-format", linter.Error},
 				{violationsFile, "no-docker-socket-mount", linter.Warn},
 				{violationsFile, "no-image-latest", linter.Warn},
 				{violationsFile, "no-privileged-container", linter.Warn},
 				{violationsFile, "pin-feature-version", linter.Warn},
 			},
-			wantExitCode: 1, // codespaces-no-host-port-format is an error by default
+			wantExitCode: 1, // no-host-port-format is an error by default
 		},
 		{
 			// Without a platform selection the codespaces-scoped rules are not registered, and with
@@ -83,8 +83,8 @@ func TestRun(t *testing.T) {
 				"testdata/e2e/violations",
 			},
 			want: []firing{
-				{violationsFile, "codespaces-no-bind-mount", linter.Warn},
-				{violationsFile, "codespaces-no-host-port-format", linter.Error},
+				{violationsFile, "no-bind-mount", linter.Warn},
+				{violationsFile, "no-host-port-format", linter.Error},
 				{violationsFile, "no-docker-socket-mount", linter.Warn},
 				{violationsFile, "no-image-latest", linter.Error},
 				{violationsFile, "no-privileged-container", linter.Warn},
@@ -155,6 +155,72 @@ func TestRun_Flags(t *testing.T) {
 		}
 		if !strings.Contains(stdout.String(), "decolint") {
 			t.Errorf("stdout = %q, want it to mention decolint", stdout.String())
+		}
+	})
+
+	t.Run("-rules", func(t *testing.T) {
+		t.Parallel()
+
+		var stdout, stderr bytes.Buffer
+		exitCode := run(t.Context(), []string{"-rules"}, &stdout, &stderr)
+		if exitCode != 0 {
+			t.Errorf("exit code = %d, want 0", exitCode)
+		}
+		if stderr.String() != "" {
+			t.Errorf("stderr = %q, want empty", stderr.String())
+		}
+		out := stdout.String()
+
+		header := mdTableRow(t, out, rulesTableHeader[0])
+		if diff := cmp.Diff(rulesTableHeader, header); diff != "" {
+			t.Errorf("header row mismatch (-want +got):\n%s", diff)
+		}
+
+		row := mdTableRow(t, out, "no-image-latest")
+		wantRow := []string{"no-image-latest", "(all)", severityEmoji[linter.Warn], severityEmoji[linter.Warn]}
+		if diff := cmp.Diff(wantRow, row); diff != "" {
+			t.Errorf("no-image-latest row mismatch (-want +got):\n%s", diff)
+		}
+
+		row = mdTableRow(t, out, "no-bind-mount")
+		wantRow = []string{"no-bind-mount", "codespaces", severityEmoji[linter.Warn], severityEmoji[linter.Warn]}
+		if diff := cmp.Diff(wantRow, row); diff != "" {
+			t.Errorf("no-bind-mount row mismatch (-want +got):\n%s", diff)
+		}
+	})
+
+	t.Run("-rules with -config", func(t *testing.T) {
+		t.Parallel()
+
+		var stdout, stderr bytes.Buffer
+		exitCode := run(t.Context(), []string{"-rules", "-config=testdata/e2e/override.jsonc"}, &stdout, &stderr)
+		if exitCode != 0 {
+			t.Errorf("exit code = %d, want 0", exitCode)
+		}
+		if stderr.String() != "" {
+			t.Errorf("stderr = %q, want empty", stderr.String())
+		}
+		out := stdout.String()
+
+		// no-image-latest: default warn, overridden to error.
+		row := mdTableRow(t, out, "no-image-latest")
+		wantRow := []string{"no-image-latest", "(all)", severityEmoji[linter.Warn], severityEmoji[linter.Error]}
+		if diff := cmp.Diff(wantRow, row); diff != "" {
+			t.Errorf("no-image-latest row mismatch (-want +got):\n%s", diff)
+		}
+
+		// pin-feature-version: default warn, overridden to off.
+		row = mdTableRow(t, out, "pin-feature-version")
+		wantRow = []string{"pin-feature-version", "(all)", severityEmoji[linter.Warn], severityEmoji[linter.Off]}
+		if diff := cmp.Diff(wantRow, row); diff != "" {
+			t.Errorf("pin-feature-version row mismatch (-want +got):\n%s", diff)
+		}
+
+		// pin-image-digest: default off, overridden to warn.
+		row = mdTableRow(t, out, "pin-image-digest")
+		wantRow = []string{"pin-image-digest", "(all)", severityEmoji[linter.Off], severityEmoji[linter.Warn]}
+		if diff := cmp.Diff(wantRow, row); diff != "" {
+			t.Errorf("pin-image-digest row mismatch (-want +got):\n%s", diff)
 		}
 	})
 
@@ -280,13 +346,35 @@ func TestRunLint(t *testing.T) {
 		opts := Options{
 			Paths:  []string{dir},
 			Format: format.TextFormat{},
-			Config: Config{Rules: map[string]linter.Severity{"codespaces-no-bind-mount": linter.Error}},
+			Config: Config{Rules: map[string]linter.Severity{"no-bind-mount": linter.Error}},
 		}
 		hasIssue, runErr := runLint(t.Context(), &stdout, opts)
 		if runErr != nil || hasIssue {
 			t.Errorf("hasIssue = %v, err = %v, want false, nil; stdout: %s", hasIssue, runErr, stdout.String())
 		}
 	})
+}
+
+// mdTableRow finds the row of a Markdown table in out whose first cell, after trimming the padding
+// listRules adds for alignment, equals key, and returns its cells trimmed of that padding. It fails
+// the test if no such row exists.
+func mdTableRow(t *testing.T, out, key string) []string {
+	t.Helper()
+	for line := range strings.Lines(out) {
+		line = strings.TrimSpace(line)
+		if !strings.HasPrefix(line, "|") {
+			continue
+		}
+		cells := strings.Split(strings.Trim(line, "|"), "|")
+		for i, cell := range cells {
+			cells[i] = strings.TrimSpace(cell)
+		}
+		if len(cells) > 0 && cells[0] == key {
+			return cells
+		}
+	}
+	t.Fatalf("no table row starting with %q in:\n%s", key, out)
+	return nil
 }
 
 // writeDevcontainer writes a minimal devcontainer.json, with the given body as its content, at the

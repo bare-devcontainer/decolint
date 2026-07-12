@@ -13,11 +13,7 @@
 
 ## Workflows
 
-- Use `make` to run workflows locally:
-  - `make build` - build the project
-  - `make run` - run the project
-  - `make lint` - run all lint rules
-  - `make test` - run all tests
+- Use `make` to run workflows locally. Run `make help` to see the full list of available targets.
 
 ## GitHub Actions
 

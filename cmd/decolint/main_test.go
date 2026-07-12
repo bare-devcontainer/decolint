@@ -177,6 +177,14 @@ func TestRun(t *testing.T) {
 			},
 			wantExitCode: 1,
 		},
+		{
+			// -merge-features=false, given explicitly, overrides merge-on.jsonc's "mergeFeatures":
+			// true and disables merging.
+			name:         "merge features disabled by CLI flag overrides config",
+			args:         []string{"-merge-features=false", "-config=testdata/e2e/merge-on.jsonc", "testdata/e2e/merge"},
+			want:         nil,
+			wantExitCode: 0,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

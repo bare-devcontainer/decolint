@@ -279,21 +279,21 @@ func TestMergeConfig(t *testing.T) {
 		},
 		{
 			"CLI merge-features flag enables it",
-			Options{MergeFeatures: true},
+			Options{MergeFeatures: true, mergeFeaturesSet: true},
 			Config{},
 			Config{MergeFeatures: true},
 		},
 		{
-			"config file mergeFeatures member enables it",
+			"CLI merge-features flag not given falls back to config file mergeFeatures",
 			Options{},
 			Config{MergeFeatures: true},
 			Config{MergeFeatures: true},
 		},
 		{
-			"CLI flag does not disable config file mergeFeatures",
-			Options{MergeFeatures: false},
+			"CLI merge-features=false overrides config file mergeFeatures: true",
+			Options{MergeFeatures: false, mergeFeaturesSet: true},
 			Config{MergeFeatures: true},
-			Config{MergeFeatures: true},
+			Config{MergeFeatures: false},
 		},
 	}
 	for _, tt := range tests {

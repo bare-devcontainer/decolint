@@ -113,6 +113,12 @@ properties it contributes, and lint the merged configuration instead:
 decolint -merge-features -config .decolint.jsonc
 ```
 
+When given explicitly, `-merge-features` (in either form,
+`-merge-features` or `-merge-features=false`) overrides the config
+file's `mergeFeatures` member; for example, `-merge-features=false`
+disables merging even if the config file sets `"mergeFeatures":
+true`. Leaving the flag unset defers to the config file.
+
 - OCI references (e.g. `ghcr.io/devcontainers/features/node:1`) are
   pulled from the registry with anonymous access, direct HTTP(S)
   tarball URIs are downloaded, and relative paths (e.g.
@@ -195,7 +201,8 @@ individual rule's severity and takes precedence over its category.
 rules run in addition to platform-agnostic ones; the `-platform` flag,
 when given, takes precedence over it. `mergeFeatures` set to `true`
 enables [merging Features](#merging-features), same as the
-`-merge-features` flag.
+`-merge-features` flag; when given explicitly, `-merge-features`
+takes precedence over `mergeFeatures` in either direction.
 
 For the strictest configuration, enable every category:
 

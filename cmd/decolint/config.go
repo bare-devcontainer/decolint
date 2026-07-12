@@ -85,15 +85,17 @@ func writeSeverityMap(enc *jsontext.Encoder, m map[string]linter.Severity) error
 	return enc.WriteToken(jsontext.EndObject)
 }
 
-// mergeConfig returns cfg with any CLI-provided opts fields applied. Platforms (-platform), when
-// given, overrides the config file's value; Categories and Rules are config-file only. MergeFeatures
-// (-merge-features) can be enabled by either source, so it merges as a boolean OR rather than an
-// override.
+// mergeConfig returns cfg with any CLI-provided opts fields applied as overrides. Platforms
+// (-platform) and MergeFeatures (-merge-features), when explicitly given, override the config
+// file's value in either direction (e.g. "-merge-features=false" disables merging even if the
+// config file sets "mergeFeatures": true); Categories and Rules are config-file only.
 func mergeConfig(opts Options, cfg Config) Config {
 	if len(opts.Platforms) > 0 {
 		cfg.Platforms = opts.Platforms
 	}
-	cfg.MergeFeatures = cfg.MergeFeatures || opts.MergeFeatures
+	if opts.mergeFeaturesSet {
+		cfg.MergeFeatures = opts.MergeFeatures
+	}
 	return cfg
 }
 

@@ -35,27 +35,33 @@ func (GitHubFormat) WriteIssues(w io.Writer, issues []linter.Issue) error {
 	return nil
 }
 
-// escapeGitHubData escapes s for use as the data (message) portion of a GitHub Actions workflow
-// command, per
+// githubDataReplacer escapes the data (message) portion of a GitHub Actions workflow command, per
 // https://docs.github.com/en/actions/using-workflows/workflow-commands-for-github-actions#escaping-properties.
+// strings.Replacer is safe for concurrent use, so a single package-level instance is reused across calls.
+var githubDataReplacer = strings.NewReplacer(
+	"%", "%25",
+	"\r", "%0D",
+	"\n", "%0A",
+)
+
+// githubPropertyReplacer escapes a property value (e.g. file, title) of a GitHub Actions workflow
+// command, per the same escaping rules as githubDataReplacer.
+var githubPropertyReplacer = strings.NewReplacer(
+	"%", "%25",
+	"\r", "%0D",
+	"\n", "%0A",
+	":", "%3A",
+	",", "%2C",
+)
+
+// escapeGitHubData escapes s for use as the data (message) portion of a GitHub Actions workflow
+// command.
 func escapeGitHubData(s string) string {
-	r := strings.NewReplacer(
-		"%", "%25",
-		"\r", "%0D",
-		"\n", "%0A",
-	)
-	return r.Replace(s)
+	return githubDataReplacer.Replace(s)
 }
 
 // escapeGitHubProperty escapes s for use as a property value (e.g. file, title) of a GitHub Actions
 // workflow command.
 func escapeGitHubProperty(s string) string {
-	r := strings.NewReplacer(
-		"%", "%25",
-		"\r", "%0D",
-		"\n", "%0A",
-		":", "%3A",
-		",", "%2C",
-	)
-	return r.Replace(s)
+	return githubPropertyReplacer.Replace(s)
 }

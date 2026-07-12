@@ -32,7 +32,7 @@ func (IDDirMismatch) Platforms() []linter.Platform { return nil }
 func (IDDirMismatch) Paths() []string { return []string{"/id"} }
 
 // Check implements [linter.Rule].
-func (r IDDirMismatch) Check(ctx *linter.Context, node *linter.Node) []linter.Finding {
+func (IDDirMismatch) Check(ctx *linter.Context, node *linter.Node) []linter.Finding {
 	lit, ok := node.Value.Value.(hujson.Literal)
 	if !ok || lit.Kind() != '"' {
 		return nil
@@ -43,7 +43,6 @@ func (r IDDirMismatch) Check(ctx *linter.Context, node *linter.Node) []linter.Fi
 		return nil
 	}
 	return []linter.Finding{{
-		RuleID:  r.ID(),
 		Message: fmt.Sprintf("id %q does not match containing directory %q", id, dir),
 		Offset:  node.Value.StartOffset,
 	}}

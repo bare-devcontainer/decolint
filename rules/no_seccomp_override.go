@@ -37,7 +37,7 @@ func (NoSeccompOverride) Paths() []string {
 }
 
 // Check implements [linter.Rule].
-func (r NoSeccompOverride) Check(ctx *linter.Context, node *linter.Node) []linter.Finding {
+func (NoSeccompOverride) Check(ctx *linter.Context, node *linter.Node) []linter.Finding {
 	lit, ok := node.Value.Value.(hujson.Literal)
 	if !ok || lit.Kind() != '"' {
 		return nil
@@ -48,7 +48,6 @@ func (r NoSeccompOverride) Check(ctx *linter.Context, node *linter.Node) []linte
 			return nil
 		}
 		return []linter.Finding{{
-			RuleID:  r.ID(),
 			Message: `"securityOpt" overrides the default seccomp profile`,
 			Offset:  node.Value.StartOffset,
 		}}
@@ -58,7 +57,6 @@ func (r NoSeccompOverride) Check(ctx *linter.Context, node *linter.Node) []linte
 		return nil
 	}
 	return []linter.Finding{{
-		RuleID:  r.ID(),
 		Message: `"runArgs" overrides the default seccomp profile via "--security-opt"`,
 		Offset:  node.Value.StartOffset,
 	}}

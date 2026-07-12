@@ -144,8 +144,6 @@ type Node struct {
 
 // Finding is a single problem reported by a rule.
 type Finding struct {
-	// RuleID identifies the rule that produced this finding.
-	RuleID string
 	// Message describes the problem in a human-readable way.
 	Message string
 	// Offset is the byte offset into Context.Src where the problem is located, typically the

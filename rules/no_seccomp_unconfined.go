@@ -33,7 +33,7 @@ func (NoSeccompUnconfined) Paths() []string {
 }
 
 // Check implements [linter.Rule].
-func (r NoSeccompUnconfined) Check(ctx *linter.Context, node *linter.Node) []linter.Finding {
+func (NoSeccompUnconfined) Check(ctx *linter.Context, node *linter.Node) []linter.Finding {
 	if node.Pointer == "/runArgs" {
 		arr, ok := node.Value.Value.(*hujson.Array)
 		if !ok || !runArgsApplicable(ctx) {
@@ -44,7 +44,6 @@ func (r NoSeccompUnconfined) Check(ctx *linter.Context, node *linter.Node) []lin
 			return nil
 		}
 		return []linter.Finding{{
-			RuleID:  r.ID(),
 			Message: `"runArgs" contains "--security-opt seccomp=unconfined", disabling the container's syscall filtering`,
 			Offset:  v.StartOffset,
 		}}
@@ -55,7 +54,6 @@ func (r NoSeccompUnconfined) Check(ctx *linter.Context, node *linter.Node) []lin
 		return nil
 	}
 	return []linter.Finding{{
-		RuleID:  r.ID(),
 		Message: `"securityOpt" contains "seccomp=unconfined", disabling the container's syscall filtering`,
 		Offset:  node.Value.StartOffset,
 	}}

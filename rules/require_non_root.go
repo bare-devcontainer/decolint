@@ -35,7 +35,7 @@ func (RequireNonRoot) Platforms() []linter.Platform { return nil }
 func (RequireNonRoot) Paths() []string { return []string{""} }
 
 // Check implements [linter.Rule].
-func (r RequireNonRoot) Check(_ *linter.Context, node *linter.Node) []linter.Finding {
+func (RequireNonRoot) Check(_ *linter.Context, node *linter.Node) []linter.Finding {
 	obj, ok := node.Value.Value.(*hujson.Object)
 	if !ok {
 		return nil
@@ -46,7 +46,6 @@ func (r RequireNonRoot) Check(_ *linter.Context, node *linter.Node) []linter.Fin
 			return nil
 		}
 		return []linter.Finding{{
-			RuleID:  r.ID(),
 			Message: `"remoteUser" is set to "root", running lifecycle scripts and any remote editor/IDE session as root`,
 			Offset:  node.Value.StartOffset,
 		}}
@@ -58,14 +57,12 @@ func (r RequireNonRoot) Check(_ *linter.Context, node *linter.Node) []linter.Fin
 			return nil
 		}
 		return []linter.Finding{{
-			RuleID:  r.ID(),
 			Message: `"remoteUser" is not set and "containerUser" is set to "root", running lifecycle scripts and any remote editor/IDE session as root`,
 			Offset:  node.Value.StartOffset,
 		}}
 	}
 
 	return []linter.Finding{{
-		RuleID:  r.ID(),
 		Message: `neither "remoteUser" nor "containerUser" is set, so the container defaults to running as root`,
 		Offset:  node.Value.StartOffset,
 	}}

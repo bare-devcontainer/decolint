@@ -33,7 +33,7 @@ func (NoPrivilegedContainer) Paths() []string {
 }
 
 // Check implements [linter.Rule].
-func (r NoPrivilegedContainer) Check(ctx *linter.Context, node *linter.Node) []linter.Finding {
+func (NoPrivilegedContainer) Check(ctx *linter.Context, node *linter.Node) []linter.Finding {
 	lit, ok := node.Value.Value.(hujson.Literal)
 	if !ok {
 		return nil
@@ -45,7 +45,6 @@ func (r NoPrivilegedContainer) Check(ctx *linter.Context, node *linter.Node) []l
 			return nil
 		}
 		return []linter.Finding{{
-			RuleID:  r.ID(),
 			Message: `"privileged" is set to true, disabling the container's isolation from the host`,
 			Offset:  node.Value.StartOffset,
 		}}
@@ -54,7 +53,6 @@ func (r NoPrivilegedContainer) Check(ctx *linter.Context, node *linter.Node) []l
 			return nil
 		}
 		return []linter.Finding{{
-			RuleID:  r.ID(),
 			Message: `"runArgs" contains "--privileged", disabling the container's isolation from the host`,
 			Offset:  node.Value.StartOffset,
 		}}

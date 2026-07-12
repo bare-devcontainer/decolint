@@ -29,13 +29,12 @@ func (MissingComposeService) Platforms() []linter.Platform { return nil }
 func (MissingComposeService) Paths() []string { return []string{""} }
 
 // Check implements [linter.Rule].
-func (r MissingComposeService) Check(_ *linter.Context, node *linter.Node) []linter.Finding {
+func (MissingComposeService) Check(_ *linter.Context, node *linter.Node) []linter.Finding {
 	obj, ok := node.Value.Value.(*hujson.Object)
 	if !ok || !hasMember(obj, "dockerComposeFile") || hasMember(obj, "service") {
 		return nil
 	}
 	return []linter.Finding{{
-		RuleID:  r.ID(),
 		Message: `devcontainer.json sets "dockerComposeFile" but is missing "service"`,
 		Offset:  node.Value.StartOffset,
 	}}

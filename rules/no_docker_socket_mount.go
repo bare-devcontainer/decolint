@@ -42,25 +42,23 @@ func (r NoDockerSocketMount) Check(_ *linter.Context, node *linter.Node) []linte
 	return r.checkRunArg(node)
 }
 
-func (r NoDockerSocketMount) checkMount(node *linter.Node) []linter.Finding {
+func (NoDockerSocketMount) checkMount(node *linter.Node) []linter.Finding {
 	_, source, ok := parseMount(node.Value)
 	if !ok || source != dockerSocketPath {
 		return nil
 	}
 	return []linter.Finding{{
-		RuleID:  r.ID(),
 		Message: `"mounts" entry bind-mounts the Docker socket, which grants the container root-equivalent control over the host`,
 		Offset:  node.Value.StartOffset,
 	}}
 }
 
-func (r NoDockerSocketMount) checkRunArg(node *linter.Node) []linter.Finding {
+func (NoDockerSocketMount) checkRunArg(node *linter.Node) []linter.Finding {
 	lit, ok := node.Value.Value.(hujson.Literal)
 	if !ok || lit.Kind() != '"' || !runArgMountsDockerSocket(lit.String()) {
 		return nil
 	}
 	return []linter.Finding{{
-		RuleID:  r.ID(),
 		Message: `"runArgs" bind-mounts the Docker socket, which grants the container root-equivalent control over the host`,
 		Offset:  node.Value.StartOffset,
 	}}

@@ -118,17 +118,18 @@ func (l *Linter) Lint(ctx context.Context, path string, src []byte, fileType Fil
 
 	var issues []Issue
 	walk(&root, "", nil, patterns, func(r Rule, node *Node) {
-		severity := l.severities[r.ID()]
+		id := r.ID()
+		severity := l.severities[id]
 		for _, f := range safeCheck(r, rctx, node) {
 			line, col := pos.lineCol(f.Offset)
-			if ignores.ignores(line, f.RuleID) {
+			if ignores.ignores(line, id) {
 				continue
 			}
 			issues = append(issues, Issue{
 				Path:     path,
 				Line:     line,
 				Col:      col,
-				RuleID:   f.RuleID,
+				RuleID:   id,
 				Message:  f.Message,
 				Severity: severity,
 			})
@@ -154,7 +155,6 @@ func safeCheck(r Rule, rctx *Context, node *Node) (findings []Finding) {
 	defer func() {
 		if rec := recover(); rec != nil {
 			findings = []Finding{{
-				RuleID:  r.ID(),
 				Message: fmt.Sprintf("rule panicked: %v", rec),
 				Offset:  node.Value.StartOffset,
 			}}

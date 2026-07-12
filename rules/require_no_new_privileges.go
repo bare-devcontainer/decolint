@@ -32,7 +32,7 @@ func (RequireNoNewPrivileges) Platforms() []linter.Platform { return nil }
 func (RequireNoNewPrivileges) Paths() []string { return []string{""} }
 
 // Check implements [linter.Rule].
-func (r RequireNoNewPrivileges) Check(_ *linter.Context, node *linter.Node) []linter.Finding {
+func (RequireNoNewPrivileges) Check(_ *linter.Context, node *linter.Node) []linter.Finding {
 	obj, ok := node.Value.Value.(*hujson.Object)
 	if !ok {
 		return nil
@@ -48,7 +48,6 @@ func (r RequireNoNewPrivileges) Check(_ *linter.Context, node *linter.Node) []li
 	}
 
 	return []linter.Finding{{
-		RuleID:  r.ID(),
 		Message: `"no-new-privileges" is not set via "securityOpt" or "runArgs", allowing container processes to gain additional privileges`,
 		Offset:  node.Value.StartOffset,
 	}}

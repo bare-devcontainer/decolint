@@ -27,9 +27,8 @@ func (NoAppPort) Platforms() []linter.Platform { return nil }
 func (NoAppPort) Paths() []string { return []string{"/appPort"} }
 
 // Check implements [linter.Rule].
-func (r NoAppPort) Check(_ *linter.Context, node *linter.Node) []linter.Finding {
+func (NoAppPort) Check(_ *linter.Context, node *linter.Node) []linter.Finding {
 	return []linter.Finding{{
-		RuleID:  r.ID(),
 		Message: `"appPort" is a legacy property; use "forwardPorts" instead to forward ports dynamically`,
 		Offset:  node.Value.StartOffset,
 	}}

@@ -33,7 +33,7 @@ func (NoCapAddAll) Paths() []string {
 }
 
 // Check implements [linter.Rule].
-func (r NoCapAddAll) Check(ctx *linter.Context, node *linter.Node) []linter.Finding {
+func (NoCapAddAll) Check(ctx *linter.Context, node *linter.Node) []linter.Finding {
 	if node.Pointer == "/runArgs" {
 		arr, ok := node.Value.Value.(*hujson.Array)
 		if !ok || !runArgsApplicable(ctx) {
@@ -44,7 +44,6 @@ func (r NoCapAddAll) Check(ctx *linter.Context, node *linter.Node) []linter.Find
 			return nil
 		}
 		return []linter.Finding{{
-			RuleID:  r.ID(),
 			Message: `"runArgs" contains "--cap-add=ALL", granting every Linux capability to the container`,
 			Offset:  v.StartOffset,
 		}}
@@ -55,7 +54,6 @@ func (r NoCapAddAll) Check(ctx *linter.Context, node *linter.Node) []linter.Find
 		return nil
 	}
 	return []linter.Finding{{
-		RuleID:  r.ID(),
 		Message: `"capAdd" contains "ALL", granting every Linux capability to the container`,
 		Offset:  node.Value.StartOffset,
 	}}

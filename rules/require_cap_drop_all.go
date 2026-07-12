@@ -12,7 +12,7 @@ import (
 // default would be noisy.
 var RequireCapDropAll = &linter.Rule{
 	ID:          "require-cap-drop-all",
-	Description: `require an "ALL" entry in a devcontainer.json's "capDrop" property, or a "--cap-drop=ALL" entry in "runArgs", dropping every Linux capability`,
+	Description: `require an "ALL" entry in a devcontainer.json's "--cap-drop=ALL" entry in "runArgs", dropping every Linux capability`,
 	FileTypes:   []linter.FileType{linter.Devcontainer},
 	Paths:       []string{""},
 	Check:       checkRequireCapDropAll,
@@ -24,9 +24,6 @@ func checkRequireCapDropAll(_ *linter.Context, node *linter.Node) []linter.Findi
 		return nil
 	}
 
-	if stringArrayContains(obj, "capDrop", func(s string) bool { return s == "ALL" }) {
-		return nil
-	}
 	if arr, ok := arrayMember(obj, "runArgs"); ok {
 		if runArgsFindFlagValue(arr, "--cap-drop", func(s string) bool { return s == "ALL" }) != nil {
 			return nil
@@ -34,7 +31,7 @@ func checkRequireCapDropAll(_ *linter.Context, node *linter.Node) []linter.Findi
 	}
 
 	return []linter.Finding{{
-		Message: `"ALL" is not set via "capDrop" or "runArgs", leaving the container with its default Linux capabilities`,
+		Message: `"ALL" is not set via "runArgs", leaving the container with its default Linux capabilities`,
 		Offset:  node.Value.StartOffset,
 	}}
 }

@@ -1,5 +1,9 @@
 {
   "rules": {
-    "no-seccomp-override": "error"
+    "no-seccomp-override": "error",
+    "pin-image-digest": "error",
+    "require-cap-drop-all": "error",
+    "require-no-new-privileges": "error",
+    "require-non-root": "error"
   }
 }

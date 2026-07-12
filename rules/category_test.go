@@ -23,7 +23,7 @@ func TestBuiltinRulesDeclareValidCategory(t *testing.T) {
 func TestOverridesSeverityFor(t *testing.T) {
 	t.Parallel()
 
-	// no-image-latest is in the reproducibility category with a default severity of warn.
+	// no-image-latest is in the reproducibility category, which is off by default.
 	reg := builtinRegistration(t, "no-image-latest")
 
 	tests := []struct {
@@ -34,7 +34,7 @@ func TestOverridesSeverityFor(t *testing.T) {
 		{
 			"no overrides keeps the default",
 			rules.Overrides{},
-			linter.SeverityWarn,
+			linter.SeverityOff,
 		},
 		{
 			"category override applies",
@@ -49,7 +49,7 @@ func TestOverridesSeverityFor(t *testing.T) {
 		{
 			"unrelated category leaves the default",
 			rules.Overrides{Categories: map[string]linter.Severity{"security": linter.SeverityError}},
-			linter.SeverityWarn,
+			linter.SeverityOff,
 		},
 		{
 			"rule override takes precedence over category",

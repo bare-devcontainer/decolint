@@ -1,0 +1,7 @@
+// Config for the e2e test: opts the security category in at warn severity, to exercise
+// -deny-warnings against category-derived (rather than per-rule) severities.
+{
+	"categories": {
+		"security": "warn"
+	}
+}

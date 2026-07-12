@@ -156,11 +156,11 @@ func TestRegisterRulesSeverityOverride(t *testing.T) {
 		want      []linter.Issue
 	}{
 		{
+			// no-image-latest is in the reproducibility category, which is off by default, so with
+			// no overrides at all the rule doesn't fire.
 			"no overrides keeps default severity",
 			nil,
-			[]linter.Issue{
-				{Path: "devcontainer.json", Line: 1, Col: 11, RuleID: "no-image-latest", Message: message, Severity: linter.SeverityWarn},
-			},
+			nil,
 		},
 		{
 			"override promotes severity",

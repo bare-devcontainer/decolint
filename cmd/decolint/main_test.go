@@ -35,48 +35,49 @@ func TestRun(t *testing.T) {
 		wantExitCode int
 	}{
 		{
+			// Only the correctness category is enabled by default, so of everything the fixture
+			// trips, just its two platform-scoped correctness rules fire: no-bind-mount and
+			// no-host-port-format. Every security/reproducibility violation (privileged container,
+			// docker socket mount, unpinned image and feature) stays silent until those categories
+			// are opted into.
 			name: "violations",
 			args: []string{"-platform=vscode,codespaces", "testdata/e2e/violations"},
 			want: []firing{
-				// The fixture uses every ignore directive kind, each suppressing a rule that would
-				// otherwise fire: decolint-ignore-file (no-seccomp-unconfined), decolint-ignore-line
-				// (no-cap-add-all), and decolint-ignore-next-line (no-app-port).
-				{violationsFile, "no-bind-mount", linter.SeverityWarn},
+				{violationsFile, "no-bind-mount", linter.SeverityError},
 				{violationsFile, "no-host-port-format", linter.SeverityError},
-				{violationsFile, "no-docker-socket-mount", linter.SeverityWarn},
-				{violationsFile, "no-image-latest", linter.SeverityWarn},
-				{violationsFile, "no-privileged-container", linter.SeverityWarn},
-				{violationsFile, "pin-feature-version", linter.SeverityWarn},
 			},
-			wantExitCode: 1, // no-host-port-format is an error by default
+			wantExitCode: 1,
 		},
 		{
-			// Without a platform selection the codespaces-scoped rules are not registered, and with
-			// them goes the only error-severity firing, so the exit signal flips too.
-			name: "violations without platform selection",
-			args: []string{"testdata/e2e/violations"},
-			want: []firing{
-				{violationsFile, "no-docker-socket-mount", linter.SeverityWarn},
-				{violationsFile, "no-image-latest", linter.SeverityWarn},
-				{violationsFile, "no-privileged-container", linter.SeverityWarn},
-				{violationsFile, "pin-feature-version", linter.SeverityWarn},
-			},
+			// Without a platform selection, the only enabled-by-default rules that apply to this
+			// fixture (no-bind-mount, no-host-port-format) are both codespaces-scoped and so are not
+			// registered; nothing else is on by default, so nothing fires.
+			name:         "violations without platform selection",
+			args:         []string{"testdata/e2e/violations"},
+			want:         nil,
 			wantExitCode: 0,
 		},
 		{
+			// security-warn.jsonc opts the security category in at warn severity. With no platform
+			// selection the platform-scoped correctness rules aren't registered, so deny-warnings is
+			// the only thing standing between these warnings and a clean exit.
 			name: "violations with deny-warnings",
-			args: []string{"-deny-warnings", "testdata/e2e/violations"},
+			args: []string{"-deny-warnings", "-config=testdata/e2e/security-warn.jsonc", "testdata/e2e/violations"},
 			want: []firing{
 				{violationsFile, "no-docker-socket-mount", linter.SeverityWarn},
-				{violationsFile, "no-image-latest", linter.SeverityWarn},
 				{violationsFile, "no-privileged-container", linter.SeverityWarn},
-				{violationsFile, "pin-feature-version", linter.SeverityWarn},
+				{violationsFile, "no-seccomp-override", linter.SeverityWarn},
+				{violationsFile, "require-cap-drop-all", linter.SeverityWarn},
+				{violationsFile, "require-no-new-privileges", linter.SeverityWarn},
+				{violationsFile, "require-non-root", linter.SeverityWarn},
 			},
 			wantExitCode: 1, // warnings now cross the fail threshold
 		},
 		{
 			// override.jsonc exercises every kind of severity override: promoting no-image-latest to
 			// error, disabling pin-feature-version, and enabling pin-image-digest (off by default).
+			// Every other reproducibility/security rule stays off, since the category itself is not
+			// opted into.
 			name: "violations with config overrides",
 			args: []string{
 				"-platform=vscode,codespaces",
@@ -84,19 +85,18 @@ func TestRun(t *testing.T) {
 				"testdata/e2e/violations",
 			},
 			want: []firing{
-				{violationsFile, "no-bind-mount", linter.SeverityWarn},
+				{violationsFile, "no-bind-mount", linter.SeverityError},
 				{violationsFile, "no-host-port-format", linter.SeverityError},
-				{violationsFile, "no-docker-socket-mount", linter.SeverityWarn},
 				{violationsFile, "no-image-latest", linter.SeverityError},
-				{violationsFile, "no-privileged-container", linter.SeverityWarn},
 				{violationsFile, "pin-image-digest", linter.SeverityWarn},
 			},
 			wantExitCode: 1,
 		},
 		{
 			// categories.jsonc raises security rules to error (enabling the off-by-default
-			// hardening rules), turns reproducibility rules off, and keeps a per-rule override
-			// (no-privileged-container back to warn) winning over its category.
+			// hardening rules), turns reproducibility rules off (already the default), and keeps a
+			// per-rule override (no-privileged-container back to warn) winning over its category.
+			// Correctness rules are unaffected and stay at their enabled-by-default error severity.
 			name: "violations with category overrides",
 			args: []string{
 				"-platform=vscode,codespaces",
@@ -104,7 +104,7 @@ func TestRun(t *testing.T) {
 				"testdata/e2e/violations",
 			},
 			want: []firing{
-				{violationsFile, "no-bind-mount", linter.SeverityWarn},
+				{violationsFile, "no-bind-mount", linter.SeverityError},
 				{violationsFile, "no-host-port-format", linter.SeverityError},
 				{violationsFile, "no-docker-socket-mount", linter.SeverityError},
 				{violationsFile, "no-privileged-container", linter.SeverityWarn},
@@ -200,13 +200,13 @@ func TestRun_Flags(t *testing.T) {
 		}
 
 		row := mdTableRow(t, out, "no-image-latest")
-		wantRow := []string{"no-image-latest", "reproducibility", "(all)", severityEmoji[linter.SeverityWarn], severityEmoji[linter.SeverityWarn]}
+		wantRow := []string{"no-image-latest", "reproducibility", "(all)", severityEmoji[linter.SeverityOff], severityEmoji[linter.SeverityOff]}
 		if diff := cmp.Diff(wantRow, row); diff != "" {
 			t.Errorf("no-image-latest row mismatch (-want +got):\n%s", diff)
 		}
 
 		row = mdTableRow(t, out, "no-bind-mount")
-		wantRow = []string{"no-bind-mount", "correctness", "codespaces", severityEmoji[linter.SeverityWarn], severityEmoji[linter.SeverityWarn]}
+		wantRow = []string{"no-bind-mount", "correctness", "codespaces", severityEmoji[linter.SeverityError], severityEmoji[linter.SeverityError]}
 		if diff := cmp.Diff(wantRow, row); diff != "" {
 			t.Errorf("no-bind-mount row mismatch (-want +got):\n%s", diff)
 		}
@@ -225,16 +225,16 @@ func TestRun_Flags(t *testing.T) {
 		}
 		out := stdout.String()
 
-		// no-image-latest: default warn, overridden to error.
+		// no-image-latest: default off, overridden to error.
 		row := mdTableRow(t, out, "no-image-latest")
-		wantRow := []string{"no-image-latest", "reproducibility", "(all)", severityEmoji[linter.SeverityWarn], severityEmoji[linter.SeverityError]}
+		wantRow := []string{"no-image-latest", "reproducibility", "(all)", severityEmoji[linter.SeverityOff], severityEmoji[linter.SeverityError]}
 		if diff := cmp.Diff(wantRow, row); diff != "" {
 			t.Errorf("no-image-latest row mismatch (-want +got):\n%s", diff)
 		}
 
-		// pin-feature-version: default warn, overridden to off.
+		// pin-feature-version: default off, overridden to off (a no-op, but still an explicit entry).
 		row = mdTableRow(t, out, "pin-feature-version")
-		wantRow = []string{"pin-feature-version", "reproducibility", "(all)", severityEmoji[linter.SeverityWarn], severityEmoji[linter.SeverityOff]}
+		wantRow = []string{"pin-feature-version", "reproducibility", "(all)", severityEmoji[linter.SeverityOff], severityEmoji[linter.SeverityOff]}
 		if diff := cmp.Diff(wantRow, row); diff != "" {
 			t.Errorf("pin-feature-version row mismatch (-want +got):\n%s", diff)
 		}
@@ -267,9 +267,10 @@ func TestRun_Flags(t *testing.T) {
 			t.Errorf("no-seccomp-override row mismatch (-want +got):\n%s", diff)
 		}
 
-		// no-privileged-container: the per-rule override (warn) wins over its category (error).
+		// no-privileged-container: default off, the per-rule override (warn) wins over its category
+		// override (error).
 		row = mdTableRow(t, out, "no-privileged-container")
-		wantRow = []string{"no-privileged-container", "security", "(all)", severityEmoji[linter.SeverityWarn], severityEmoji[linter.SeverityWarn]}
+		wantRow = []string{"no-privileged-container", "security", "(all)", severityEmoji[linter.SeverityOff], severityEmoji[linter.SeverityWarn]}
 		if diff := cmp.Diff(wantRow, row); diff != "" {
 			t.Errorf("no-privileged-container row mismatch (-want +got):\n%s", diff)
 		}

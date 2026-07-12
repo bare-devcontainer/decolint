@@ -18,35 +18,58 @@ import (
 type Registration struct {
 	// Rule is the built-in rule.
 	Rule *linter.Rule
-	// DefaultSeverity is the severity Rule is registered at unless overridden.
+	// DefaultSeverity is the severity Rule is registered at unless overridden. It is derived from
+	// Rule.Category (see categoryDefaultSeverities), not set per rule.
 	DefaultSeverity linter.Severity
 }
 
-// builtinRules lists the built-in rules, in a deterministic order (alphabetically by rule ID), along
-// with their default severities.
-var builtinRules = []Registration{
-	{IDDirMismatch, linter.SeverityError},
-	{InvalidSemver, linter.SeverityError},
-	{MissingBuildDockerfile, linter.SeverityError},
-	{MissingComposeService, linter.SeverityError},
-	{MissingContainerDef, linter.SeverityError},
-	{MissingRequiredProps, linter.SeverityError},
-	{MissingWorkspaceMountFolder, linter.SeverityError},
-	{NoAppPort, linter.SeverityWarn},
-	{NoBindMount, linter.SeverityWarn},
-	{NoCapAddAll, linter.SeverityWarn},
-	{NoDockerSocketMount, linter.SeverityWarn},
-	{NoHostPortFormat, linter.SeverityError},
-	{NoImageLatest, linter.SeverityWarn},
-	{NoPrivilegedContainer, linter.SeverityWarn},
-	{NoSeccompOverride, linter.SeverityOff},
-	{NoSeccompUnconfined, linter.SeverityWarn},
-	{PinExtensionVersion, linter.SeverityWarn},
-	{PinFeatureVersion, linter.SeverityWarn},
-	{PinImageDigest, linter.SeverityOff},
-	{RequireCapDropAll, linter.SeverityOff},
-	{RequireNoNewPrivileges, linter.SeverityOff},
-	{RequireNonRoot, linter.SeverityOff},
+// categoryDefaultSeverities maps each category to the severity its rules are registered at by
+// default. Only CategoryCorrectness is enabled out of the box, since its rules report
+// configuration that is broken or does not behave as written — something every project wants
+// caught. The other categories encode judgment calls (security hardening, reproducibility pinning,
+// style preferences) and must be opted into with a "categories" override.
+var categoryDefaultSeverities = map[linter.Category]linter.Severity{
+	linter.CategoryCorrectness:     linter.SeverityError,
+	linter.CategorySecurity:        linter.SeverityOff,
+	linter.CategoryReproducibility: linter.SeverityOff,
+	linter.CategoryStyle:           linter.SeverityOff,
+}
+
+// builtinRuleList lists the built-in rules, in a deterministic order (alphabetically by rule ID).
+var builtinRuleList = []*linter.Rule{
+	IDDirMismatch,
+	InvalidSemver,
+	MissingBuildDockerfile,
+	MissingComposeService,
+	MissingContainerDef,
+	MissingRequiredProps,
+	MissingWorkspaceMountFolder,
+	NoAppPort,
+	NoBindMount,
+	NoCapAddAll,
+	NoDockerSocketMount,
+	NoHostPortFormat,
+	NoImageLatest,
+	NoPrivilegedContainer,
+	NoSeccompOverride,
+	NoSeccompUnconfined,
+	PinExtensionVersion,
+	PinFeatureVersion,
+	PinImageDigest,
+	RequireCapDropAll,
+	RequireNoNewPrivileges,
+	RequireNonRoot,
+}
+
+// builtinRules pairs each rule in builtinRuleList with its category's default severity.
+var builtinRules = buildRegistrations(builtinRuleList)
+
+func buildRegistrations(rules []*linter.Rule) []Registration {
+	regs := make([]Registration, len(rules))
+	for i, r := range rules {
+		regs[i] = Registration{Rule: r, DefaultSeverity: categoryDefaultSeverities[r.Category]}
+	}
+	return regs
 }
 
 // Overrides carries the user-supplied severity overrides that RegisterRules applies on top of the

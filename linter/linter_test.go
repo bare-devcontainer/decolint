@@ -12,7 +12,10 @@ import (
 func lintSrc(t *testing.T, src string) []linter.Issue {
 	t.Helper()
 	l := linter.New()
-	if err := rules.RegisterRules(l, nil, rules.Overrides{}); err != nil {
+	// Only the correctness category is enabled by default; enable no-image-latest specifically,
+	// since tests using this helper rely on it firing.
+	overrides := rules.Overrides{Rules: map[string]linter.Severity{"no-image-latest": linter.SeverityWarn}}
+	if err := rules.RegisterRules(l, nil, overrides); err != nil {
 		t.Fatalf("RegisterRules: %v", err)
 	}
 	issues, err := l.Lint(t.Context(), "devcontainer.json", []byte(src), linter.Devcontainer)
@@ -92,7 +95,10 @@ func TestLintDir(t *testing.T) {
 	t.Parallel()
 
 	l := linter.New()
-	if err := rules.RegisterRules(l, nil, rules.Overrides{}); err != nil {
+	// Only the correctness category is enabled by default; enable no-image-latest specifically,
+	// since the fixtures below rely on it firing.
+	overrides := rules.Overrides{Rules: map[string]linter.Severity{"no-image-latest": linter.SeverityWarn}}
+	if err := rules.RegisterRules(l, nil, overrides); err != nil {
 		t.Fatalf("RegisterRules: %v", err)
 	}
 

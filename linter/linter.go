@@ -48,8 +48,7 @@ func New() *Linter {
 	return &Linter{patterns: map[FileType][]pattern{}, severities: map[string]Severity{}}
 }
 
-// RegisterRule adds r to the linter, to run at the given severity. If severity is Off, r is recorded
-// but its patterns are not compiled, so it never runs.
+// RegisterRule adds r to the linter, to run at the given severity.
 func (l *Linter) RegisterRule(r Rule, severity Severity) {
 	l.severities[r.ID()] = severity
 	if severity == Off {

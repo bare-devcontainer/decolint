@@ -15,7 +15,7 @@ type GitHubFormat struct{}
 func (GitHubFormat) WriteIssues(w io.Writer, issues []linter.Issue) error {
 	for _, issue := range issues {
 		command := "error"
-		if issue.Severity == linter.Warn {
+		if issue.Severity == linter.SeverityWarn {
 			command = "warning"
 		}
 		_, err := fmt.Fprintf(

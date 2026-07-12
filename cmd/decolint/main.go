@@ -20,7 +20,7 @@ import (
 const progName = "decolint"
 
 // failThreshold is the default lowest severity that causes exit code 1.
-const failThreshold = linter.Error
+const failThreshold = linter.SeverityError
 
 const (
 	exitCodeSuccess     = 0
@@ -97,9 +97,9 @@ func versionString() string {
 
 // severityEmoji renders a severity for the -rules table; see the legend printed above the table.
 var severityEmoji = map[linter.Severity]string{
-	linter.Off:   "",
-	linter.Warn:  "🟡 WARN",
-	linter.Error: "🔴 ERROR",
+	linter.SeverityOff:   "",
+	linter.SeverityWarn:  "🟡 WARN",
+	linter.SeverityError: "🔴 ERROR",
 }
 
 // rulesTableHeader is the header row of the -rules Markdown table.
@@ -218,7 +218,7 @@ Flags:
 func runLint(ctx context.Context, stdout io.Writer, opts Options) (bool, error) {
 	threshold := failThreshold
 	if opts.DenyWarnings {
-		threshold = linter.Warn
+		threshold = linter.SeverityWarn
 	}
 
 	l := linter.New()

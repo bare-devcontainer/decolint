@@ -51,7 +51,7 @@ func New() *Linter {
 // RegisterRule adds r to the linter, to run at the given severity.
 func (l *Linter) RegisterRule(r *Rule, severity Severity) {
 	l.severities[r.ID] = severity
-	if severity == Off {
+	if severity == SeverityOff {
 		return
 	}
 	for _, t := range r.FileTypes {

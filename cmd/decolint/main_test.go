@@ -40,12 +40,12 @@ func TestRun(t *testing.T) {
 				// The fixture uses every ignore directive kind, each suppressing a rule that would
 				// otherwise fire: decolint-ignore-file (no-seccomp-unconfined), decolint-ignore-line
 				// (no-cap-add-all), and decolint-ignore-next-line (no-app-port).
-				{violationsFile, "no-bind-mount", linter.Warn},
-				{violationsFile, "no-host-port-format", linter.Error},
-				{violationsFile, "no-docker-socket-mount", linter.Warn},
-				{violationsFile, "no-image-latest", linter.Warn},
-				{violationsFile, "no-privileged-container", linter.Warn},
-				{violationsFile, "pin-feature-version", linter.Warn},
+				{violationsFile, "no-bind-mount", linter.SeverityWarn},
+				{violationsFile, "no-host-port-format", linter.SeverityError},
+				{violationsFile, "no-docker-socket-mount", linter.SeverityWarn},
+				{violationsFile, "no-image-latest", linter.SeverityWarn},
+				{violationsFile, "no-privileged-container", linter.SeverityWarn},
+				{violationsFile, "pin-feature-version", linter.SeverityWarn},
 			},
 			wantExitCode: 1, // no-host-port-format is an error by default
 		},
@@ -55,10 +55,10 @@ func TestRun(t *testing.T) {
 			name: "violations without platform selection",
 			args: []string{"testdata/e2e/violations"},
 			want: []firing{
-				{violationsFile, "no-docker-socket-mount", linter.Warn},
-				{violationsFile, "no-image-latest", linter.Warn},
-				{violationsFile, "no-privileged-container", linter.Warn},
-				{violationsFile, "pin-feature-version", linter.Warn},
+				{violationsFile, "no-docker-socket-mount", linter.SeverityWarn},
+				{violationsFile, "no-image-latest", linter.SeverityWarn},
+				{violationsFile, "no-privileged-container", linter.SeverityWarn},
+				{violationsFile, "pin-feature-version", linter.SeverityWarn},
 			},
 			wantExitCode: 0,
 		},
@@ -66,10 +66,10 @@ func TestRun(t *testing.T) {
 			name: "violations with deny-warnings",
 			args: []string{"-deny-warnings", "testdata/e2e/violations"},
 			want: []firing{
-				{violationsFile, "no-docker-socket-mount", linter.Warn},
-				{violationsFile, "no-image-latest", linter.Warn},
-				{violationsFile, "no-privileged-container", linter.Warn},
-				{violationsFile, "pin-feature-version", linter.Warn},
+				{violationsFile, "no-docker-socket-mount", linter.SeverityWarn},
+				{violationsFile, "no-image-latest", linter.SeverityWarn},
+				{violationsFile, "no-privileged-container", linter.SeverityWarn},
+				{violationsFile, "pin-feature-version", linter.SeverityWarn},
 			},
 			wantExitCode: 1, // warnings now cross the fail threshold
 		},
@@ -83,12 +83,12 @@ func TestRun(t *testing.T) {
 				"testdata/e2e/violations",
 			},
 			want: []firing{
-				{violationsFile, "no-bind-mount", linter.Warn},
-				{violationsFile, "no-host-port-format", linter.Error},
-				{violationsFile, "no-docker-socket-mount", linter.Warn},
-				{violationsFile, "no-image-latest", linter.Error},
-				{violationsFile, "no-privileged-container", linter.Warn},
-				{violationsFile, "pin-image-digest", linter.Warn},
+				{violationsFile, "no-bind-mount", linter.SeverityWarn},
+				{violationsFile, "no-host-port-format", linter.SeverityError},
+				{violationsFile, "no-docker-socket-mount", linter.SeverityWarn},
+				{violationsFile, "no-image-latest", linter.SeverityError},
+				{violationsFile, "no-privileged-container", linter.SeverityWarn},
+				{violationsFile, "pin-image-digest", linter.SeverityWarn},
 			},
 			wantExitCode: 1,
 		},
@@ -177,13 +177,13 @@ func TestRun_Flags(t *testing.T) {
 		}
 
 		row := mdTableRow(t, out, "no-image-latest")
-		wantRow := []string{"no-image-latest", "(all)", severityEmoji[linter.Warn], severityEmoji[linter.Warn]}
+		wantRow := []string{"no-image-latest", "(all)", severityEmoji[linter.SeverityWarn], severityEmoji[linter.SeverityWarn]}
 		if diff := cmp.Diff(wantRow, row); diff != "" {
 			t.Errorf("no-image-latest row mismatch (-want +got):\n%s", diff)
 		}
 
 		row = mdTableRow(t, out, "no-bind-mount")
-		wantRow = []string{"no-bind-mount", "codespaces", severityEmoji[linter.Warn], severityEmoji[linter.Warn]}
+		wantRow = []string{"no-bind-mount", "codespaces", severityEmoji[linter.SeverityWarn], severityEmoji[linter.SeverityWarn]}
 		if diff := cmp.Diff(wantRow, row); diff != "" {
 			t.Errorf("no-bind-mount row mismatch (-want +got):\n%s", diff)
 		}
@@ -204,21 +204,21 @@ func TestRun_Flags(t *testing.T) {
 
 		// no-image-latest: default warn, overridden to error.
 		row := mdTableRow(t, out, "no-image-latest")
-		wantRow := []string{"no-image-latest", "(all)", severityEmoji[linter.Warn], severityEmoji[linter.Error]}
+		wantRow := []string{"no-image-latest", "(all)", severityEmoji[linter.SeverityWarn], severityEmoji[linter.SeverityError]}
 		if diff := cmp.Diff(wantRow, row); diff != "" {
 			t.Errorf("no-image-latest row mismatch (-want +got):\n%s", diff)
 		}
 
 		// pin-feature-version: default warn, overridden to off.
 		row = mdTableRow(t, out, "pin-feature-version")
-		wantRow = []string{"pin-feature-version", "(all)", severityEmoji[linter.Warn], severityEmoji[linter.Off]}
+		wantRow = []string{"pin-feature-version", "(all)", severityEmoji[linter.SeverityWarn], severityEmoji[linter.SeverityOff]}
 		if diff := cmp.Diff(wantRow, row); diff != "" {
 			t.Errorf("pin-feature-version row mismatch (-want +got):\n%s", diff)
 		}
 
 		// pin-image-digest: default off, overridden to warn.
 		row = mdTableRow(t, out, "pin-image-digest")
-		wantRow = []string{"pin-image-digest", "(all)", severityEmoji[linter.Off], severityEmoji[linter.Warn]}
+		wantRow = []string{"pin-image-digest", "(all)", severityEmoji[linter.SeverityOff], severityEmoji[linter.SeverityWarn]}
 		if diff := cmp.Diff(wantRow, row); diff != "" {
 			t.Errorf("pin-image-digest row mismatch (-want +got):\n%s", diff)
 		}
@@ -297,7 +297,7 @@ func TestRunLint(t *testing.T) {
 		opts := Options{
 			Paths:  []string{dir},
 			Format: format.TextFormat{},
-			Config: Config{Rules: map[string]linter.Severity{"no-image-latest": linter.Error}},
+			Config: Config{Rules: map[string]linter.Severity{"no-image-latest": linter.SeverityError}},
 		}
 		hasIssue, runErr := runLint(t.Context(), &stdout, opts)
 		if runErr != nil || !hasIssue {
@@ -313,7 +313,7 @@ func TestRunLint(t *testing.T) {
 		opts := Options{
 			Paths:  []string{dir},
 			Format: format.TextFormat{},
-			Config: Config{Rules: map[string]linter.Severity{"missing-container-def": linter.Off}},
+			Config: Config{Rules: map[string]linter.Severity{"missing-container-def": linter.SeverityOff}},
 		}
 		hasIssue, runErr := runLint(t.Context(), &stdout, opts)
 		if runErr != nil || hasIssue {
@@ -327,7 +327,7 @@ func TestRunLint(t *testing.T) {
 		var stdout bytes.Buffer
 		opts := Options{
 			Format: format.TextFormat{},
-			Config: Config{Rules: map[string]linter.Severity{"no-image-latst": linter.Error}},
+			Config: Config{Rules: map[string]linter.Severity{"no-image-latst": linter.SeverityError}},
 		}
 		hasIssue, runErr := runLint(t.Context(), &stdout, opts)
 		if runErr == nil || hasIssue {
@@ -346,7 +346,7 @@ func TestRunLint(t *testing.T) {
 		opts := Options{
 			Paths:  []string{dir},
 			Format: format.TextFormat{},
-			Config: Config{Rules: map[string]linter.Severity{"no-bind-mount": linter.Error}},
+			Config: Config{Rules: map[string]linter.Severity{"no-bind-mount": linter.SeverityError}},
 		}
 		hasIssue, runErr := runLint(t.Context(), &stdout, opts)
 		if runErr != nil || hasIssue {

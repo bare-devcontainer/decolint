@@ -45,10 +45,10 @@ func TestParseSeverity(t *testing.T) {
 		want    linter.Severity
 		wantErr bool
 	}{
-		{"off", "off", linter.Off, false},
-		{"warn", "warn", linter.Warn, false},
-		{"error", "error", linter.Error, false},
-		{"mixed case", "Error", linter.Error, false},
+		{"off", "off", linter.SeverityOff, false},
+		{"warn", "warn", linter.SeverityWarn, false},
+		{"error", "error", linter.SeverityError, false},
+		{"mixed case", "Error", linter.SeverityError, false},
 		{"unknown", "bogus", 0, true},
 		{"empty", "", 0, true},
 	}
@@ -73,9 +73,9 @@ func TestSeverityJSON(t *testing.T) {
 		severity linter.Severity
 		want     string
 	}{
-		{linter.Off, `"off"`},
-		{linter.Warn, `"warn"`},
-		{linter.Error, `"error"`},
+		{linter.SeverityOff, `"off"`},
+		{linter.SeverityWarn, `"warn"`},
+		{linter.SeverityError, `"error"`},
 	}
 	for _, tt := range tests {
 		t.Run(tt.want, func(t *testing.T) {

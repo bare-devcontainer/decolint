@@ -23,16 +23,16 @@ func TestParseConfig(t *testing.T) {
 		{
 			"jsonc with comments and trailing comma",
 			"{\n  // override severities\n  \"rules\": {\n    \"no-image-latest\": \"error\",\n  },\n}\n",
-			Config{Rules: map[string]linter.Severity{"no-image-latest": linter.Error}},
+			Config{Rules: map[string]linter.Severity{"no-image-latest": linter.SeverityError}},
 			false,
 		},
 		{
 			"multiple rules",
 			`{"rules": {"no-image-latest": "error", "pin-image-digest": "warn", "require-non-root": "off"}}`,
 			Config{Rules: map[string]linter.Severity{
-				"no-image-latest":  linter.Error,
-				"pin-image-digest": linter.Warn,
-				"require-non-root": linter.Off,
+				"no-image-latest":  linter.SeverityError,
+				"pin-image-digest": linter.SeverityWarn,
+				"require-non-root": linter.SeverityOff,
 			}},
 			false,
 		},
@@ -76,7 +76,7 @@ func TestLoadConfigExplicitPath(t *testing.T) {
 		if err != nil {
 			t.Fatalf("loadConfig: %v", err)
 		}
-		want := Config{Rules: map[string]linter.Severity{"no-image-latest": linter.Error}}
+		want := Config{Rules: map[string]linter.Severity{"no-image-latest": linter.SeverityError}}
 		if diff := cmp.Diff(want, got); diff != "" {
 			t.Errorf("loadConfig() mismatch (-want +got):\n%s", diff)
 		}
@@ -94,12 +94,12 @@ func TestLoadConfigDiscovery(t *testing.T) {
 		{
 			".decolint.jsonc present",
 			map[string]string{".decolint.jsonc": `{"rules": {"no-image-latest": "error"}}`},
-			Config{Rules: map[string]linter.Severity{"no-image-latest": linter.Error}},
+			Config{Rules: map[string]linter.Severity{"no-image-latest": linter.SeverityError}},
 		},
 		{
 			".decolint.json fallback",
 			map[string]string{".decolint.json": `{"rules": {"no-image-latest": "warn"}}`},
-			Config{Rules: map[string]linter.Severity{"no-image-latest": linter.Warn}},
+			Config{Rules: map[string]linter.Severity{"no-image-latest": linter.SeverityWarn}},
 		},
 		{
 			".decolint.jsonc takes precedence over .decolint.json",
@@ -107,7 +107,7 @@ func TestLoadConfigDiscovery(t *testing.T) {
 				".decolint.jsonc": `{"rules": {"no-image-latest": "error"}}`,
 				".decolint.json":  `{"rules": {"no-image-latest": "warn"}}`,
 			},
-			Config{Rules: map[string]linter.Severity{"no-image-latest": linter.Error}},
+			Config{Rules: map[string]linter.Severity{"no-image-latest": linter.SeverityError}},
 		},
 	}
 	for _, tt := range tests {

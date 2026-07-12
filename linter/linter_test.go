@@ -228,7 +228,7 @@ func TestLintRulePanicIsRecovered(t *testing.T) {
 	t.Parallel()
 
 	l := linter.New()
-	l.RegisterRule(panicRule, linter.Error)
+	l.RegisterRule(panicRule, linter.SeverityError)
 	issues, err := l.Lint(t.Context(), "devcontainer.json", []byte(`{}`), linter.Devcontainer)
 	if err != nil {
 		t.Fatalf("Lint: %v", err)
@@ -239,7 +239,7 @@ func TestLintRulePanicIsRecovered(t *testing.T) {
 	if issues[0].RuleID != "panic-rule" {
 		t.Errorf("RuleID = %q, want %q", issues[0].RuleID, "panic-rule")
 	}
-	if issues[0].Severity != linter.Error {
-		t.Errorf("Severity = %v, want %v", issues[0].Severity, linter.Error)
+	if issues[0].Severity != linter.SeverityError {
+		t.Errorf("Severity = %v, want %v", issues[0].Severity, linter.SeverityError)
 	}
 }

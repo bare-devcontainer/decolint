@@ -15,7 +15,7 @@ func testIssues() []linter.Issue {
 			Col:      12,
 			RuleID:   "no-image-latest",
 			Message:  `image "ubuntu:latest" uses the "latest" tag; pin a specific version`,
-			Severity: linter.Warn,
+			Severity: linter.SeverityWarn,
 		},
 		{
 			Path:     ".devcontainer/devcontainer.json",
@@ -23,7 +23,7 @@ func testIssues() []linter.Issue {
 			Col:      3,
 			RuleID:   "some-error-rule",
 			Message:  "something is broken",
-			Severity: linter.Error,
+			Severity: linter.SeverityError,
 		},
 	}
 }
@@ -38,6 +38,7 @@ func TestTextWriteIssues(t *testing.T) {
 
 	want := `.devcontainer/devcontainer.json:4:12: warn: image "ubuntu:latest" uses the "latest" tag; pin a specific version (no-image-latest)
 .devcontainer/devcontainer.json:8:3: error: something is broken (some-error-rule)
+Found 1 error and 1 warning.
 `
 	if sb.String() != want {
 		t.Errorf("WriteIssues text = %q, want %q", sb.String(), want)

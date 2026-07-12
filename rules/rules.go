@@ -48,8 +48,7 @@ var builtinRules = []ruleReg{
 
 // RegisterRules registers the built-in rules whose target platform matches platforms on l, in a
 // deterministic order, at their default severities, unless overrides contains an entry for a rule's
-// ID, in which case that severity is used instead. A rule whose effective severity is Off is not
-// registered on l at all.
+// ID, in which case that severity is used instead.
 //
 // A rule is registered if it declares no target platforms (applies to all platforms), or if any of
 // the platforms it targets is in platforms. If platforms is empty, only rules with no target
@@ -70,9 +69,6 @@ func RegisterRules(l *linter.Linter, platforms []linter.Platform, overrides map[
 		severity := reg.severity
 		if s, ok := overrides[reg.rule.ID()]; ok {
 			severity = s
-		}
-		if severity == linter.Off {
-			continue
 		}
 		l.RegisterRule(reg.rule, severity)
 	}

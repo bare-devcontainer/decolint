@@ -89,8 +89,7 @@ decolint -platform=vscode,codespaces
 ```
 
 Target platforms can also be declared in the [config
-file](#config-file) with the `platforms` member; the `-platform` flag,
-when given, takes precedence.
+file](#config-file) with the `platforms` member.
 
 ### Merging Features
 
@@ -112,12 +111,6 @@ properties it contributes, and lint the merged configuration instead:
 ```console
 decolint -merge-features -config .decolint.jsonc
 ```
-
-When given explicitly, `-merge-features` (in either form,
-`-merge-features` or `-merge-features=false`) overrides the config
-file's `mergeFeatures` member; for example, `-merge-features=false`
-disables merging even if the config file sets `"mergeFeatures":
-true`. Leaving the flag unset defers to the config file.
 
 - OCI references (e.g. `ghcr.io/devcontainers/features/node:1`) are
   pulled from the registry with anonymous access, direct HTTP(S)
@@ -198,11 +191,15 @@ to edit:
 rule in a [category](#rule-categories) at once; `rules` sets an
 individual rule's severity and takes precedence over its category.
 `platforms` lists the [target platforms](#target-platforms) whose
-rules run in addition to platform-agnostic ones; the `-platform` flag,
-when given, takes precedence over it. `mergeFeatures` set to `true`
-enables [merging Features](#merging-features), same as the
-`-merge-features` flag; when given explicitly, `-merge-features`
-takes precedence over `mergeFeatures` in either direction.
+rules run in addition to platform-agnostic ones. `mergeFeatures` set
+to `true` enables [merging Features](#merging-features), same as the
+`-merge-features` flag.
+
+For a config file member with a corresponding flag (`platforms` /
+`-platform`, `mergeFeatures` / `-merge-features`), the flag, when
+given explicitly, takes precedence over the config file in either
+direction — e.g. `-merge-features=false` disables merging even if the
+config file sets `"mergeFeatures": true`.
 
 For the strictest configuration, enable every category:
 

@@ -1,113 +1,184 @@
-package linter_test
+package linter
 
 import (
 	"context"
 	"errors"
+	"fmt"
+	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 	"testing"
 
-	"github.com/bare-devcontainer/decolint/linter"
-	"github.com/bare-devcontainer/decolint/rules"
 	"github.com/tailscale/hujson"
 )
 
-func lintSrc(t *testing.T, src string) []linter.Issue {
+// noImageLatestRule is a test double for the rules package's no-image-latest rule: it flags an
+// "image" property with no tag or the "latest" tag. Reusing its ID keeps testdata's
+// decolint-ignore-next-line comments meaningful without this package depending on rules.
+var noImageLatestRule = &Rule{
+	ID:        "no-image-latest",
+	FileTypes: []FileType{Devcontainer},
+	Paths:     []string{"/image"},
+	Check: func(_ *Context, node *Node) []Finding {
+		lit, ok := node.Value.Value.(hujson.Literal)
+		if !ok || lit.Kind() != '"' {
+			return nil
+		}
+		image := lit.String()
+		tag, hasTag := "", false
+		if i := strings.LastIndex(image, ":"); i >= 0 {
+			tag, hasTag = image[i+1:], true
+		}
+		switch {
+		case !hasTag:
+			return []Finding{{Message: fmt.Sprintf("image %q has no explicit tag", image), Offset: node.Value.StartOffset}}
+		case tag == "latest":
+			return []Finding{{Message: fmt.Sprintf("image %q uses the \"latest\" tag", image), Offset: node.Value.StartOffset}}
+		}
+		return nil
+	},
+}
+
+func lintSrc(t *testing.T, src string) []Issue {
 	t.Helper()
-	l := linter.New()
-	// Only the correctness category is enabled by default; enable no-image-latest specifically,
-	// since tests using this helper rely on it firing.
-	overrides := rules.Overrides{Rules: map[string]linter.Severity{"no-image-latest": linter.SeverityWarn}}
-	if err := rules.RegisterRules(l, nil, overrides); err != nil {
-		t.Fatalf("RegisterRules: %v", err)
-	}
-	issues, err := l.Lint(t.Context(), "devcontainer.json", []byte(src), linter.Devcontainer)
+	l := New()
+	l.RegisterRule(noImageLatestRule, SeverityWarn)
+	issues, err := l.Lint(t.Context(), "devcontainer.json", []byte(src), Devcontainer)
 	if err != nil {
 		t.Fatalf("Lint: %v", err)
 	}
 	return issues
 }
 
-func TestFindConfigs(t *testing.T) {
+// symlink creates a symbolic link, skipping the test on platforms where symlink creation is not
+// permitted (e.g. Windows without the required privilege).
+func symlink(t *testing.T, target, link string) {
+	t.Helper()
+	if err := os.Symlink(target, link); err != nil {
+		t.Skipf("symlink unsupported: %v", err)
+	}
+}
+
+// openRoot opens dir as an os.Root, closed when the test ends, to lint or visit configs through.
+func openRoot(t *testing.T, dir string) *os.Root {
+	t.Helper()
+	root, err := os.OpenRoot(dir)
+	if err != nil {
+		t.Fatalf("os.OpenRoot(%q): %v", dir, err)
+	}
+	t.Cleanup(func() { _ = root.Close() })
+	return root
+}
+
+func TestLintDirSymlink(t *testing.T) {
 	t.Parallel()
 
-	tests := []struct {
-		dir  string
-		want []linter.ConfigFile
-	}{
-		{
-			"testdata/project",
-			[]linter.ConfigFile{
-				{filepath.Join("testdata", "project", ".devcontainer", "devcontainer.json"), linter.Devcontainer},
-				{filepath.Join("testdata", "project", ".devcontainer", "go", "devcontainer.json"), linter.Devcontainer},
-			},
-		},
-		{
-			"testdata/rootfile",
-			[]linter.ConfigFile{
-				{filepath.Join("testdata", "rootfile", ".devcontainer.json"), linter.Devcontainer},
-			},
-		},
-		{
-			"testdata/feature",
-			[]linter.ConfigFile{
-				{filepath.Join("testdata", "feature", "devcontainer-feature.json"), linter.Feature},
-			},
-		},
-		{
-			"testdata/template",
-			[]linter.ConfigFile{
-				{filepath.Join("testdata", "template", "devcontainer-template.json"), linter.Template},
-				{filepath.Join("testdata", "template", ".devcontainer", "devcontainer.json"), linter.Devcontainer},
-			},
-		},
-		{
-			"testdata/template-rootfile",
-			[]linter.ConfigFile{
-				{filepath.Join("testdata", "template-rootfile", "devcontainer-template.json"), linter.Template},
-				{filepath.Join("testdata", "template-rootfile", ".devcontainer.json"), linter.Devcontainer},
-			},
-		},
-		{
-			"testdata/template-subfolder",
-			[]linter.ConfigFile{
-				{filepath.Join("testdata", "template-subfolder", "devcontainer-template.json"), linter.Template},
-				{filepath.Join("testdata", "template-subfolder", ".devcontainer", "go", "devcontainer.json"), linter.Devcontainer},
-			},
-		},
-		{
-			"testdata/template-no-devcontainer",
-			[]linter.ConfigFile{
-				{filepath.Join("testdata", "template-no-devcontainer", "devcontainer-template.json"), linter.Template},
-			},
-		},
-		{"testdata", nil},
+	// setup creates a dev container definition directory whose .devcontainer/devcontainer.json is a
+	// symbolic link to target, and returns the directory.
+	setup := func(t *testing.T, target string) string {
+		t.Helper()
+		proj := t.TempDir()
+		if err := os.MkdirAll(filepath.Join(proj, ".devcontainer"), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		symlink(t, target, filepath.Join(proj, ".devcontainer", "devcontainer.json"))
+		return proj
 	}
-	for _, tt := range tests {
-		t.Run(tt.dir, func(t *testing.T) {
-			t.Parallel()
-			got := linter.FindConfigs(tt.dir)
-			if !slices.Equal(got, tt.want) {
-				t.Errorf("linter.FindConfigs(%q) = %v, want %v", tt.dir, got, tt.want)
-			}
-		})
-	}
+
+	t.Run("link escaping the lint directory is treated as nonexistent", func(t *testing.T) {
+		t.Parallel()
+		tmp := t.TempDir()
+		if err := os.WriteFile(filepath.Join(tmp, "devcontainer.json"), []byte(`{}`), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		proj := filepath.Join(tmp, "proj")
+		if err := os.MkdirAll(filepath.Join(proj, ".devcontainer"), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		symlink(t, filepath.Join("..", "..", "devcontainer.json"),
+			filepath.Join(proj, ".devcontainer", "devcontainer.json"))
+
+		l := New()
+		if _, err := l.LintDir(t.Context(), openRoot(t, proj)); err == nil {
+			t.Error("LintDir: got nil error, want 'no devcontainer configuration found'")
+		}
+	})
+
+	t.Run("link leaving .devcontainer is treated as nonexistent", func(t *testing.T) {
+		t.Parallel()
+		proj := setup(t, filepath.Join("..", "real.json"))
+		// The target is inside the lint directory, but outside .devcontainer.
+		if err := os.WriteFile(filepath.Join(proj, "real.json"), []byte(`{}`), 0o644); err != nil {
+			t.Fatal(err)
+		}
+
+		l := New()
+		if _, err := l.LintDir(t.Context(), openRoot(t, proj)); err == nil {
+			t.Error("LintDir: got nil error, want 'no devcontainer configuration found'")
+		}
+	})
+
+	t.Run("link with an absolute target is treated as nonexistent", func(t *testing.T) {
+		t.Parallel()
+		// The target is inside .devcontainer, but os.Root rejects absolute symlink targets.
+		proj := t.TempDir()
+		if err := os.MkdirAll(filepath.Join(proj, ".devcontainer"), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(proj, ".devcontainer", "real.json"), []byte(`{}`), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		symlink(t, filepath.Join(proj, ".devcontainer", "real.json"),
+			filepath.Join(proj, ".devcontainer", "devcontainer.json"))
+
+		l := New()
+		if _, err := l.LintDir(t.Context(), openRoot(t, proj)); err == nil {
+			t.Error("LintDir: got nil error, want 'no devcontainer configuration found'")
+		}
+	})
+
+	t.Run("link resolving within .devcontainer is followed", func(t *testing.T) {
+		t.Parallel()
+		proj := setup(t, "main.json")
+		if err := os.WriteFile(filepath.Join(proj, ".devcontainer", "main.json"), []byte(`{}`), 0o644); err != nil {
+			t.Fatal(err)
+		}
+
+		l := New()
+		if _, err := l.LintDir(t.Context(), openRoot(t, proj)); err != nil {
+			t.Errorf("LintDir: %v", err)
+		}
+	})
+
+	t.Run("link from a subfolder resolving within .devcontainer is followed", func(t *testing.T) {
+		t.Parallel()
+		proj := t.TempDir()
+		if err := os.MkdirAll(filepath.Join(proj, ".devcontainer", "go"), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(proj, ".devcontainer", "shared.json"), []byte(`{}`), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		symlink(t, filepath.Join("..", "shared.json"),
+			filepath.Join(proj, ".devcontainer", "go", "devcontainer.json"))
+
+		l := New()
+		if _, err := l.LintDir(t.Context(), openRoot(t, proj)); err != nil {
+			t.Errorf("LintDir: %v", err)
+		}
+	})
 }
 
 func TestLintDir(t *testing.T) {
 	t.Parallel()
 
-	l := linter.New()
-	// Only the correctness category is enabled by default; enable no-image-latest specifically,
-	// since the fixtures below rely on it firing.
-	overrides := rules.Overrides{Rules: map[string]linter.Severity{"no-image-latest": linter.SeverityWarn}}
-	if err := rules.RegisterRules(l, nil, overrides); err != nil {
-		t.Fatalf("RegisterRules: %v", err)
-	}
+	l := New()
+	l.RegisterRule(noImageLatestRule, SeverityWarn)
 
 	t.Run("definition with multiple configs", func(t *testing.T) {
 		t.Parallel()
-		issues, err := l.LintDir(t.Context(), "testdata/project")
+		issues, err := l.LintDir(t.Context(), openRoot(t, "testdata/project"))
 		if err != nil {
 			t.Fatalf("LintDir: %v", err)
 		}
@@ -127,7 +198,7 @@ func TestLintDir(t *testing.T) {
 
 	t.Run("clean definition", func(t *testing.T) {
 		t.Parallel()
-		issues, err := l.LintDir(t.Context(), "testdata/rootfile")
+		issues, err := l.LintDir(t.Context(), openRoot(t, "testdata/rootfile"))
 		if err != nil {
 			t.Fatalf("LintDir: %v", err)
 		}
@@ -138,7 +209,7 @@ func TestLintDir(t *testing.T) {
 
 	t.Run("feature is not checked by devcontainer rules", func(t *testing.T) {
 		t.Parallel()
-		issues, err := l.LintDir(t.Context(), "testdata/feature")
+		issues, err := l.LintDir(t.Context(), openRoot(t, "testdata/feature"))
 		if err != nil {
 			t.Fatalf("LintDir: %v", err)
 		}
@@ -149,7 +220,7 @@ func TestLintDir(t *testing.T) {
 
 	t.Run("template lints the shipped devcontainer config", func(t *testing.T) {
 		t.Parallel()
-		issues, err := l.LintDir(t.Context(), "testdata/template")
+		issues, err := l.LintDir(t.Context(), openRoot(t, "testdata/template"))
 		if err != nil {
 			t.Fatalf("LintDir: %v", err)
 		}
@@ -164,7 +235,7 @@ func TestLintDir(t *testing.T) {
 
 	t.Run("a broken file does not stop other files in the same directory from being linted", func(t *testing.T) {
 		t.Parallel()
-		issues, err := l.LintDir(t.Context(), "testdata/broken")
+		issues, err := l.LintDir(t.Context(), openRoot(t, "testdata/broken"))
 		if err == nil {
 			t.Fatal("got nil error, want a parse error for the broken config")
 		}
@@ -177,17 +248,9 @@ func TestLintDir(t *testing.T) {
 		}
 	})
 
-	t.Run("file path is rejected", func(t *testing.T) {
-		t.Parallel()
-		file := filepath.Join("testdata", "project", ".devcontainer", "devcontainer.json")
-		if _, err := l.LintDir(t.Context(), file); err == nil {
-			t.Error("got nil error, want 'not a directory'")
-		}
-	})
-
 	t.Run("directory without config", func(t *testing.T) {
 		t.Parallel()
-		if _, err := l.LintDir(t.Context(), t.TempDir()); err == nil {
+		if _, err := l.LintDir(t.Context(), openRoot(t, t.TempDir())); err == nil {
 			t.Error("got nil error, want 'no devcontainer configuration found'")
 		}
 	})
@@ -212,25 +275,22 @@ func TestIssuePosition(t *testing.T) {
 func TestLintParseError(t *testing.T) {
 	t.Parallel()
 
-	l := linter.New()
-	if err := rules.RegisterRules(l, nil, rules.Overrides{}); err != nil {
-		t.Fatalf("RegisterRules: %v", err)
-	}
-	if _, err := l.Lint(t.Context(), "bad.json", []byte(`{`), linter.Devcontainer); err == nil {
+	l := New()
+	if _, err := l.Lint(t.Context(), "bad.json", []byte(`{`), Devcontainer); err == nil {
 		t.Error("Lint on malformed input: got nil error, want parse error")
 	}
 }
 
 // flagRule is a stub Rule that reports the value at "/flag" when it is true, used to observe
 // mutations a Transform makes to the syntax tree.
-var flagRule = &linter.Rule{
+var flagRule = &Rule{
 	ID:          "flag-rule",
 	Description: "reports a true /flag value",
-	FileTypes:   []linter.FileType{linter.Devcontainer},
+	FileTypes:   []FileType{Devcontainer},
 	Paths:       []string{"/flag"},
-	Check: func(_ *linter.Context, node *linter.Node) []linter.Finding {
+	Check: func(_ *Context, node *Node) []Finding {
 		if lit, ok := node.Value.Value.(hujson.Literal); ok && lit.Bool() {
-			return []linter.Finding{{Message: "flag is true", Offset: node.Value.StartOffset}}
+			return []Finding{{Message: "flag is true", Offset: node.Value.StartOffset}}
 		}
 		return nil
 	},
@@ -245,9 +305,9 @@ func TestLintTransform(t *testing.T) {
 
 	t.Run("rules see the transformed tree at anchored positions", func(t *testing.T) {
 		t.Parallel()
-		l := linter.New()
-		l.RegisterRule(flagRule, linter.SeverityWarn)
-		l.SetTransform(func(_ context.Context, fctx *linter.Context) error {
+		l := New()
+		l.RegisterRule(flagRule, SeverityWarn)
+		l.SetTransform(func(_ context.Context, fctx *Context) error {
 			obj := fctx.Root.Value.(*hujson.Object)
 			anchor := obj.Members[0].Name.StartOffset
 			obj.Members = append(obj.Members, hujson.ObjectMember{
@@ -256,7 +316,7 @@ func TestLintTransform(t *testing.T) {
 			})
 			return nil
 		})
-		issues, err := l.Lint(t.Context(), "devcontainer.json", []byte(src), linter.Devcontainer)
+		issues, err := l.Lint(t.Context(), "devcontainer.json", []byte(src), Devcontainer)
 		if err != nil {
 			t.Fatalf("Lint: %v", err)
 		}
@@ -270,24 +330,24 @@ func TestLintTransform(t *testing.T) {
 
 	t.Run("transform error aborts the lint", func(t *testing.T) {
 		t.Parallel()
-		l := linter.New()
-		l.RegisterRule(flagRule, linter.SeverityWarn)
+		l := New()
+		l.RegisterRule(flagRule, SeverityWarn)
 		wantErr := errors.New("fetch failed")
-		l.SetTransform(func(context.Context, *linter.Context) error { return wantErr })
-		if _, err := l.Lint(t.Context(), "devcontainer.json", []byte(src), linter.Devcontainer); !errors.Is(err, wantErr) {
+		l.SetTransform(func(context.Context, *Context) error { return wantErr })
+		if _, err := l.Lint(t.Context(), "devcontainer.json", []byte(src), Devcontainer); !errors.Is(err, wantErr) {
 			t.Errorf("Lint error = %v, want %v", err, wantErr)
 		}
 	})
 
 	t.Run("transform is skipped when no rule applies", func(t *testing.T) {
 		t.Parallel()
-		l := linter.New()
+		l := New()
 		called := false
-		l.SetTransform(func(context.Context, *linter.Context) error {
+		l.SetTransform(func(context.Context, *Context) error {
 			called = true
 			return nil
 		})
-		if _, err := l.Lint(t.Context(), "devcontainer.json", []byte(src), linter.Devcontainer); err != nil {
+		if _, err := l.Lint(t.Context(), "devcontainer.json", []byte(src), Devcontainer); err != nil {
 			t.Fatalf("Lint: %v", err)
 		}
 		if called {
@@ -298,12 +358,12 @@ func TestLintTransform(t *testing.T) {
 
 // panicRule is a stub Rule whose Check always panics, used to verify that the engine survives a
 // defective rule instead of letting it abort the whole run.
-var panicRule = &linter.Rule{
+var panicRule = &Rule{
 	ID:          "panic-rule",
 	Description: "always panics",
-	FileTypes:   []linter.FileType{linter.Devcontainer},
+	FileTypes:   []FileType{Devcontainer},
 	Paths:       []string{""},
-	Check: func(*linter.Context, *linter.Node) []linter.Finding {
+	Check: func(*Context, *Node) []Finding {
 		panic("boom")
 	},
 }
@@ -311,9 +371,9 @@ var panicRule = &linter.Rule{
 func TestLintRulePanicIsRecovered(t *testing.T) {
 	t.Parallel()
 
-	l := linter.New()
-	l.RegisterRule(panicRule, linter.SeverityError)
-	issues, err := l.Lint(t.Context(), "devcontainer.json", []byte(`{}`), linter.Devcontainer)
+	l := New()
+	l.RegisterRule(panicRule, SeverityError)
+	issues, err := l.Lint(t.Context(), "devcontainer.json", []byte(`{}`), Devcontainer)
 	if err != nil {
 		t.Fatalf("Lint: %v", err)
 	}
@@ -323,7 +383,108 @@ func TestLintRulePanicIsRecovered(t *testing.T) {
 	if issues[0].RuleID != "panic-rule" {
 		t.Errorf("RuleID = %q, want %q", issues[0].RuleID, "panic-rule")
 	}
-	if issues[0].Severity != linter.SeverityError {
-		t.Errorf("Severity = %v, want %v", issues[0].Severity, linter.SeverityError)
+	if issues[0].Severity != SeverityError {
+		t.Errorf("Severity = %v, want %v", issues[0].Severity, SeverityError)
+	}
+}
+
+// configRef identifies a visited configuration file independently of the root it is read through:
+// its path relative to the lint directory, and its type.
+type configRef struct {
+	rel string
+	typ FileType
+}
+
+func TestVisitConfigs(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		dir  string
+		want []configRef
+	}{
+		{
+			"testdata/project",
+			[]configRef{
+				{filepath.Join(".devcontainer", "devcontainer.json"), Devcontainer},
+				{filepath.Join(".devcontainer", "go", "devcontainer.json"), Devcontainer},
+			},
+		},
+		{
+			"testdata/rootfile",
+			[]configRef{
+				{".devcontainer.json", Devcontainer},
+			},
+		},
+		{
+			"testdata/feature",
+			[]configRef{
+				{"devcontainer-feature.json", Feature},
+			},
+		},
+		{
+			"testdata/template",
+			[]configRef{
+				{"devcontainer-template.json", Template},
+				{filepath.Join(".devcontainer", "devcontainer.json"), Devcontainer},
+			},
+		},
+		{
+			"testdata/template-rootfile",
+			[]configRef{
+				{"devcontainer-template.json", Template},
+				{".devcontainer.json", Devcontainer},
+			},
+		},
+		{
+			"testdata/template-subfolder",
+			[]configRef{
+				{"devcontainer-template.json", Template},
+				{filepath.Join(".devcontainer", "go", "devcontainer.json"), Devcontainer},
+			},
+		},
+		{
+			"testdata/template-no-devcontainer",
+			[]configRef{
+				{"devcontainer-template.json", Template},
+			},
+		},
+		{"testdata", nil},
+	}
+	for _, tt := range tests {
+		t.Run(tt.dir, func(t *testing.T) {
+			t.Parallel()
+			var got []configRef
+			err := visitConfigs(openRoot(t, tt.dir), func(f configEntry) error {
+				if _, err := f.root.Stat(f.path); err != nil {
+					t.Errorf("entry %q is not accessible through its root: %v", f.rel, err)
+				}
+				got = append(got, configRef{f.rel, f.typ})
+				return nil
+			})
+			if err != nil {
+				t.Fatalf("visitConfigs(%q): %v", tt.dir, err)
+			}
+			if !slices.Equal(got, tt.want) {
+				t.Errorf("visitConfigs(%q) visited %v, want %v", tt.dir, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestVisitConfigsStopsOnError(t *testing.T) {
+	t.Parallel()
+
+	wantErr := errors.New("stop")
+	calls := 0
+	// testdata/project contains two configs, so a first-call error must prevent a second call.
+	err := visitConfigs(openRoot(t, "testdata/project"), func(configEntry) error {
+		calls++
+		return wantErr
+	})
+	if !errors.Is(err, wantErr) {
+		t.Errorf("visitConfigs returned %v, want %v", err, wantErr)
+	}
+	if calls != 1 {
+		t.Errorf("fn called %d times, want 1", calls)
 	}
 }

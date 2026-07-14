@@ -537,6 +537,18 @@ func TestRunLint(t *testing.T) {
 		}
 	})
 
+	t.Run("file path is rejected", func(t *testing.T) {
+		t.Parallel()
+		dir := writeDevcontainer(t, `{"image": "ubuntu:24.04"}`)
+		file := filepath.Join(dir, ".devcontainer", "devcontainer.json")
+
+		var stdout bytes.Buffer
+		hasIssue, runErr := runLint(t.Context(), &stdout, Options{Paths: []string{file}, Format: format.TextFormat{}}, Config{})
+		if runErr == nil || hasIssue {
+			t.Errorf("hasIssue = %v, err = %v, want false, 'not a directory'", hasIssue, runErr)
+		}
+	})
+
 	t.Run("override for unselected platform-scoped rule is not an error", func(t *testing.T) {
 		t.Parallel()
 		dir := writeDevcontainer(t, `{"image": "ubuntu:latest"}`)

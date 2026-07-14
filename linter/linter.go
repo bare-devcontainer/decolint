@@ -199,7 +199,10 @@ func safeCheck(r *Rule, rctx *Context, node *Node) (findings []Finding) {
 // .devcontainer directory — resolve within it.
 func visitConfigs(root *os.Root, fn func(configEntry) error) error {
 	if p := "devcontainer-feature.json"; isFile(root, p) {
-		return fn(configEntry{root, p, p, Feature})
+		if err := fn(configEntry{root, p, p, Feature}); err != nil {
+			return err
+		}
+		return nil
 	}
 	if p := "devcontainer-template.json"; isFile(root, p) {
 		if err := fn(configEntry{root, p, p, Template}); err != nil {

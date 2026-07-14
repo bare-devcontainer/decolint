@@ -34,6 +34,17 @@ func symlink(t *testing.T, target, link string) {
 	}
 }
 
+// openRoot opens dir as an os.Root, closed when the test ends, to lint through.
+func openRoot(t *testing.T, dir string) *os.Root {
+	t.Helper()
+	root, err := os.OpenRoot(dir)
+	if err != nil {
+		t.Fatalf("os.OpenRoot(%q): %v", dir, err)
+	}
+	t.Cleanup(func() { _ = root.Close() })
+	return root
+}
+
 func TestLintDirSymlink(t *testing.T) {
 	t.Parallel()
 
@@ -63,7 +74,7 @@ func TestLintDirSymlink(t *testing.T) {
 			filepath.Join(proj, ".devcontainer", "devcontainer.json"))
 
 		l := linter.New()
-		if _, err := l.LintDir(t.Context(), proj); err == nil {
+		if _, err := l.LintDir(t.Context(), openRoot(t, proj)); err == nil {
 			t.Error("LintDir: got nil error, want 'no devcontainer configuration found'")
 		}
 	})
@@ -77,7 +88,7 @@ func TestLintDirSymlink(t *testing.T) {
 		}
 
 		l := linter.New()
-		if _, err := l.LintDir(t.Context(), proj); err == nil {
+		if _, err := l.LintDir(t.Context(), openRoot(t, proj)); err == nil {
 			t.Error("LintDir: got nil error, want 'no devcontainer configuration found'")
 		}
 	})
@@ -96,7 +107,7 @@ func TestLintDirSymlink(t *testing.T) {
 			filepath.Join(proj, ".devcontainer", "devcontainer.json"))
 
 		l := linter.New()
-		if _, err := l.LintDir(t.Context(), proj); err == nil {
+		if _, err := l.LintDir(t.Context(), openRoot(t, proj)); err == nil {
 			t.Error("LintDir: got nil error, want 'no devcontainer configuration found'")
 		}
 	})
@@ -109,7 +120,7 @@ func TestLintDirSymlink(t *testing.T) {
 		}
 
 		l := linter.New()
-		if _, err := l.LintDir(t.Context(), proj); err != nil {
+		if _, err := l.LintDir(t.Context(), openRoot(t, proj)); err != nil {
 			t.Errorf("LintDir: %v", err)
 		}
 	})
@@ -127,7 +138,7 @@ func TestLintDirSymlink(t *testing.T) {
 			filepath.Join(proj, ".devcontainer", "go", "devcontainer.json"))
 
 		l := linter.New()
-		if _, err := l.LintDir(t.Context(), proj); err != nil {
+		if _, err := l.LintDir(t.Context(), openRoot(t, proj)); err != nil {
 			t.Errorf("LintDir: %v", err)
 		}
 	})
@@ -146,7 +157,7 @@ func TestLintDir(t *testing.T) {
 
 	t.Run("definition with multiple configs", func(t *testing.T) {
 		t.Parallel()
-		issues, err := l.LintDir(t.Context(), "testdata/project")
+		issues, err := l.LintDir(t.Context(), openRoot(t, "testdata/project"))
 		if err != nil {
 			t.Fatalf("LintDir: %v", err)
 		}
@@ -166,7 +177,7 @@ func TestLintDir(t *testing.T) {
 
 	t.Run("clean definition", func(t *testing.T) {
 		t.Parallel()
-		issues, err := l.LintDir(t.Context(), "testdata/rootfile")
+		issues, err := l.LintDir(t.Context(), openRoot(t, "testdata/rootfile"))
 		if err != nil {
 			t.Fatalf("LintDir: %v", err)
 		}
@@ -177,7 +188,7 @@ func TestLintDir(t *testing.T) {
 
 	t.Run("feature is not checked by devcontainer rules", func(t *testing.T) {
 		t.Parallel()
-		issues, err := l.LintDir(t.Context(), "testdata/feature")
+		issues, err := l.LintDir(t.Context(), openRoot(t, "testdata/feature"))
 		if err != nil {
 			t.Fatalf("LintDir: %v", err)
 		}
@@ -188,7 +199,7 @@ func TestLintDir(t *testing.T) {
 
 	t.Run("template lints the shipped devcontainer config", func(t *testing.T) {
 		t.Parallel()
-		issues, err := l.LintDir(t.Context(), "testdata/template")
+		issues, err := l.LintDir(t.Context(), openRoot(t, "testdata/template"))
 		if err != nil {
 			t.Fatalf("LintDir: %v", err)
 		}
@@ -203,7 +214,7 @@ func TestLintDir(t *testing.T) {
 
 	t.Run("a broken file does not stop other files in the same directory from being linted", func(t *testing.T) {
 		t.Parallel()
-		issues, err := l.LintDir(t.Context(), "testdata/broken")
+		issues, err := l.LintDir(t.Context(), openRoot(t, "testdata/broken"))
 		if err == nil {
 			t.Fatal("got nil error, want a parse error for the broken config")
 		}
@@ -216,17 +227,9 @@ func TestLintDir(t *testing.T) {
 		}
 	})
 
-	t.Run("file path is rejected", func(t *testing.T) {
-		t.Parallel()
-		file := filepath.Join("testdata", "project", ".devcontainer", "devcontainer.json")
-		if _, err := l.LintDir(t.Context(), file); err == nil {
-			t.Error("got nil error, want 'not a directory'")
-		}
-	})
-
 	t.Run("directory without config", func(t *testing.T) {
 		t.Parallel()
-		if _, err := l.LintDir(t.Context(), t.TempDir()); err == nil {
+		if _, err := l.LintDir(t.Context(), openRoot(t, t.TempDir())); err == nil {
 			t.Error("got nil error, want 'no devcontainer configuration found'")
 		}
 	})

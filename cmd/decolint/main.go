@@ -237,7 +237,7 @@ func runLint(ctx context.Context, stdout io.Writer, opts Options, cfg Config) (b
 	var worstSeverity linter.Severity
 	var lintErr error
 	for _, path := range opts.Paths {
-		issues, err := l.LintDir(ctx, path)
+		issues, err := lintPath(ctx, l, path)
 		for _, issue := range issues {
 			if issue.Severity > worstSeverity {
 				worstSeverity = issue.Severity
@@ -257,4 +257,16 @@ func runLint(ctx context.Context, stdout io.Writer, opts Options, cfg Config) (b
 	}
 
 	return worstSeverity >= threshold, nil
+}
+
+// lintPath lints the devcontainer directory at path. The directory is opened as an os.Root, so
+// every file the lint reads is confined to it. It is an error if path is not a directory.
+func lintPath(ctx context.Context, l *linter.Linter, path string) ([]linter.Issue, error) {
+	root, err := os.OpenRoot(path)
+	if err != nil {
+		return nil, fmt.Errorf("resolve directory: %w", err)
+	}
+	// The root is only read from, so a close error is inconsequential.
+	defer func() { _ = root.Close() }()
+	return l.LintDir(ctx, root)
 }

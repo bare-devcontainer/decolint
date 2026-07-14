@@ -61,29 +61,18 @@ func (l *Linter) RegisterRule(r *Rule, severity Severity) {
 	}
 }
 
-// LintDir determines the kind of devcontainer directory dir is (a dev container definition, a
-// Feature, or a Template), and lints every configuration file it contains. It is an error if dir is
-// not a directory or contains no configuration. Configuration files under dir's .devcontainer
-// directory are only accessed within that directory, and other configuration files only within dir:
-// symbolic links are followed only while they resolve inside that boundary, and a link escaping it
-// is treated as nonexistent.
-func (l *Linter) LintDir(ctx context.Context, dir string) ([]Issue, error) {
+// LintDir determines the kind of devcontainer directory root is opened on (a dev container
+// definition, a Feature, or a Template), and lints every configuration file it contains. It is an
+// error if the directory contains no configuration. All file access happens through root, so it is
+// confined to that directory; configuration files under its .devcontainer directory are only
+// accessed within that directory. Symbolic links are followed only while they resolve inside that
+// boundary, and a link escaping it is treated as nonexistent. Issue paths are the files' locations
+// joined onto root's name.
+func (l *Linter) LintDir(ctx context.Context, root *os.Root) ([]Issue, error) {
+	dir := root.Name()
 	if err := ctx.Err(); err != nil {
 		return nil, fmt.Errorf("aborted %s: %w", dir, err)
 	}
-	info, err := os.Stat(dir)
-	if err != nil {
-		return nil, fmt.Errorf("resolve directory: %w", err)
-	}
-	if !info.IsDir() {
-		return nil, fmt.Errorf("not a directory: %s", dir)
-	}
-	root, err := os.OpenRoot(dir)
-	if err != nil {
-		return nil, fmt.Errorf("resolve directory: %w", err)
-	}
-	// The root is only read from, so a close error is inconsequential.
-	defer func() { _ = root.Close() }()
 	files := findConfigs(root)
 	if len(files) == 0 {
 		return nil, fmt.Errorf("no devcontainer configuration found in %s", dir)

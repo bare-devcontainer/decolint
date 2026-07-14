@@ -1,6 +1,7 @@
 package linter_test
 
 import (
+	"os"
 	"path/filepath"
 	"slices"
 	"testing"
@@ -89,6 +90,87 @@ func TestFindConfigs(t *testing.T) {
 			}
 		})
 	}
+}
+
+// symlink creates a symbolic link, skipping the test on platforms where symlink creation is not
+// permitted (e.g. Windows without the required privilege).
+func symlink(t *testing.T, target, link string) {
+	t.Helper()
+	if err := os.Symlink(target, link); err != nil {
+		t.Skipf("symlink unsupported: %v", err)
+	}
+}
+
+func TestFindConfigsSymlink(t *testing.T) {
+	t.Parallel()
+
+	t.Run("link escaping the directory is treated as nonexistent", func(t *testing.T) {
+		t.Parallel()
+		tmp := t.TempDir()
+		outside := filepath.Join(tmp, "outside")
+		proj := filepath.Join(tmp, "proj")
+		if err := os.MkdirAll(filepath.Join(proj, ".devcontainer"), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.MkdirAll(outside, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(outside, "devcontainer.json"), []byte(`{}`), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		symlink(t, filepath.Join("..", "..", "outside", "devcontainer.json"),
+			filepath.Join(proj, ".devcontainer", "devcontainer.json"))
+
+		if got := linter.FindConfigs(proj); len(got) != 0 {
+			t.Errorf("linter.FindConfigs(%q) = %v, want none", proj, got)
+		}
+		l := linter.New()
+		if _, err := l.LintDir(t.Context(), proj); err == nil {
+			t.Error("LintDir: got nil error, want 'no devcontainer configuration found'")
+		}
+	})
+
+	t.Run("link with an absolute target is treated as nonexistent", func(t *testing.T) {
+		t.Parallel()
+		proj := t.TempDir()
+		if err := os.MkdirAll(filepath.Join(proj, ".devcontainer"), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(proj, "real.json"), []byte(`{}`), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		// The target is inside the directory, but os.Root rejects absolute symlink targets.
+		symlink(t, filepath.Join(proj, "real.json"),
+			filepath.Join(proj, ".devcontainer", "devcontainer.json"))
+
+		if got := linter.FindConfigs(proj); len(got) != 0 {
+			t.Errorf("linter.FindConfigs(%q) = %v, want none", proj, got)
+		}
+	})
+
+	t.Run("link resolving within the directory is followed", func(t *testing.T) {
+		t.Parallel()
+		proj := t.TempDir()
+		if err := os.MkdirAll(filepath.Join(proj, ".devcontainer"), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(proj, "real.json"), []byte(`{"image": "ubuntu:24.04"}`), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		symlink(t, filepath.Join("..", "real.json"),
+			filepath.Join(proj, ".devcontainer", "devcontainer.json"))
+
+		want := []linter.ConfigFile{
+			{filepath.Join(proj, ".devcontainer", "devcontainer.json"), linter.Devcontainer},
+		}
+		if got := linter.FindConfigs(proj); !slices.Equal(got, want) {
+			t.Errorf("linter.FindConfigs(%q) = %v, want %v", proj, got, want)
+		}
+		l := linter.New()
+		if _, err := l.LintDir(t.Context(), proj); err != nil {
+			t.Errorf("LintDir: %v", err)
+		}
+	})
 }
 
 func TestLintDir(t *testing.T) {

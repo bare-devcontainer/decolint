@@ -8,6 +8,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"sort"
@@ -61,7 +62,9 @@ func (l *Linter) RegisterRule(r *Rule, severity Severity) {
 
 // LintDir determines the kind of devcontainer directory dir is (a dev container definition, a
 // Feature, or a Template), and lints every configuration file it contains. It is an error if dir is
-// not a directory or contains no configuration.
+// not a directory or contains no configuration. Files are only accessed within dir: symbolic links
+// are followed only while they resolve inside dir, and a link escaping dir is treated as
+// nonexistent.
 func (l *Linter) LintDir(ctx context.Context, dir string) ([]Issue, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, fmt.Errorf("aborted %s: %w", dir, err)
@@ -73,22 +76,29 @@ func (l *Linter) LintDir(ctx context.Context, dir string) ([]Issue, error) {
 	if !info.IsDir() {
 		return nil, fmt.Errorf("not a directory: %s", dir)
 	}
-	files := FindConfigs(dir)
+	root, err := os.OpenRoot(dir)
+	if err != nil {
+		return nil, fmt.Errorf("resolve directory: %w", err)
+	}
+	// The root is only read from, so a close error is inconsequential.
+	defer func() { _ = root.Close() }()
+	files := findConfigs(root)
 	if len(files) == 0 {
 		return nil, fmt.Errorf("no devcontainer configuration found in %s", dir)
 	}
 	var issues []Issue
 	var errs []error
 	for _, f := range files {
+		display := filepath.Join(dir, f.Path)
 		if err := ctx.Err(); err != nil {
-			return issues, errors.Join(append(errs, fmt.Errorf("aborted %s: %w", f.Path, err))...)
+			return issues, errors.Join(append(errs, fmt.Errorf("aborted %s: %w", display, err))...)
 		}
-		src, err := os.ReadFile(f.Path)
+		src, err := root.ReadFile(f.Path)
 		if err != nil {
-			errs = append(errs, fmt.Errorf("read config: %w", err))
+			errs = append(errs, fmt.Errorf("read config %s: %w", display, err))
 			continue
 		}
-		fileIssues, err := l.Lint(ctx, f.Path, src, f.Type)
+		fileIssues, err := l.Lint(ctx, display, src, f.Type)
 		if err != nil {
 			errs = append(errs, err)
 			continue
@@ -173,38 +183,58 @@ func safeCheck(r *Rule, rctx *Context, node *Node) (findings []Finding) {
 //     the devcontainer specification: .devcontainer/devcontainer.json, .devcontainer.json, and
 //     .devcontainer/<folder>/devcontainer.json (one level deep).
 //
-// An empty result means dir contains no devcontainer configuration.
+// An empty result means dir contains no devcontainer configuration. Files are only accessed within
+// dir: symbolic links are followed only while they resolve inside dir, and a link escaping dir is
+// treated as nonexistent.
 func FindConfigs(dir string) []ConfigFile {
-	if p := filepath.Join(dir, "devcontainer-feature.json"); isFile(p) {
-		return []ConfigFile{{Path: p, Type: Feature}}
+	root, err := os.OpenRoot(dir)
+	if err != nil {
+		return nil
 	}
-	if p := filepath.Join(dir, "devcontainer-template.json"); isFile(p) {
-		files := []ConfigFile{{Path: p, Type: Template}}
-		return append(files, devcontainerConfigs(dir)...)
+	// The root is only read from, so a close error is inconsequential.
+	defer func() { _ = root.Close() }()
+	files := findConfigs(root)
+	for i := range files {
+		files[i].Path = filepath.Join(dir, files[i].Path)
 	}
-	return devcontainerConfigs(dir)
+	return files
 }
 
-// devcontainerConfigs returns the devcontainer.json files under dir at the locations defined by the
-// devcontainer specification.
-func devcontainerConfigs(dir string) []ConfigFile {
+// findConfigs implements FindConfigs against root, returning root-relative paths. All filesystem
+// access during a lint run goes through a single *os.Root so that paths derived from configuration
+// content (e.g. local Feature references, once dependsOn resolution is implemented) cannot escape
+// the directory being linted.
+func findConfigs(root *os.Root) []ConfigFile {
+	if p := "devcontainer-feature.json"; isFile(root, p) {
+		return []ConfigFile{{Path: p, Type: Feature}}
+	}
+	if p := "devcontainer-template.json"; isFile(root, p) {
+		files := []ConfigFile{{Path: p, Type: Template}}
+		return append(files, devcontainerConfigs(root)...)
+	}
+	return devcontainerConfigs(root)
+}
+
+// devcontainerConfigs returns the devcontainer.json files under root at the locations defined by
+// the devcontainer specification, as root-relative paths.
+func devcontainerConfigs(root *os.Root) []ConfigFile {
 	var paths []string
 	for _, p := range []string{
-		filepath.Join(dir, ".devcontainer", "devcontainer.json"),
-		filepath.Join(dir, ".devcontainer.json"),
+		filepath.Join(".devcontainer", "devcontainer.json"),
+		".devcontainer.json",
 	} {
-		if isFile(p) {
+		if isFile(root, p) {
 			paths = append(paths, p)
 		}
 	}
-	entries, err := os.ReadDir(filepath.Join(dir, ".devcontainer"))
+	entries, err := fs.ReadDir(root.FS(), ".devcontainer")
 	if err == nil {
 		for _, e := range entries {
 			if !e.IsDir() {
 				continue
 			}
-			p := filepath.Join(dir, ".devcontainer", e.Name(), "devcontainer.json")
-			if isFile(p) {
+			p := filepath.Join(".devcontainer", e.Name(), "devcontainer.json")
+			if isFile(root, p) {
 				paths = append(paths, p)
 			}
 		}
@@ -217,7 +247,7 @@ func devcontainerConfigs(dir string) []ConfigFile {
 	return files
 }
 
-func isFile(path string) bool {
-	info, err := os.Stat(path)
+func isFile(root *os.Root, path string) bool {
+	info, err := root.Stat(path)
 	return err == nil && !info.IsDir()
 }

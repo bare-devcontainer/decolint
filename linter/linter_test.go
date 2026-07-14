@@ -3,7 +3,6 @@ package linter_test
 import (
 	"os"
 	"path/filepath"
-	"slices"
 	"testing"
 
 	"github.com/bare-devcontainer/decolint/linter"
@@ -26,72 +25,6 @@ func lintSrc(t *testing.T, src string) []linter.Issue {
 	return issues
 }
 
-func TestFindConfigs(t *testing.T) {
-	t.Parallel()
-
-	tests := []struct {
-		dir  string
-		want []linter.ConfigFile
-	}{
-		{
-			"testdata/project",
-			[]linter.ConfigFile{
-				{filepath.Join("testdata", "project", ".devcontainer", "devcontainer.json"), linter.Devcontainer},
-				{filepath.Join("testdata", "project", ".devcontainer", "go", "devcontainer.json"), linter.Devcontainer},
-			},
-		},
-		{
-			"testdata/rootfile",
-			[]linter.ConfigFile{
-				{filepath.Join("testdata", "rootfile", ".devcontainer.json"), linter.Devcontainer},
-			},
-		},
-		{
-			"testdata/feature",
-			[]linter.ConfigFile{
-				{filepath.Join("testdata", "feature", "devcontainer-feature.json"), linter.Feature},
-			},
-		},
-		{
-			"testdata/template",
-			[]linter.ConfigFile{
-				{filepath.Join("testdata", "template", "devcontainer-template.json"), linter.Template},
-				{filepath.Join("testdata", "template", ".devcontainer", "devcontainer.json"), linter.Devcontainer},
-			},
-		},
-		{
-			"testdata/template-rootfile",
-			[]linter.ConfigFile{
-				{filepath.Join("testdata", "template-rootfile", "devcontainer-template.json"), linter.Template},
-				{filepath.Join("testdata", "template-rootfile", ".devcontainer.json"), linter.Devcontainer},
-			},
-		},
-		{
-			"testdata/template-subfolder",
-			[]linter.ConfigFile{
-				{filepath.Join("testdata", "template-subfolder", "devcontainer-template.json"), linter.Template},
-				{filepath.Join("testdata", "template-subfolder", ".devcontainer", "go", "devcontainer.json"), linter.Devcontainer},
-			},
-		},
-		{
-			"testdata/template-no-devcontainer",
-			[]linter.ConfigFile{
-				{filepath.Join("testdata", "template-no-devcontainer", "devcontainer-template.json"), linter.Template},
-			},
-		},
-		{"testdata", nil},
-	}
-	for _, tt := range tests {
-		t.Run(tt.dir, func(t *testing.T) {
-			t.Parallel()
-			got := linter.FindConfigs(tt.dir)
-			if !slices.Equal(got, tt.want) {
-				t.Errorf("linter.FindConfigs(%q) = %v, want %v", tt.dir, got, tt.want)
-			}
-		})
-	}
-}
-
 // symlink creates a symbolic link, skipping the test on platforms where symlink creation is not
 // permitted (e.g. Windows without the required privilege).
 func symlink(t *testing.T, target, link string) {
@@ -101,29 +34,48 @@ func symlink(t *testing.T, target, link string) {
 	}
 }
 
-func TestFindConfigsSymlink(t *testing.T) {
+func TestLintDirSymlink(t *testing.T) {
 	t.Parallel()
 
-	t.Run("link escaping the directory is treated as nonexistent", func(t *testing.T) {
+	// setup creates a dev container definition directory whose .devcontainer/devcontainer.json is a
+	// symbolic link to target, and returns the directory.
+	setup := func(t *testing.T, target string) string {
+		t.Helper()
+		proj := t.TempDir()
+		if err := os.MkdirAll(filepath.Join(proj, ".devcontainer"), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		symlink(t, target, filepath.Join(proj, ".devcontainer", "devcontainer.json"))
+		return proj
+	}
+
+	t.Run("link escaping the lint directory is treated as nonexistent", func(t *testing.T) {
 		t.Parallel()
 		tmp := t.TempDir()
-		outside := filepath.Join(tmp, "outside")
+		if err := os.WriteFile(filepath.Join(tmp, "devcontainer.json"), []byte(`{}`), 0o644); err != nil {
+			t.Fatal(err)
+		}
 		proj := filepath.Join(tmp, "proj")
 		if err := os.MkdirAll(filepath.Join(proj, ".devcontainer"), 0o755); err != nil {
 			t.Fatal(err)
 		}
-		if err := os.MkdirAll(outside, 0o755); err != nil {
-			t.Fatal(err)
-		}
-		if err := os.WriteFile(filepath.Join(outside, "devcontainer.json"), []byte(`{}`), 0o644); err != nil {
-			t.Fatal(err)
-		}
-		symlink(t, filepath.Join("..", "..", "outside", "devcontainer.json"),
+		symlink(t, filepath.Join("..", "..", "devcontainer.json"),
 			filepath.Join(proj, ".devcontainer", "devcontainer.json"))
 
-		if got := linter.FindConfigs(proj); len(got) != 0 {
-			t.Errorf("linter.FindConfigs(%q) = %v, want none", proj, got)
+		l := linter.New()
+		if _, err := l.LintDir(t.Context(), proj); err == nil {
+			t.Error("LintDir: got nil error, want 'no devcontainer configuration found'")
 		}
+	})
+
+	t.Run("link leaving .devcontainer is treated as nonexistent", func(t *testing.T) {
+		t.Parallel()
+		proj := setup(t, filepath.Join("..", "real.json"))
+		// The target is inside the lint directory, but outside .devcontainer.
+		if err := os.WriteFile(filepath.Join(proj, "real.json"), []byte(`{}`), 0o644); err != nil {
+			t.Fatal(err)
+		}
+
 		l := linter.New()
 		if _, err := l.LintDir(t.Context(), proj); err == nil {
 			t.Error("LintDir: got nil error, want 'no devcontainer configuration found'")
@@ -132,40 +84,48 @@ func TestFindConfigsSymlink(t *testing.T) {
 
 	t.Run("link with an absolute target is treated as nonexistent", func(t *testing.T) {
 		t.Parallel()
+		// The target is inside .devcontainer, but os.Root rejects absolute symlink targets.
 		proj := t.TempDir()
 		if err := os.MkdirAll(filepath.Join(proj, ".devcontainer"), 0o755); err != nil {
 			t.Fatal(err)
 		}
-		if err := os.WriteFile(filepath.Join(proj, "real.json"), []byte(`{}`), 0o644); err != nil {
+		if err := os.WriteFile(filepath.Join(proj, ".devcontainer", "real.json"), []byte(`{}`), 0o644); err != nil {
 			t.Fatal(err)
 		}
-		// The target is inside the directory, but os.Root rejects absolute symlink targets.
-		symlink(t, filepath.Join(proj, "real.json"),
+		symlink(t, filepath.Join(proj, ".devcontainer", "real.json"),
 			filepath.Join(proj, ".devcontainer", "devcontainer.json"))
 
-		if got := linter.FindConfigs(proj); len(got) != 0 {
-			t.Errorf("linter.FindConfigs(%q) = %v, want none", proj, got)
+		l := linter.New()
+		if _, err := l.LintDir(t.Context(), proj); err == nil {
+			t.Error("LintDir: got nil error, want 'no devcontainer configuration found'")
 		}
 	})
 
-	t.Run("link resolving within the directory is followed", func(t *testing.T) {
+	t.Run("link resolving within .devcontainer is followed", func(t *testing.T) {
+		t.Parallel()
+		proj := setup(t, "main.json")
+		if err := os.WriteFile(filepath.Join(proj, ".devcontainer", "main.json"), []byte(`{}`), 0o644); err != nil {
+			t.Fatal(err)
+		}
+
+		l := linter.New()
+		if _, err := l.LintDir(t.Context(), proj); err != nil {
+			t.Errorf("LintDir: %v", err)
+		}
+	})
+
+	t.Run("link from a subfolder resolving within .devcontainer is followed", func(t *testing.T) {
 		t.Parallel()
 		proj := t.TempDir()
-		if err := os.MkdirAll(filepath.Join(proj, ".devcontainer"), 0o755); err != nil {
+		if err := os.MkdirAll(filepath.Join(proj, ".devcontainer", "go"), 0o755); err != nil {
 			t.Fatal(err)
 		}
-		if err := os.WriteFile(filepath.Join(proj, "real.json"), []byte(`{"image": "ubuntu:24.04"}`), 0o644); err != nil {
+		if err := os.WriteFile(filepath.Join(proj, ".devcontainer", "shared.json"), []byte(`{}`), 0o644); err != nil {
 			t.Fatal(err)
 		}
-		symlink(t, filepath.Join("..", "real.json"),
-			filepath.Join(proj, ".devcontainer", "devcontainer.json"))
+		symlink(t, filepath.Join("..", "shared.json"),
+			filepath.Join(proj, ".devcontainer", "go", "devcontainer.json"))
 
-		want := []linter.ConfigFile{
-			{filepath.Join(proj, ".devcontainer", "devcontainer.json"), linter.Devcontainer},
-		}
-		if got := linter.FindConfigs(proj); !slices.Equal(got, want) {
-			t.Errorf("linter.FindConfigs(%q) = %v, want %v", proj, got, want)
-		}
 		l := linter.New()
 		if _, err := l.LintDir(t.Context(), proj); err != nil {
 			t.Errorf("LintDir: %v", err)

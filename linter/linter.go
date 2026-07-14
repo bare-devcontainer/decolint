@@ -12,6 +12,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 
 	"github.com/tailscale/hujson"
 )
@@ -62,9 +63,10 @@ func (l *Linter) RegisterRule(r *Rule, severity Severity) {
 
 // LintDir determines the kind of devcontainer directory dir is (a dev container definition, a
 // Feature, or a Template), and lints every configuration file it contains. It is an error if dir is
-// not a directory or contains no configuration. Files are only accessed within dir: symbolic links
-// are followed only while they resolve inside dir, and a link escaping dir is treated as
-// nonexistent.
+// not a directory or contains no configuration. Configuration files under dir's .devcontainer
+// directory are only accessed within that directory, and other configuration files only within dir:
+// symbolic links are followed only while they resolve inside that boundary, and a link escaping it
+// is treated as nonexistent.
 func (l *Linter) LintDir(ctx context.Context, dir string) ([]Issue, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, fmt.Errorf("aborted %s: %w", dir, err)
@@ -93,7 +95,7 @@ func (l *Linter) LintDir(ctx context.Context, dir string) ([]Issue, error) {
 		if err := ctx.Err(); err != nil {
 			return issues, errors.Join(append(errs, fmt.Errorf("aborted %s: %w", display, err))...)
 		}
-		src, err := root.ReadFile(f.Path)
+		src, err := readConfig(root, f.Path)
 		if err != nil {
 			errs = append(errs, fmt.Errorf("read config %s: %w", display, err))
 			continue
@@ -173,8 +175,8 @@ func safeCheck(r *Rule, rctx *Context, node *Node) (findings []Finding) {
 	return r.Check(rctx, node)
 }
 
-// FindConfigs determines the kind of devcontainer directory dir is and returns the configuration
-// files it contains:
+// findConfigs determines the kind of devcontainer directory root is opened on and returns the
+// configuration files it contains, as root-relative paths:
 //
 //   - a Feature (dir contains devcontainer-feature.json): that file;
 //   - a Template (dir contains devcontainer-template.json): that file, plus the dev container
@@ -183,27 +185,10 @@ func safeCheck(r *Rule, rctx *Context, node *Node) (findings []Finding) {
 //     the devcontainer specification: .devcontainer/devcontainer.json, .devcontainer.json, and
 //     .devcontainer/<folder>/devcontainer.json (one level deep).
 //
-// An empty result means dir contains no devcontainer configuration. Files are only accessed within
-// dir: symbolic links are followed only while they resolve inside dir, and a link escaping dir is
-// treated as nonexistent.
-func FindConfigs(dir string) []ConfigFile {
-	root, err := os.OpenRoot(dir)
-	if err != nil {
-		return nil
-	}
-	// The root is only read from, so a close error is inconsequential.
-	defer func() { _ = root.Close() }()
-	files := findConfigs(root)
-	for i := range files {
-		files[i].Path = filepath.Join(dir, files[i].Path)
-	}
-	return files
-}
-
-// findConfigs implements FindConfigs against root, returning root-relative paths. All filesystem
-// access during a lint run goes through a single *os.Root so that paths derived from configuration
-// content (e.g. local Feature references, once dependsOn resolution is implemented) cannot escape
-// the directory being linted.
+// An empty result means the directory contains no devcontainer configuration. Everything under the
+// .devcontainer directory is accessed through a root confined to that directory: the future
+// Feature/dependsOn resolver receives the same boundary, so local Feature references — including
+// Features stored inside the active .devcontainer directory — resolve within it.
 func findConfigs(root *os.Root) []ConfigFile {
 	if p := "devcontainer-feature.json"; isFile(root, p) {
 		return []ConfigFile{{Path: p, Type: Feature}}
@@ -215,27 +200,32 @@ func findConfigs(root *os.Root) []ConfigFile {
 	return devcontainerConfigs(root)
 }
 
+// devcontainerDir is the directory that holds a dev container definition's configuration, and the
+// boundary that access to that configuration is confined to.
+const devcontainerDir = ".devcontainer"
+
 // devcontainerConfigs returns the devcontainer.json files under root at the locations defined by
 // the devcontainer specification, as root-relative paths.
 func devcontainerConfigs(root *os.Root) []ConfigFile {
 	var paths []string
-	for _, p := range []string{
-		filepath.Join(".devcontainer", "devcontainer.json"),
-		".devcontainer.json",
-	} {
-		if isFile(root, p) {
-			paths = append(paths, p)
-		}
+	if isFile(root, ".devcontainer.json") {
+		paths = append(paths, ".devcontainer.json")
 	}
-	entries, err := fs.ReadDir(root.FS(), ".devcontainer")
-	if err == nil {
-		for _, e := range entries {
-			if !e.IsDir() {
-				continue
-			}
-			p := filepath.Join(".devcontainer", e.Name(), "devcontainer.json")
-			if isFile(root, p) {
-				paths = append(paths, p)
+	if sub, err := root.OpenRoot(devcontainerDir); err == nil {
+		// The root is only read from, so a close error is inconsequential.
+		defer func() { _ = sub.Close() }()
+		if isFile(sub, "devcontainer.json") {
+			paths = append(paths, filepath.Join(devcontainerDir, "devcontainer.json"))
+		}
+		entries, err := fs.ReadDir(sub.FS(), ".")
+		if err == nil {
+			for _, e := range entries {
+				if !e.IsDir() {
+					continue
+				}
+				if isFile(sub, filepath.Join(e.Name(), "devcontainer.json")) {
+					paths = append(paths, filepath.Join(devcontainerDir, e.Name(), "devcontainer.json"))
+				}
 			}
 		}
 	}
@@ -245,6 +235,23 @@ func devcontainerConfigs(root *os.Root) []ConfigFile {
 		files = append(files, ConfigFile{Path: p, Type: Devcontainer})
 	}
 	return files
+}
+
+// readConfig reads the configuration file at name, which is relative to root. A file under the
+// .devcontainer directory is accessed through a root confined to that directory, so its resolution
+// cannot reach files outside of it.
+func readConfig(root *os.Root, name string) ([]byte, error) {
+	rest, ok := strings.CutPrefix(name, devcontainerDir+string(filepath.Separator))
+	if !ok {
+		return root.ReadFile(name)
+	}
+	sub, err := root.OpenRoot(devcontainerDir)
+	if err != nil {
+		return nil, err
+	}
+	// The root is only read from, so a close error is inconsequential.
+	defer func() { _ = sub.Close() }()
+	return sub.ReadFile(rest)
 }
 
 func isFile(root *os.Root, path string) bool {

@@ -3,6 +3,7 @@ package linter
 import (
 	"encoding/json/jsontext"
 	"fmt"
+	"os"
 	"strings"
 
 	"github.com/tailscale/hujson"
@@ -142,6 +143,14 @@ type Context struct {
 	Src []byte
 	// Root is the HuJSON syntax tree parsed from Src. It preserves comments and byte offsets into Src.
 	Root *hujson.Value
+	// Dir is an os.Root confined to the same boundary LintDir enforces for this file (the lint root,
+	// or its .devcontainer sub-root). FileDir is this file's own directory, relative to Dir. A
+	// Transform that resolves a path relative to the file (e.g. a local Feature reference) should
+	// join FileDir with that relative path and access the result through Dir, so the resolution
+	// cannot escape the same boundary the file itself was read through. Both are the zero value when
+	// Lint is called directly on in-memory content with no real directory backing it (e.g. in tests).
+	Dir     *os.Root
+	FileDir string
 }
 
 // Severity indicates how a finding should be treated: whether it's reported as an error or a

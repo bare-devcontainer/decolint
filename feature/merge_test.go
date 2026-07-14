@@ -22,7 +22,7 @@ func mergeSrc(t *testing.T, src string, features map[string]string) *hujson.Valu
 	if err != nil {
 		t.Fatalf("parse devcontainer.json: %v", err)
 	}
-	if err := Merge(t.Context(), NewFetcher(), dir, &root); err != nil {
+	if err := Merge(t.Context(), NewFetcher(), openRoot(t, dir), ".", &root); err != nil {
 		t.Fatalf("Merge: %v", err)
 	}
 	return &root
@@ -225,7 +225,7 @@ func TestMergeDependsOnCycle(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := Merge(t.Context(), NewFetcher(), dir, &root); err == nil || !strings.Contains(err.Error(), "cycle") {
+	if err := Merge(t.Context(), NewFetcher(), openRoot(t, dir), ".", &root); err == nil || !strings.Contains(err.Error(), "cycle") {
 		t.Errorf("Merge with a dependency cycle: err = %v, want a cycle error", err)
 	}
 }
@@ -237,7 +237,7 @@ func TestMergeFetchFailure(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := Merge(t.Context(), NewFetcher(), t.TempDir(), &root); err == nil {
+	if err := Merge(t.Context(), NewFetcher(), openRoot(t, t.TempDir()), ".", &root); err == nil {
 		t.Error("Merge with an unresolvable feature: got nil error")
 	}
 }

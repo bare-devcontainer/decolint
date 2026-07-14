@@ -45,10 +45,12 @@ func NewFetcher() *Fetcher {
 	}
 }
 
-// Fetch retrieves the metadata of the Feature referenced by raw. baseDir is the directory
-// containing the devcontainer.json that references the Feature; local references are resolved
-// relative to it.
-func (f *Fetcher) Fetch(ctx context.Context, raw string, baseDir string) (*Metadata, error) {
+// Fetch retrieves the metadata of the Feature referenced by raw. dir and fileDir together locate
+// the devcontainer.json that references the Feature (see linter.Context.Dir and
+// linter.Context.FileDir): a local reference is resolved by joining fileDir with it and reading the
+// result through dir, so the resolution cannot escape dir's boundary. dir and fileDir are unused
+// for an OCI or tarball reference.
+func (f *Fetcher) Fetch(ctx context.Context, raw string, dir *os.Root, fileDir string) (*Metadata, error) {
 	ref, err := ParseRef(raw)
 	if err != nil {
 		return nil, err
@@ -57,15 +59,15 @@ func (f *Fetcher) Fetch(ctx context.Context, raw string, baseDir string) (*Metad
 	key := raw
 	if ref.Kind == KindLocal {
 		// The same relative reference can name different directories depending on the referencing
-		// file's location.
-		key = "local:" + filepath.Join(baseDir, raw)
+		// file's location and the root it is confined to.
+		key = fmt.Sprintf("local:%p:%s", dir, filepath.Join(fileDir, raw))
 	}
 
 	f.mu.Lock()
 	res, ok := f.cache[key]
 	f.mu.Unlock()
 	if !ok {
-		res.md, res.err = f.fetch(ctx, ref, baseDir)
+		res.md, res.err = f.fetch(ctx, ref, dir, fileDir)
 		if res.err != nil {
 			res.err = fmt.Errorf("fetch feature %q: %w", raw, res.err)
 		}
@@ -76,10 +78,10 @@ func (f *Fetcher) Fetch(ctx context.Context, raw string, baseDir string) (*Metad
 	return res.md, res.err
 }
 
-func (f *Fetcher) fetch(ctx context.Context, ref Ref, baseDir string) (*Metadata, error) {
+func (f *Fetcher) fetch(ctx context.Context, ref Ref, dir *os.Root, fileDir string) (*Metadata, error) {
 	switch ref.Kind {
 	case KindLocal:
-		return fetchLocal(filepath.Join(baseDir, ref.Raw))
+		return fetchLocal(dir, filepath.Join(fileDir, ref.Raw))
 	case KindTarball:
 		return f.fetchTarball(ctx, ref.Raw)
 	default:
@@ -87,17 +89,18 @@ func (f *Fetcher) fetch(ctx context.Context, ref Ref, baseDir string) (*Metadata
 	}
 }
 
-// fetchLocal reads the metadata of the Feature in directory dir.
-func fetchLocal(dir string) (*Metadata, error) {
-	path := filepath.Join(dir, metadataFileName)
-	info, err := os.Stat(path)
+// fetchLocal reads the metadata of the Feature at featureDir, read through dir so its resolution
+// cannot escape dir's boundary.
+func fetchLocal(dir *os.Root, featureDir string) (*Metadata, error) {
+	path := filepath.Join(featureDir, metadataFileName)
+	info, err := dir.Stat(path)
 	if err != nil {
 		return nil, err
 	}
 	if info.Size() > maxMetadataBytes {
 		return nil, fmt.Errorf("%s exceeds %d bytes", path, maxMetadataBytes)
 	}
-	src, err := os.ReadFile(path)
+	src, err := dir.ReadFile(path)
 	if err != nil {
 		return nil, err
 	}

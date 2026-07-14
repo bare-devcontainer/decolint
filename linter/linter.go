@@ -119,19 +119,27 @@ func (l *Linter) LintDir(ctx context.Context, root *os.Root) ([]Issue, error) {
 
 // lintConfig reads and lints the single configuration file f, reporting issues under
 // filepath.Join(dir, f.rel). The file is read through f.root, so its resolution cannot escape that
-// boundary.
+// boundary; the same f.root, and f's own directory relative to it, are passed through as the
+// resulting Context's Dir and FileDir, so a Transform resolving a path relative to the file cannot
+// escape that boundary either.
 func (l *Linter) lintConfig(ctx context.Context, dir string, f configEntry) ([]Issue, error) {
 	display := filepath.Join(dir, f.rel)
 	src, err := f.root.ReadFile(f.path)
 	if err != nil {
 		return nil, fmt.Errorf("read config %s: %w", display, err)
 	}
-	return l.Lint(ctx, display, src, f.typ)
+	return l.lintWithDir(ctx, display, src, f.typ, f.root, filepath.Dir(f.path))
 }
 
 // Lint lints src, which is the content of a configuration file of the given type. path is used only
 // for reporting.
 func (l *Linter) Lint(ctx context.Context, path string, src []byte, fileType FileType) ([]Issue, error) {
+	return l.lintWithDir(ctx, path, src, fileType, nil, "")
+}
+
+// lintWithDir is Lint, additionally attaching dir and fileDir to the Context passed to the
+// transform and rules; see Context.Dir and Context.FileDir.
+func (l *Linter) lintWithDir(ctx context.Context, path string, src []byte, fileType FileType, dir *os.Root, fileDir string) ([]Issue, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, fmt.Errorf("aborted %s: %w", path, err)
 	}
@@ -143,7 +151,7 @@ func (l *Linter) Lint(ctx context.Context, path string, src []byte, fileType Fil
 	if len(patterns) == 0 {
 		return nil, nil
 	}
-	rctx := &Context{Path: path, Type: fileType, Src: src, Root: &root}
+	rctx := &Context{Path: path, Type: fileType, Src: src, Root: &root, Dir: dir, FileDir: fileDir}
 	if l.transform != nil {
 		if err := l.transform(ctx, rctx); err != nil {
 			return nil, fmt.Errorf("transform %s: %w", path, err)

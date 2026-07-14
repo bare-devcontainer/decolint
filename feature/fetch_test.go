@@ -13,8 +13,7 @@ import (
 	"testing"
 )
 
-// writeLocalFeature creates dir/<name>/devcontainer-feature.json with the given content and
-// returns the base directory.
+// writeLocalFeature creates dir/<name>/devcontainer-feature.json with the given content.
 func writeLocalFeature(t *testing.T, dir, name, src string) {
 	t.Helper()
 	featureDir := filepath.Join(dir, name)
@@ -26,6 +25,17 @@ func writeLocalFeature(t *testing.T, dir, name, src string) {
 	}
 }
 
+// openRoot opens dir as an os.Root, closed when the test ends, to fetch local Features through.
+func openRoot(t *testing.T, dir string) *os.Root {
+	t.Helper()
+	root, err := os.OpenRoot(dir)
+	if err != nil {
+		t.Fatalf("os.OpenRoot(%q): %v", dir, err)
+	}
+	t.Cleanup(func() { _ = root.Close() })
+	return root
+}
+
 func TestFetchLocal(t *testing.T) {
 	t.Parallel()
 
@@ -33,7 +43,7 @@ func TestFetchLocal(t *testing.T) {
 	writeLocalFeature(t, dir, "my-feature", `{"id": "my-feature", "version": "1.0.0"}`)
 
 	f := NewFetcher()
-	md, err := f.Fetch(t.Context(), "./my-feature", dir)
+	md, err := f.Fetch(t.Context(), "./my-feature", openRoot(t, dir), ".")
 	if err != nil {
 		t.Fatalf("Fetch: %v", err)
 	}
@@ -42,11 +52,25 @@ func TestFetchLocal(t *testing.T) {
 	}
 }
 
+func TestFetchLocalEscapingRootIsRejected(t *testing.T) {
+	t.Parallel()
+
+	// A Feature outside the confining root (here, dir's parent) must not be reachable via "..",
+	// even though it exists on disk.
+	dir := t.TempDir()
+	writeLocalFeature(t, filepath.Dir(dir), "escaped-feature", `{"id": "escaped-feature"}`)
+
+	f := NewFetcher()
+	if _, err := f.Fetch(t.Context(), "../escaped-feature", openRoot(t, dir), "."); err == nil {
+		t.Error("Fetch of a feature escaping the root: got nil error")
+	}
+}
+
 func TestFetchLocalMissing(t *testing.T) {
 	t.Parallel()
 
 	f := NewFetcher()
-	if _, err := f.Fetch(t.Context(), "./nope", t.TempDir()); err == nil {
+	if _, err := f.Fetch(t.Context(), "./nope", openRoot(t, t.TempDir()), "."); err == nil {
 		t.Error("Fetch of a missing local feature: got nil error")
 	}
 }
@@ -56,9 +80,10 @@ func TestFetchCachesResults(t *testing.T) {
 
 	dir := t.TempDir()
 	writeLocalFeature(t, dir, "f", `{"id": "before"}`)
+	root := openRoot(t, dir)
 
 	f := NewFetcher()
-	md, err := f.Fetch(t.Context(), "./f", dir)
+	md, err := f.Fetch(t.Context(), "./f", root, ".")
 	if err != nil {
 		t.Fatalf("Fetch: %v", err)
 	}
@@ -68,7 +93,7 @@ func TestFetchCachesResults(t *testing.T) {
 
 	// A second fetch must hit the cache and not observe the changed file.
 	writeLocalFeature(t, dir, "f", `{"id": "after"}`)
-	md, err = f.Fetch(t.Context(), "./f", dir)
+	md, err = f.Fetch(t.Context(), "./f", root, ".")
 	if err != nil {
 		t.Fatalf("Fetch (cached): %v", err)
 	}
@@ -88,7 +113,7 @@ func TestFetchMetadataParse(t *testing.T) {
 	  "installsAfter": ["ghcr.io/devcontainers/features/common-utils"],
 	}`)
 
-	md, err := NewFetcher().Fetch(t.Context(), "./f", dir)
+	md, err := NewFetcher().Fetch(t.Context(), "./f", openRoot(t, dir), ".")
 	if err != nil {
 		t.Fatalf("Fetch: %v", err)
 	}
@@ -148,7 +173,7 @@ func TestFetchTarball(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	md, err := NewFetcher().Fetch(t.Context(), srv.URL+"/feature.tgz", "")
+	md, err := NewFetcher().Fetch(t.Context(), srv.URL+"/feature.tgz", nil, "")
 	if err != nil {
 		t.Fatalf("Fetch: %v", err)
 	}
@@ -163,7 +188,7 @@ func TestFetchTarballNotFound(t *testing.T) {
 	srv := httptest.NewServer(http.NotFoundHandler())
 	defer srv.Close()
 
-	if _, err := NewFetcher().Fetch(t.Context(), srv.URL+"/feature.tgz", ""); err == nil {
+	if _, err := NewFetcher().Fetch(t.Context(), srv.URL+"/feature.tgz", nil, ""); err == nil {
 		t.Error("Fetch of a missing tarball: got nil error")
 	}
 }
@@ -245,7 +270,7 @@ func TestFetchOCI(t *testing.T) {
 	}
 	host := startRegistry(t, fr)
 
-	md, err := NewFetcher().Fetch(t.Context(), host+"/devcontainers/features/node:1", "")
+	md, err := NewFetcher().Fetch(t.Context(), host+"/devcontainers/features/node:1", nil, "")
 	if err != nil {
 		t.Fatalf("Fetch: %v", err)
 	}
@@ -267,7 +292,7 @@ func TestFetchOCIThroughIndex(t *testing.T) {
 	}
 	host := startRegistry(t, fr)
 
-	md, err := NewFetcher().Fetch(t.Context(), host+"/devcontainers/features/go:1", "")
+	md, err := NewFetcher().Fetch(t.Context(), host+"/devcontainers/features/go:1", nil, "")
 	if err != nil {
 		t.Fatalf("Fetch: %v", err)
 	}
@@ -287,7 +312,7 @@ func TestFetchOCIUnknownRepository(t *testing.T) {
 	}
 	host := startRegistry(t, fr)
 
-	if _, err := NewFetcher().Fetch(t.Context(), host+"/devcontainers/features/nope:1", ""); err == nil {
+	if _, err := NewFetcher().Fetch(t.Context(), host+"/devcontainers/features/nope:1", nil, ""); err == nil {
 		t.Error("Fetch of an unknown repository: got nil error")
 	}
 }

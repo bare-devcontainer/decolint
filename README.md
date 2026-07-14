@@ -63,6 +63,17 @@ layout, and the configuration files it contains are linted:
 
 With no arguments, the current directory is linted.
 
+### Path handling
+
+All file access for a linted directory is confined to it: a
+`devcontainer.json` under `.devcontainer` is only read from within
+that directory, and a symbolic link resolving outside the boundary
+its config file was read through (see above) is treated as
+nonexistent rather than followed. The same boundary applies to local
+Feature references resolved while [merging
+Features](#merging-features) — a reference that would resolve outside
+it is an error, even if the target exists elsewhere on disk.
+
 decolint supports the following flags; run `decolint -help` for the full
 list.
 
@@ -115,7 +126,8 @@ decolint -merge-features -config .decolint.jsonc
 - OCI references (e.g. `ghcr.io/devcontainers/features/node:1`) are
   pulled from the registry with anonymous access, direct HTTP(S)
   tarball URIs are downloaded, and relative paths (e.g.
-  `./my-feature`) are read from disk.
+  `./my-feature`) are read from disk (see [Path
+  handling](#path-handling)).
 - Features referenced by a Feature's `dependsOn` are resolved
   recursively and contribute their properties as well; installation
   order follows `dependsOn`, `installsAfter`, and

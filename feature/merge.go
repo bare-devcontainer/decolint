@@ -4,20 +4,25 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"os"
 	"strings"
 
 	"github.com/tailscale/hujson"
 )
 
 // Merge fetches the Features referenced under "/features" of root, a devcontainer.json parsed from
-// a file in directory dir, and merges the properties they contribute into root in place, following
-// the merge logic of the Dev Container specification. Features named by "dependsOn" are resolved
-// recursively and contribute properties as well.
+// a file at fileDir within dir, and merges the properties they contribute into root in place,
+// following the merge logic of the Dev Container specification. Features named by "dependsOn" are
+// resolved recursively and contribute properties as well.
+//
+// dir and fileDir together locate the referencing devcontainer.json (see linter.Context.Dir and
+// linter.Context.FileDir): a local Feature reference is resolved relative to fileDir and read
+// through dir, so it cannot escape dir's boundary.
 //
 // Every node Merge adds to the tree carries the byte offset of the referencing Feature key in the
 // original file, so findings on merged-in properties point at the Feature reference. Any fetch or
 // parse failure is returned as an error.
-func Merge(ctx context.Context, f *Fetcher, dir string, root *hujson.Value) error {
+func Merge(ctx context.Context, f *Fetcher, dir *os.Root, fileDir string, root *hujson.Value) error {
 	features := root.Find("/features")
 	if features == nil {
 		return nil
@@ -36,7 +41,7 @@ func Merge(ctx context.Context, f *Fetcher, dir string, root *hujson.Value) erro
 		declared = append(declared, &contributor{ref: name.String(), anchor: m.Name.StartOffset})
 	}
 
-	contribs, err := resolveAll(ctx, f, dir, declared)
+	contribs, err := resolveAll(ctx, f, dir, fileDir, declared)
 	if err != nil {
 		return err
 	}
@@ -92,7 +97,7 @@ func refWithoutVersion(ref string) string {
 
 // resolveAll fetches every declared Feature and, recursively, the Features they depend on. The
 // result is in discovery order (dependencies before their dependents), deduplicated by reference.
-func resolveAll(ctx context.Context, f *Fetcher, dir string, declared []*contributor) ([]*contributor, error) {
+func resolveAll(ctx context.Context, f *Fetcher, dir *os.Root, fileDir string, declared []*contributor) ([]*contributor, error) {
 	seen := map[string]*contributor{}
 	var out []*contributor
 
@@ -106,7 +111,7 @@ func resolveAll(ctx context.Context, f *Fetcher, dir string, declared []*contrib
 		if _, ok := seen[c.ref]; ok {
 			return nil
 		}
-		md, err := f.Fetch(ctx, c.ref, dir)
+		md, err := f.Fetch(ctx, c.ref, dir, fileDir)
 		if err != nil {
 			return err
 		}

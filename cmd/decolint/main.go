@@ -9,7 +9,6 @@ import (
 	"io"
 	"os"
 	"os/signal"
-	"path/filepath"
 	"strings"
 	"syscall"
 
@@ -241,7 +240,7 @@ func runLint(ctx context.Context, stdout io.Writer, opts Options, cfg Config) (b
 			if fctx.Type != linter.Devcontainer {
 				return nil
 			}
-			return feature.Merge(ctx, fetcher, filepath.Dir(fctx.Path), fctx.Root)
+			return feature.Merge(ctx, fetcher, fctx.Dir, fctx.FileDir, fctx.Root)
 		})
 	}
 

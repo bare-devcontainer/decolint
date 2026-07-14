@@ -605,6 +605,29 @@ func TestRunMergeFeatures(t *testing.T) {
 			t.Errorf("stderr = %q, want it to mention the unresolvable feature", stderr.String())
 		}
 	})
+
+	t.Run("local feature escaping .devcontainer is a runtime error", func(t *testing.T) {
+		t.Parallel()
+		dir := writeDevcontainer(t, `{"image": "ubuntu:24.04", "features": {"../sibling-feature": {}}}`)
+		// sibling-feature exists on disk, but as a project-root sibling of .devcontainer, not inside
+		// it, so it is outside the boundary local Feature references are confined to.
+		if err := os.MkdirAll(filepath.Join(dir, "sibling-feature"), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(dir, "sibling-feature", "devcontainer-feature.json"),
+			[]byte(`{"id": "sibling-feature"}`), 0o644); err != nil {
+			t.Fatal(err)
+		}
+
+		var stdout, stderr bytes.Buffer
+		exitCode := run(t.Context(), []string{"-merge-features", dir}, &stdout, &stderr)
+		if exitCode != 2 {
+			t.Errorf("exit code = %d, want 2; stdout: %s", exitCode, stdout.String())
+		}
+		if !strings.Contains(stderr.String(), "../sibling-feature") {
+			t.Errorf("stderr = %q, want it to mention the unresolvable feature", stderr.String())
+		}
+	})
 }
 
 // mdTableRow finds the row of a Markdown table in out whose first cell, after trimming the padding

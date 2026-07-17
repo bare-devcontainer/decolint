@@ -3,11 +3,9 @@ package feature
 import (
 	"context"
 	"fmt"
-	"net/http"
 	"os"
 	"path/filepath"
 	"sync"
-	"time"
 )
 
 // Size limits for downloaded content, so a misbehaving registry or tarball cannot exhaust memory.
@@ -26,7 +24,7 @@ const metadataFileName = "devcontainer-feature.json"
 // caches every result in memory for the lifetime of the Fetcher, including failures, so a
 // reference shared by several files is fetched at most once per run.
 type Fetcher struct {
-	client *http.Client
+	client *externalClient
 
 	mu    sync.Mutex
 	cache map[string]fetchResult
@@ -37,10 +35,29 @@ type fetchResult struct {
 	err error
 }
 
-// NewFetcher returns a Fetcher with a default HTTP client.
-func NewFetcher() *Fetcher {
+// FetcherOption configures a Fetcher constructed by NewFetcher.
+type FetcherOption func(*fetcherConfig)
+
+type fetcherConfig struct {
+	allowInsecureRegistry bool
+}
+
+// WithInsecureRegistry allows a request to an OCI registry (manifest, blob, or token endpoint) to
+// use plain HTTP instead of HTTPS. It has no effect on Feature tarball requests, which always
+// require HTTPS.
+func WithInsecureRegistry() FetcherOption {
+	return func(cfg *fetcherConfig) { cfg.allowInsecureRegistry = true }
+}
+
+// NewFetcher returns a Fetcher. By default, every request it makes to an external host must use
+// HTTPS; pass WithInsecureRegistry to allow OCI registry requests over plain HTTP instead.
+func NewFetcher(opts ...FetcherOption) *Fetcher {
+	var cfg fetcherConfig
+	for _, opt := range opts {
+		opt(&cfg)
+	}
 	return &Fetcher{
-		client: &http.Client{Timeout: 30 * time.Second},
+		client: newExternalClient(cfg.allowInsecureRegistry),
 		cache:  map[string]fetchResult{},
 	}
 }

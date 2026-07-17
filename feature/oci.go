@@ -70,7 +70,7 @@ func (f *Fetcher) fetchOCI(ctx context.Context, ref Ref) (*Metadata, error) {
 	if err != nil {
 		return nil, err
 	}
-	blobURL := fmt.Sprintf("%s://%s/v2/%s/blobs/%s", registryScheme(ref.Registry), ref.Registry, ref.Repository, layer.Digest)
+	blobURL := fmt.Sprintf("%s://%s/v2/%s/blobs/%s", f.registryScheme(), ref.Registry, ref.Repository, layer.Digest)
 	resp, err := f.registryGet(ctx, ref, blobURL, "", &token)
 	if err != nil {
 		return nil, err
@@ -99,7 +99,7 @@ func featureLayer(manifest *ociManifest) (ociDescriptor, error) {
 
 // fetchManifest retrieves and decodes the manifest (or index) at reference, a tag or digest.
 func (f *Fetcher) fetchManifest(ctx context.Context, ref Ref, reference string, token *string) (*ociManifest, error) {
-	manifestURL := fmt.Sprintf("%s://%s/v2/%s/manifests/%s", registryScheme(ref.Registry), ref.Registry, ref.Repository, reference)
+	manifestURL := fmt.Sprintf("%s://%s/v2/%s/manifests/%s", f.registryScheme(), ref.Registry, ref.Repository, reference)
 	resp, err := f.registryGet(ctx, ref, manifestURL, manifestAccept, token)
 	if err != nil {
 		return nil, err
@@ -131,7 +131,7 @@ func (f *Fetcher) registryGet(ctx context.Context, ref Ref, url, accept string, 
 		if *token != "" {
 			req.Header.Set("Authorization", "Bearer "+*token)
 		}
-		return f.client.Do(req)
+		return f.client.do(req, requestKindRegistry)
 	}
 
 	resp, err := do()
@@ -185,7 +185,7 @@ func (f *Fetcher) fetchToken(ctx context.Context, ref Ref, challenge string) (st
 	if err != nil {
 		return "", err
 	}
-	resp, err := f.client.Do(req)
+	resp, err := f.client.do(req, requestKindRegistry)
 	if err != nil {
 		return "", err
 	}
@@ -226,14 +226,11 @@ func parseChallengeParams(s string) map[string]string {
 	return params
 }
 
-// registryScheme returns the URL scheme for reaching a registry host: plain HTTP for loopback
-// hosts (local test registries), HTTPS otherwise.
-func registryScheme(host string) string {
-	h := host
-	if colon := strings.LastIndex(h, ":"); colon >= 0 {
-		h = h[:colon]
-	}
-	if h == "localhost" || h == "127.0.0.1" || h == "::1" || h == "[::1]" {
+// registryScheme returns the URL scheme to use for reaching a registry: HTTP if f was constructed
+// with WithInsecureRegistry, HTTPS otherwise. externalClient.do enforces this independently, so a
+// mismatch here only costs a wasted request rather than an insecure one.
+func (f *Fetcher) registryScheme() string {
+	if f.client.allowInsecureRegistry {
 		return "http"
 	}
 	return "https"

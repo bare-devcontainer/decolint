@@ -18,7 +18,7 @@ func (f *Fetcher) fetchTarball(ctx context.Context, url string) (*Metadata, erro
 	if err != nil {
 		return nil, err
 	}
-	resp, err := f.client.Do(req)
+	resp, err := f.client.do(req, requestKindTarball)
 	if err != nil {
 		return nil, err
 	}

@@ -160,11 +160,20 @@ func archiveWithMetadata(t *testing.T, src string, compress bool) []byte {
 	return gzBuf.Bytes()
 }
 
+// fetcherWithClient returns a Fetcher configured with opts whose HTTP requests are sent through
+// client instead of a default one, so a test can point it at an httptest server (in particular, one
+// whose TLS certificate client is already configured to trust).
+func fetcherWithClient(client *http.Client, opts ...FetcherOption) *Fetcher {
+	f := NewFetcher(opts...)
+	f.client.http = client
+	return f
+}
+
 func TestFetchTarball(t *testing.T) {
 	t.Parallel()
 
 	archive := archiveWithMetadata(t, `{"id": "tarred", "version": "2.0.0"}`, true)
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/feature.tgz" {
 			http.NotFound(w, r)
 			return
@@ -173,7 +182,7 @@ func TestFetchTarball(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	md, err := NewFetcher().Fetch(t.Context(), srv.URL+"/feature.tgz", nil, "")
+	md, err := fetcherWithClient(srv.Client()).Fetch(t.Context(), srv.URL+"/feature.tgz", nil, "")
 	if err != nil {
 		t.Fatalf("Fetch: %v", err)
 	}
@@ -185,11 +194,30 @@ func TestFetchTarball(t *testing.T) {
 func TestFetchTarballNotFound(t *testing.T) {
 	t.Parallel()
 
-	srv := httptest.NewServer(http.NotFoundHandler())
+	srv := httptest.NewTLSServer(http.NotFoundHandler())
 	defer srv.Close()
 
-	if _, err := NewFetcher().Fetch(t.Context(), srv.URL+"/feature.tgz", nil, ""); err == nil {
+	if _, err := fetcherWithClient(srv.Client()).Fetch(t.Context(), srv.URL+"/feature.tgz", nil, ""); err == nil {
 		t.Error("Fetch of a missing tarball: got nil error")
+	}
+}
+
+func TestFetchTarballRejectsHTTP(t *testing.T) {
+	t.Parallel()
+
+	srv := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
+		t.Error("server was contacted despite the client refusing the request")
+	}))
+	defer srv.Close()
+
+	// WithInsecureRegistry only ever affects OCI registry requests, so an HTTP tarball reference is
+	// rejected regardless.
+	_, err := fetcherWithClient(srv.Client(), WithInsecureRegistry()).Fetch(t.Context(), srv.URL+"/feature.tgz", nil, "")
+	if err == nil {
+		t.Fatal("Fetch of an HTTP tarball: got nil error")
+	}
+	if !strings.Contains(err.Error(), "HTTPS") {
+		t.Errorf("err = %q, want it to mention HTTPS", err)
 	}
 }
 
@@ -206,7 +234,9 @@ type fakeRegistry struct {
 	token          string
 }
 
-func (fr *fakeRegistry) handler(registryHost func() string) http.Handler {
+// handler returns fr's http.Handler. scheme (http or https) is used to build the realm URL of the
+// Www-Authenticate challenge, which must match the scheme the server is actually reached at.
+func (fr *fakeRegistry) handler(scheme string, registryHost func() string) http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/token", func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Query().Get("scope") != "repository:"+fr.repository+":pull" {
@@ -220,8 +250,8 @@ func (fr *fakeRegistry) handler(registryHost func() string) http.Handler {
 			return true
 		}
 		w.Header().Set("Www-Authenticate", fmt.Sprintf(
-			`Bearer realm="http://%s/token",service="registry",scope="repository:%s:pull"`,
-			registryHost(), fr.repository))
+			`Bearer realm="%s://%s/token",service="registry",scope="repository:%s:pull"`,
+			scheme, registryHost(), fr.repository))
 		w.WriteHeader(http.StatusUnauthorized)
 		return false
 	}
@@ -249,17 +279,29 @@ func (fr *fakeRegistry) handler(registryHost func() string) http.Handler {
 	return mux
 }
 
-// startRegistry serves fr on a loopback address and returns the registry host (host:port).
+// startRegistry serves fr over plain HTTP on a loopback address and returns the registry host
+// (host:port), for tests exercising the WithInsecureRegistry option.
 func startRegistry(t *testing.T, fr *fakeRegistry) string {
 	t.Helper()
 	var host string
-	srv := httptest.NewServer(fr.handler(func() string { return host }))
+	srv := httptest.NewServer(fr.handler("http", func() string { return host }))
 	t.Cleanup(srv.Close)
 	host = strings.TrimPrefix(srv.URL, "http://")
 	return host
 }
 
-func TestFetchOCI(t *testing.T) {
+// startSecureRegistry serves fr over HTTPS on a loopback address and returns the registry host
+// (host:port) and an http.Client configured to trust its certificate.
+func startSecureRegistry(t *testing.T, fr *fakeRegistry) (string, *http.Client) {
+	t.Helper()
+	var host string
+	srv := httptest.NewTLSServer(fr.handler("https", func() string { return host }))
+	t.Cleanup(srv.Close)
+	host = strings.TrimPrefix(srv.URL, "https://")
+	return host, srv.Client()
+}
+
+func TestFetchOCIRequiresOptInForHTTP(t *testing.T) {
 	t.Parallel()
 
 	fr := &fakeRegistry{
@@ -269,8 +311,43 @@ func TestFetchOCI(t *testing.T) {
 		token:      "anonymous-token",
 	}
 	host := startRegistry(t, fr)
+	ref := host + "/devcontainers/features/node:1"
 
-	md, err := NewFetcher().Fetch(t.Context(), host+"/devcontainers/features/node:1", nil, "")
+	t.Run("rejected by default", func(t *testing.T) {
+		t.Parallel()
+		_, err := NewFetcher().Fetch(t.Context(), ref, nil, "")
+		if err == nil {
+			t.Fatal("Fetch of an HTTP registry without the option: got nil error")
+		}
+		if !strings.Contains(err.Error(), "HTTPS") {
+			t.Errorf("err = %q, want it to mention HTTPS", err)
+		}
+	})
+
+	t.Run("allowed with WithInsecureRegistry", func(t *testing.T) {
+		t.Parallel()
+		md, err := NewFetcher(WithInsecureRegistry()).Fetch(t.Context(), ref, nil, "")
+		if err != nil {
+			t.Fatalf("Fetch: %v", err)
+		}
+		if md.ID != "node" || md.Version != "1.2.3" {
+			t.Errorf("got ID %q version %q, want node 1.2.3", md.ID, md.Version)
+		}
+	})
+}
+
+func TestFetchOCIHTTPSByDefault(t *testing.T) {
+	t.Parallel()
+
+	fr := &fakeRegistry{
+		repository: "devcontainers/features/node",
+		blob:       archiveWithMetadata(t, `{"id": "node", "version": "1.2.3"}`, false),
+		blobDigest: "sha256:feedface",
+		token:      "anonymous-token",
+	}
+	host, client := startSecureRegistry(t, fr)
+
+	md, err := fetcherWithClient(client).Fetch(t.Context(), host+"/devcontainers/features/node:1", nil, "")
 	if err != nil {
 		t.Fatalf("Fetch: %v", err)
 	}
@@ -292,7 +369,7 @@ func TestFetchOCIThroughIndex(t *testing.T) {
 	}
 	host := startRegistry(t, fr)
 
-	md, err := NewFetcher().Fetch(t.Context(), host+"/devcontainers/features/go:1", nil, "")
+	md, err := NewFetcher(WithInsecureRegistry()).Fetch(t.Context(), host+"/devcontainers/features/go:1", nil, "")
 	if err != nil {
 		t.Fatalf("Fetch: %v", err)
 	}
@@ -312,7 +389,7 @@ func TestFetchOCIUnknownRepository(t *testing.T) {
 	}
 	host := startRegistry(t, fr)
 
-	if _, err := NewFetcher().Fetch(t.Context(), host+"/devcontainers/features/nope:1", nil, ""); err == nil {
+	if _, err := NewFetcher(WithInsecureRegistry()).Fetch(t.Context(), host+"/devcontainers/features/nope:1", nil, ""); err == nil {
 		t.Error("Fetch of an unknown repository: got nil error")
 	}
 }

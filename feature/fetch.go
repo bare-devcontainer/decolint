@@ -13,9 +13,9 @@ import (
 // Size limits for downloaded content, so a misbehaving registry or tarball cannot exhaust memory.
 const (
 	// maxArchiveBytes caps a downloaded Feature archive (an OCI layer blob or a tarball).
-	maxArchiveBytes = 64 << 20
+	maxArchiveBytes = 64 << 20 // 64 MB
 	// maxMetadataBytes caps a devcontainer-feature.json, whether read from disk or from an archive.
-	maxMetadataBytes = 4 << 20
+	maxMetadataBytes = 4 << 20 // 4 MB
 )
 
 // metadataFileName is the file declaring a Feature, located at the root of the Feature's directory

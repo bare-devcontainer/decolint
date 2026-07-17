@@ -4,13 +4,20 @@ import (
 	"archive/tar"
 	"bytes"
 	"compress/gzip"
-	"fmt"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/olareg/olareg"
+	oConfig "github.com/olareg/olareg/config"
+	"github.com/opencontainers/go-digest"
+	specs "github.com/opencontainers/image-spec/specs-go"
+	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
+	"oras.land/oras-go/v2/registry/remote"
 )
 
 // writeLocalFeature creates dir/<name>/devcontainer-feature.json with the given content and
@@ -168,82 +175,101 @@ func TestFetchTarballNotFound(t *testing.T) {
 	}
 }
 
-// fakeRegistry serves a minimal OCI distribution API for a single feature artifact, requiring the
-// anonymous bearer token flow.
-type fakeRegistry struct {
-	repository string
-	blob       []byte
-	blobDigest string
-	// useIndex makes the tag reference resolve to an image index pointing at the manifest.
-	useIndex bool
-	// manifestDigest is the digest the index points at.
-	manifestDigest string
-	token          string
-}
-
-func (fr *fakeRegistry) handler(registryHost func() string) http.Handler {
-	mux := http.NewServeMux()
-	mux.HandleFunc("/token", func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Query().Get("scope") != "repository:"+fr.repository+":pull" {
-			http.Error(w, "bad scope", http.StatusBadRequest)
-			return
-		}
-		_, _ = fmt.Fprintf(w, `{"token": %q}`, fr.token)
-	})
-	authorized := func(w http.ResponseWriter, r *http.Request) bool {
-		if r.Header.Get("Authorization") == "Bearer "+fr.token {
-			return true
-		}
-		w.Header().Set("Www-Authenticate", fmt.Sprintf(
-			`Bearer realm="http://%s/token",service="registry",scope="repository:%s:pull"`,
-			registryHost(), fr.repository))
-		w.WriteHeader(http.StatusUnauthorized)
-		return false
-	}
-	mux.HandleFunc("/v2/"+fr.repository+"/manifests/", func(w http.ResponseWriter, r *http.Request) {
-		if !authorized(w, r) {
-			return
-		}
-		reference := strings.TrimPrefix(r.URL.Path, "/v2/"+fr.repository+"/manifests/")
-		if fr.useIndex && reference != fr.manifestDigest {
-			w.Header().Set("Content-Type", ociIndexMediaType)
-			_, _ = fmt.Fprintf(w, `{"mediaType": %q, "manifests": [{"mediaType": %q, "digest": %q}]}`,
-				ociIndexMediaType, ociManifestMediaType, fr.manifestDigest)
-			return
-		}
-		w.Header().Set("Content-Type", ociManifestMediaType)
-		_, _ = fmt.Fprintf(w, `{"mediaType": %q, "layers": [{"mediaType": %q, "digest": %q}]}`,
-			ociManifestMediaType, featureLayerMediaType, fr.blobDigest)
-	})
-	mux.HandleFunc("/v2/"+fr.repository+"/blobs/"+fr.blobDigest, func(w http.ResponseWriter, r *http.Request) {
-		if !authorized(w, r) {
-			return
-		}
-		_, _ = w.Write(fr.blob)
-	})
-	return mux
-}
-
-// startRegistry serves fr on a loopback address and returns the registry host (host:port).
-func startRegistry(t *testing.T, fr *fakeRegistry) string {
+// startOCIRegistry starts an ephemeral, in-memory OCI registry on a loopback address and returns
+// its host (host:port).
+func startOCIRegistry(t *testing.T) string {
 	t.Helper()
-	var host string
-	srv := httptest.NewServer(fr.handler(func() string { return host }))
-	t.Cleanup(srv.Close)
-	host = strings.TrimPrefix(srv.URL, "http://")
-	return host
+	handler := olareg.New(oConfig.Config{
+		Storage: oConfig.ConfigStorage{StoreType: oConfig.StoreMem},
+	})
+	srv := httptest.NewServer(handler)
+	t.Cleanup(func() {
+		srv.Close()
+		_ = handler.Close()
+	})
+	return strings.TrimPrefix(srv.URL, "http://")
+}
+
+// pushOCIFeature publishes archive as a Feature artifact at host/repo:tag. When asIndex is true the
+// tag resolves to an image index that points at the manifest, exercising the index-following path.
+func pushOCIFeature(t *testing.T, host, repoName, tag string, archive []byte, asIndex bool) {
+	t.Helper()
+	ctx := t.Context()
+	repo, err := remote.NewRepository(host + "/" + repoName)
+	if err != nil {
+		t.Fatal(err)
+	}
+	repo.PlainHTTP = true
+
+	push := func(mediaType string, data []byte) ocispec.Descriptor {
+		desc := ocispec.Descriptor{
+			MediaType: mediaType,
+			Digest:    digest.FromBytes(data),
+			Size:      int64(len(data)),
+		}
+		if err := repo.Push(ctx, desc, bytes.NewReader(data)); err != nil {
+			t.Fatal(err)
+		}
+		return desc
+	}
+
+	configDesc := push("application/vnd.devcontainers", []byte("{}"))
+	layerDesc := push(featureLayerMediaType, archive)
+
+	manBytes := mustMarshal(t, ocispec.Manifest{
+		Versioned: specs.Versioned{SchemaVersion: 2},
+		MediaType: ocispec.MediaTypeImageManifest,
+		Config:    configDesc,
+		Layers:    []ocispec.Descriptor{layerDesc},
+	})
+	manDesc := ocispec.Descriptor{
+		MediaType: ocispec.MediaTypeImageManifest,
+		Digest:    digest.FromBytes(manBytes),
+		Size:      int64(len(manBytes)),
+	}
+
+	if !asIndex {
+		if err := repo.PushReference(ctx, manDesc, bytes.NewReader(manBytes), tag); err != nil {
+			t.Fatal(err)
+		}
+		return
+	}
+
+	// Store the manifest by digest and publish an index pointing at it under the tag.
+	if err := repo.Push(ctx, manDesc, bytes.NewReader(manBytes)); err != nil {
+		t.Fatal(err)
+	}
+	indexBytes := mustMarshal(t, ocispec.Index{
+		Versioned: specs.Versioned{SchemaVersion: 2},
+		MediaType: ocispec.MediaTypeImageIndex,
+		Manifests: []ocispec.Descriptor{manDesc},
+	})
+	indexDesc := ocispec.Descriptor{
+		MediaType: ocispec.MediaTypeImageIndex,
+		Digest:    digest.FromBytes(indexBytes),
+		Size:      int64(len(indexBytes)),
+	}
+	if err := repo.PushReference(ctx, indexDesc, bytes.NewReader(indexBytes), tag); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// mustMarshal JSON-encodes v, failing the test on error.
+func mustMarshal(t *testing.T, v any) []byte {
+	t.Helper()
+	b, err := json.Marshal(v)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return b
 }
 
 func TestFetchOCI(t *testing.T) {
 	t.Parallel()
 
-	fr := &fakeRegistry{
-		repository: "devcontainers/features/node",
-		blob:       archiveWithMetadata(t, `{"id": "node", "version": "1.2.3"}`, false),
-		blobDigest: "sha256:feedface",
-		token:      "anonymous-token",
-	}
-	host := startRegistry(t, fr)
+	host := startOCIRegistry(t)
+	pushOCIFeature(t, host, "devcontainers/features/node", "1",
+		archiveWithMetadata(t, `{"id": "node", "version": "1.2.3"}`, false), false)
 
 	md, err := NewFetcher().Fetch(t.Context(), host+"/devcontainers/features/node:1", "")
 	if err != nil {
@@ -257,15 +283,9 @@ func TestFetchOCI(t *testing.T) {
 func TestFetchOCIThroughIndex(t *testing.T) {
 	t.Parallel()
 
-	fr := &fakeRegistry{
-		repository:     "devcontainers/features/go",
-		blob:           archiveWithMetadata(t, `{"id": "go"}`, false),
-		blobDigest:     "sha256:cafebabe",
-		useIndex:       true,
-		manifestDigest: "sha256:deadbeef",
-		token:          "anonymous-token",
-	}
-	host := startRegistry(t, fr)
+	host := startOCIRegistry(t)
+	pushOCIFeature(t, host, "devcontainers/features/go", "1",
+		archiveWithMetadata(t, `{"id": "go"}`, false), true)
 
 	md, err := NewFetcher().Fetch(t.Context(), host+"/devcontainers/features/go:1", "")
 	if err != nil {
@@ -279,13 +299,9 @@ func TestFetchOCIThroughIndex(t *testing.T) {
 func TestFetchOCIUnknownRepository(t *testing.T) {
 	t.Parallel()
 
-	fr := &fakeRegistry{
-		repository: "devcontainers/features/node",
-		blob:       archiveWithMetadata(t, `{"id": "node"}`, false),
-		blobDigest: "sha256:feedface",
-		token:      "anonymous-token",
-	}
-	host := startRegistry(t, fr)
+	host := startOCIRegistry(t)
+	pushOCIFeature(t, host, "devcontainers/features/node", "1",
+		archiveWithMetadata(t, `{"id": "node"}`, false), false)
 
 	if _, err := NewFetcher().Fetch(t.Context(), host+"/devcontainers/features/nope:1", ""); err == nil {
 		t.Error("Fetch of an unknown repository: got nil error")

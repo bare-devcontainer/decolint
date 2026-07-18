@@ -3,9 +3,6 @@ package main
 import (
 	"bytes"
 	"encoding/json/v2"
-	"fmt"
-	"net/http"
-	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -629,42 +626,6 @@ func TestRunMergeFeatures(t *testing.T) {
 		}
 		if !strings.Contains(stderr.String(), "../sibling-feature") {
 			t.Errorf("stderr = %q, want it to mention the unresolvable feature", stderr.String())
-		}
-	})
-}
-
-func TestRunMergeFeaturesInsecureRegistry(t *testing.T) {
-	t.Parallel()
-
-	// The fake registry 404s on everything; the tests only care whether it gets contacted at all.
-	srv := httptest.NewServer(http.NotFoundHandler())
-	t.Cleanup(srv.Close)
-	host := strings.TrimPrefix(srv.URL, "http://")
-	dir := writeDevcontainer(t, fmt.Sprintf(`{"image": "ubuntu:24.04", "features": {"%s/some/feature:1": {}}}`, host))
-
-	t.Run("HTTP registry access is rejected by default", func(t *testing.T) {
-		t.Parallel()
-		var stdout, stderr bytes.Buffer
-		exitCode := run(t.Context(), []string{"-merge-features", dir}, &stdout, &stderr)
-		if exitCode != 2 {
-			t.Errorf("exit code = %d, want 2", exitCode)
-		}
-		if !strings.Contains(stderr.String(), "HTTPS") {
-			t.Errorf("stderr = %q, want it to mention HTTPS", stderr.String())
-		}
-	})
-
-	t.Run("-insecure-registry allows the HTTP request to be attempted", func(t *testing.T) {
-		t.Parallel()
-		var stdout, stderr bytes.Buffer
-		exitCode := run(t.Context(), []string{"-merge-features", "-insecure-registry", dir}, &stdout, &stderr)
-		if exitCode != 2 {
-			t.Errorf("exit code = %d, want 2", exitCode)
-		}
-		// The fake registry was actually reached (and 404s), rather than the request being refused
-		// outright for using HTTP.
-		if strings.Contains(stderr.String(), "HTTPS") {
-			t.Errorf("stderr = %q, want it to not mention HTTPS", stderr.String())
 		}
 	})
 }

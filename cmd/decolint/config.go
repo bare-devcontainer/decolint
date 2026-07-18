@@ -20,10 +20,6 @@ type Config struct {
 	// MergeFeatures, when true, fetches the Features referenced in each devcontainer.json and
 	// lints the merged (effective) configuration. The -merge-features flag can enable it as well.
 	MergeFeatures bool `json:"mergeFeatures"`
-	// InsecureRegistry, when true, allows fetching a Feature from an OCI registry over plain HTTP
-	// instead of HTTPS; it has no effect on Feature tarball requests, which always require HTTPS.
-	// The -insecure-registry flag can enable it as well.
-	InsecureRegistry bool `json:"insecureRegistry"`
 	// Categories maps a category name to the severity every rule in that category should be
 	// overridden to. Per-rule entries in Rules take precedence.
 	Categories map[string]linter.Severity `json:"categories"`
@@ -33,9 +29,9 @@ type Config struct {
 
 // MarshalJSONTo encodes cfg with its categories and rules written in sorted key order, for use
 // with encoding/json/v2. Map iteration order is otherwise unspecified, so without this, marshaling
-// the same Config twice could produce differently ordered output. The "platforms",
-// "mergeFeatures", "insecureRegistry", and "categories" members are omitted when empty or false, so
-// generated configs (see initConfigFile) stay minimal.
+// the same Config twice could produce differently ordered output. The "platforms", "mergeFeatures",
+// and "categories" members are omitted when empty or false, so generated configs (see
+// initConfigFile) stay minimal.
 func (cfg Config) MarshalJSONTo(enc *jsontext.Encoder) error {
 	if err := enc.WriteToken(jsontext.BeginObject); err != nil {
 		return fmt.Errorf("encode config: %w", err)
@@ -50,18 +46,10 @@ func (cfg Config) MarshalJSONTo(enc *jsontext.Encoder) error {
 	}
 	if cfg.MergeFeatures {
 		if err := enc.WriteToken(jsontext.String("mergeFeatures")); err != nil {
-			return err
+			return fmt.Errorf("encode config: %w", err)
 		}
 		if err := enc.WriteToken(jsontext.Bool(true)); err != nil {
-			return err
-		}
-	}
-	if cfg.InsecureRegistry {
-		if err := enc.WriteToken(jsontext.String("insecureRegistry")); err != nil {
-			return err
-		}
-		if err := enc.WriteToken(jsontext.Bool(true)); err != nil {
-			return err
+			return fmt.Errorf("encode config: %w", err)
 		}
 	}
 	if len(cfg.Categories) > 0 {
@@ -104,19 +92,15 @@ func writeSeverityMap(enc *jsontext.Encoder, m map[string]linter.Severity) error
 }
 
 // mergeConfig returns cfg with any CLI-provided opts fields applied as overrides. Platforms
-// (-platform), MergeFeatures (-merge-features), and InsecureRegistry (-insecure-registry), when
-// explicitly given, override the config file's value in either direction (e.g.
-// "-merge-features=false" disables merging even if the config file sets "mergeFeatures": true);
-// Categories and Rules are config-file only.
+// (-platform) and MergeFeatures (-merge-features), when explicitly given, override the config
+// file's value in either direction (e.g. "-merge-features=false" disables merging even if the
+// config file sets "mergeFeatures": true); Categories and Rules are config-file only.
 func mergeConfig(opts Options, cfg Config) Config {
 	if len(opts.Platforms) > 0 {
 		cfg.Platforms = opts.Platforms
 	}
 	if opts.mergeFeaturesSet {
 		cfg.MergeFeatures = opts.MergeFeatures
-	}
-	if opts.insecureRegistrySet {
-		cfg.InsecureRegistry = opts.InsecureRegistry
 	}
 	return cfg
 }

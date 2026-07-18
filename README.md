@@ -84,7 +84,6 @@ list.
 | `-deny-warnings` | also exit non-zero on `warn`-severity findings (see [Exit codes](#exit-codes)) |
 | `-config` | path to a config file overriding rule and category severities (see [Config file](#config-file)) |
 | `-merge-features` | fetch the Features referenced in `features` and lint the merged configuration (see [Merging Features](#merging-features)) |
-| `-insecure-registry` | allow fetching a Feature from an OCI registry over plain HTTP (see [Merging Features](#merging-features)) |
 | `-rules` | print the available rules |
 | `-init` | write a new `.decolint.jsonc` listing every rule at its default severity (see [Config file](#config-file)) |
 
@@ -128,12 +127,7 @@ decolint -merge-features -config .decolint.jsonc
   pulled from the registry with anonymous access, direct HTTP(S)
   tarball URIs are downloaded, and relative paths (e.g.
   `./my-feature`) are read from disk (see [Path
-  handling](#path-handling)). Every request to an external host
-  requires HTTPS by default; pass `-insecure-registry` (or set
-  `"insecureRegistry": true` in the config file) to allow an OCI
-  registry request over plain HTTP instead — e.g. to reach a registry
-  during local development. This has no effect on tarball requests,
-  which always require HTTPS.
+  handling](#path-handling)).
 - Features referenced by a Feature's `dependsOn` are resolved
   recursively and contribute their properties as well; installation
   order follows `dependsOn`, `installsAfter`, and
@@ -211,16 +205,13 @@ individual rule's severity and takes precedence over its category.
 `platforms` lists the [target platforms](#target-platforms) whose
 rules run in addition to platform-agnostic ones. `mergeFeatures` set
 to `true` enables [merging Features](#merging-features), same as the
-`-merge-features` flag; `insecureRegistry` set to `true` allows an
-OCI registry request to use plain HTTP, same as the
-`-insecure-registry` flag.
+`-merge-features` flag.
 
 For a config file member with a corresponding flag (`platforms` /
-`-platform`, `mergeFeatures` / `-merge-features`, `insecureRegistry` /
-`-insecure-registry`), the flag, when given explicitly, takes
-precedence over the config file in either direction — e.g.
-`-merge-features=false` disables merging even if the config file sets
-`"mergeFeatures": true`.
+`-platform`, `mergeFeatures` / `-merge-features`), the flag, when
+given explicitly, takes precedence over the config file in either
+direction — e.g. `-merge-features=false` disables merging even if the
+config file sets `"mergeFeatures": true`.
 
 For the strictest configuration, enable every category:
 

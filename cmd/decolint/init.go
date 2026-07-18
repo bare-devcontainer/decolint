@@ -40,9 +40,6 @@ func initConfigFile(output io.Writer) error {
 // "mergeFeatures", when true, fetches the Features referenced in each
 // devcontainer.json and lints the merged (effective) configuration, e.g.:
 //   "mergeFeatures": true
-// "insecureRegistry", when true, allows fetching a Feature from an OCI
-// registry over plain HTTP instead of HTTPS, e.g.:
-//   "insecureRegistry": true
 `)
 	if err := json.MarshalWrite(&buf, cfg, jsontext.Multiline(true)); err != nil {
 		return fmt.Errorf("marshal %s: %w", name, err)

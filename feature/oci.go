@@ -2,236 +2,126 @@ package feature
 
 import (
 	"context"
-	"encoding/json/v2"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
-	"net/url"
 	"strings"
+
+	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
+	"oras.land/oras-go/v2/content"
+	"oras.land/oras-go/v2/registry/remote"
+	"oras.land/oras-go/v2/registry/remote/auth"
 )
 
-// Media types of the OCI artifacts a published Feature consists of. Docker registries may rewrite
-// the manifest media types, so both the OCI and Docker variants are accepted.
-const (
-	ociManifestMediaType    = "application/vnd.oci.image.manifest.v1+json"
-	ociIndexMediaType       = "application/vnd.oci.image.index.v1+json"
-	dockerManifestMediaType = "application/vnd.docker.distribution.manifest.v2+json"
-	dockerListMediaType     = "application/vnd.docker.distribution.manifest.list.v2+json"
-	// featureLayerMediaType is the media type of the single tar layer a Feature is packaged as, per
-	// the Features distribution specification.
-	featureLayerMediaType = "application/vnd.devcontainers.layer.v1+tar"
-)
+// featureLayerMediaType is the media type of the single tar layer a Feature is packaged as, per the
+// Features distribution specification.
+const featureLayerMediaType = "application/vnd.devcontainers.layer.v1+tar"
 
-// manifestAccept is the Accept header for manifest requests.
-var manifestAccept = strings.Join([]string{
-	ociManifestMediaType,
-	ociIndexMediaType,
-	dockerManifestMediaType,
-	dockerListMediaType,
-}, ", ")
+// dockerManifestListMediaType is the Docker (schema 2) equivalent of an OCI image index; ghcr.io
+// serves Features behind either media type.
+const dockerManifestListMediaType = "application/vnd.docker.distribution.manifest.list.v2+json"
 
-// ociDescriptor is a content descriptor within a manifest or index.
-type ociDescriptor struct {
-	MediaType string `json:"mediaType"`
-	Digest    string `json:"digest"`
-}
-
-// ociManifest is the subset of an OCI image manifest or index needed to locate the Feature layer.
-// A manifest carries Layers; an index carries Manifests.
-type ociManifest struct {
-	Layers    []ociDescriptor `json:"layers"`
-	Manifests []ociDescriptor `json:"manifests"`
-}
-
-// fetchOCI retrieves a Feature distributed as an OCI artifact, using anonymous pull access.
-func (f *Fetcher) fetchOCI(ctx context.Context, ref Ref) (*Metadata, error) {
-	reference := ref.Tag
-	if ref.Digest != "" {
-		reference = ref.Digest
+// fetchOCI retrieves a Feature distributed as an OCI artifact, using anonymous pull access. The
+// registry protocol (manifest resolution, the token handshake, blob download, and digest
+// verification) is handled by oras-go.
+func (f *Fetcher) fetchOCI(ctx context.Context, feat Ref) (*Metadata, error) {
+	repo, err := remote.NewRepository(feat.Registry + "/" + feat.Repository)
+	if err != nil {
+		return nil, fmt.Errorf("new repository %s/%s: %w", feat.Registry, feat.Repository, err)
+	}
+	// Loopback registries (local test registries) are reached over plain HTTP; all others use HTTPS.
+	repo.PlainHTTP = isLoopback(feat.Registry)
+	repo.Client = &auth.Client{
+		Client: f.client,
+		Cache:  auth.NewCache(),
+		Header: http.Header{"User-Agent": []string{"decolint"}},
 	}
 
-	// The token, obtained lazily on the first 401 challenge, is shared by the subsequent requests
-	// against the same repository.
-	var token string
-	manifest, err := f.fetchManifest(ctx, ref, reference, &token)
+	target := feat.Tag
+	if feat.Digest != "" {
+		target = feat.Digest
+	}
+	desc, err := repo.Resolve(ctx, target)
+	if err != nil {
+		return nil, fmt.Errorf("resolve %s: %w", target, err)
+	}
+
+	layer, err := featureLayer(ctx, repo, desc)
 	if err != nil {
 		return nil, err
 	}
-	if len(manifest.Manifests) > 0 {
-		// The reference resolved to an index; Features are single-platform, so follow its first
-		// entry.
-		manifest, err = f.fetchManifest(ctx, ref, manifest.Manifests[0].Digest, &token)
-		if err != nil {
-			return nil, err
-		}
-	}
 
-	layer, err := featureLayer(manifest)
+	blob, err := repo.Fetch(ctx, layer)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("fetch layer %s: %w", layer.Digest, err)
 	}
-	blobURL := fmt.Sprintf("%s://%s/v2/%s/blobs/%s", f.registryScheme(), ref.Registry, ref.Repository, layer.Digest)
-	resp, err := f.registryGet(ctx, ref, blobURL, "", &token)
-	if err != nil {
-		return nil, err
-	}
-	defer func() { _ = resp.Body.Close() }()
-	src, err := metadataFromArchive(io.LimitReader(resp.Body, maxArchiveBytes))
+	defer func() { _ = blob.Close() }()
+	src, err := metadataFromArchive(io.LimitReader(blob, maxArchiveBytes))
 	if err != nil {
 		return nil, fmt.Errorf("read layer %s: %w", layer.Digest, err)
 	}
 	return parseMetadata(src)
 }
 
-// featureLayer picks the layer carrying the Feature archive out of manifest: the layer with the
-// Features distribution media type, or the sole layer if none declares it.
-func featureLayer(manifest *ociManifest) (ociDescriptor, error) {
-	for _, layer := range manifest.Layers {
+// featureLayer resolves desc to an image manifest and returns the descriptor of the layer carrying
+// the Feature archive: the layer with the Features distribution media type, or the sole layer if
+// none declares it.
+func featureLayer(ctx context.Context, repo *remote.Repository, desc ocispec.Descriptor) (ocispec.Descriptor, error) {
+	man, err := imageManifest(ctx, repo, desc)
+	if err != nil {
+		return ocispec.Descriptor{}, err
+	}
+	for _, layer := range man.Layers {
 		if layer.MediaType == featureLayerMediaType {
 			return layer, nil
 		}
 	}
-	if len(manifest.Layers) == 1 {
-		return manifest.Layers[0], nil
+	if len(man.Layers) == 1 {
+		return man.Layers[0], nil
 	}
-	return ociDescriptor{}, fmt.Errorf("manifest has no %s layer", featureLayerMediaType)
+	return ocispec.Descriptor{}, fmt.Errorf("manifest %s has no %s layer", desc.Digest, featureLayerMediaType)
 }
 
-// fetchManifest retrieves and decodes the manifest (or index) at reference, a tag or digest.
-func (f *Fetcher) fetchManifest(ctx context.Context, ref Ref, reference string, token *string) (*ociManifest, error) {
-	manifestURL := fmt.Sprintf("%s://%s/v2/%s/manifests/%s", f.registryScheme(), ref.Registry, ref.Repository, reference)
-	resp, err := f.registryGet(ctx, ref, manifestURL, manifestAccept, token)
-	if err != nil {
-		return nil, err
-	}
-	defer func() { _ = resp.Body.Close() }()
-	data, err := io.ReadAll(io.LimitReader(resp.Body, maxMetadataBytes))
-	if err != nil {
-		return nil, err
-	}
-	var manifest ociManifest
-	if err := json.Unmarshal(data, &manifest); err != nil {
-		return nil, fmt.Errorf("decode manifest %s: %w", reference, err)
-	}
-	return &manifest, nil
-}
-
-// registryGet performs an authenticated GET against a registry endpoint. On a 401 challenge it
-// obtains an anonymous bearer token per the OCI distribution auth flow, stores it in *token for
-// reuse, and retries once.
-func (f *Fetcher) registryGet(ctx context.Context, ref Ref, url, accept string, token *string) (*http.Response, error) {
-	do := func() (*http.Response, error) {
-		req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+// imageManifest fetches and parses the image manifest for desc. When desc is an image index (Features
+// are single-platform), it follows the first entry.
+func imageManifest(ctx context.Context, repo *remote.Repository, desc ocispec.Descriptor) (ocispec.Manifest, error) {
+	if desc.MediaType == ocispec.MediaTypeImageIndex || desc.MediaType == dockerManifestListMediaType {
+		raw, err := content.FetchAll(ctx, repo, desc)
 		if err != nil {
-			return nil, err
+			return ocispec.Manifest{}, fmt.Errorf("fetch index %s: %w", desc.Digest, err)
 		}
-		if accept != "" {
-			req.Header.Set("Accept", accept)
+		var index ocispec.Index
+		if err := json.Unmarshal(raw, &index); err != nil {
+			return ocispec.Manifest{}, fmt.Errorf("decode index %s: %w", desc.Digest, err)
 		}
-		if *token != "" {
-			req.Header.Set("Authorization", "Bearer "+*token)
+		if len(index.Manifests) == 0 {
+			return ocispec.Manifest{}, fmt.Errorf("index %s has no manifests", desc.Digest)
 		}
-		return f.client.do(req, requestKindRegistry)
+		desc = index.Manifests[0]
 	}
 
-	resp, err := do()
+	raw, err := content.FetchAll(ctx, repo, desc)
 	if err != nil {
-		return nil, err
+		return ocispec.Manifest{}, fmt.Errorf("fetch manifest %s: %w", desc.Digest, err)
 	}
-	if resp.StatusCode == http.StatusUnauthorized && *token == "" {
-		challenge := resp.Header.Get("Www-Authenticate")
-		_ = resp.Body.Close()
-		*token, err = f.fetchToken(ctx, ref, challenge)
-		if err != nil {
-			return nil, err
-		}
-		resp, err = do()
-		if err != nil {
-			return nil, err
-		}
+	var man ocispec.Manifest
+	if err := json.Unmarshal(raw, &man); err != nil {
+		return ocispec.Manifest{}, fmt.Errorf("decode manifest %s: %w", desc.Digest, err)
 	}
-	if resp.StatusCode != http.StatusOK {
-		status := resp.Status
-		_ = resp.Body.Close()
-		return nil, fmt.Errorf("GET %s: %s", url, status)
-	}
-	return resp, nil
+	return man, nil
 }
 
-// fetchToken obtains an anonymous pull token from the token endpoint named by a Bearer challenge
-// (RFC 6750): `Bearer realm="...",service="...",scope="..."`.
-func (f *Fetcher) fetchToken(ctx context.Context, ref Ref, challenge string) (string, error) {
-	scheme, rest, ok := strings.Cut(strings.TrimSpace(challenge), " ")
-	if !ok || !strings.EqualFold(scheme, "Bearer") {
-		return "", fmt.Errorf("registry %s requires unsupported authentication %q", ref.Registry, challenge)
+// isLoopback reports whether host (optionally with a port) names the local machine, in which case
+// the registry is reached over plain HTTP.
+func isLoopback(host string) bool {
+	if colon := strings.LastIndex(host, ":"); colon >= 0 {
+		host = host[:colon]
 	}
-	params := parseChallengeParams(rest)
-	realm := params["realm"]
-	if realm == "" {
-		return "", fmt.Errorf("registry %s sent a Bearer challenge without a realm", ref.Registry)
+	switch host {
+	case "localhost", "127.0.0.1", "::1", "[::1]":
+		return true
+	default:
+		return false
 	}
-
-	query := url.Values{}
-	if s := params["service"]; s != "" {
-		query.Set("service", s)
-	}
-	scope := params["scope"]
-	if scope == "" {
-		scope = fmt.Sprintf("repository:%s:pull", ref.Repository)
-	}
-	query.Set("scope", scope)
-
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, realm+"?"+query.Encode(), nil)
-	if err != nil {
-		return "", err
-	}
-	resp, err := f.client.do(req, requestKindRegistry)
-	if err != nil {
-		return "", err
-	}
-	defer func() { _ = resp.Body.Close() }()
-	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("GET %s: %s", realm, resp.Status)
-	}
-	data, err := io.ReadAll(io.LimitReader(resp.Body, maxMetadataBytes))
-	if err != nil {
-		return "", err
-	}
-	var body struct {
-		Token       string `json:"token"`
-		AccessToken string `json:"access_token"`
-	}
-	if err := json.Unmarshal(data, &body); err != nil {
-		return "", fmt.Errorf("decode token response from %s: %w", realm, err)
-	}
-	if body.Token != "" {
-		return body.Token, nil
-	}
-	if body.AccessToken != "" {
-		return body.AccessToken, nil
-	}
-	return "", fmt.Errorf("token response from %s contains no token", realm)
-}
-
-// parseChallengeParams parses the comma-separated key="value" parameters of an auth challenge.
-func parseChallengeParams(s string) map[string]string {
-	params := map[string]string{}
-	for _, part := range strings.Split(s, ",") {
-		key, value, ok := strings.Cut(strings.TrimSpace(part), "=")
-		if !ok {
-			continue
-		}
-		params[strings.ToLower(key)] = strings.Trim(value, `"`)
-	}
-	return params
-}
-
-// registryScheme returns the URL scheme to use for reaching a registry: HTTP if f was constructed
-// with WithInsecureRegistry, HTTPS otherwise. externalClient.do enforces this independently, so a
-// mismatch here only costs a wasted request rather than an insecure one.
-func (f *Fetcher) registryScheme() string {
-	if f.client.allowInsecureRegistry {
-		return "http"
-	}
-	return "https"
 }

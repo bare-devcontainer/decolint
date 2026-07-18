@@ -236,12 +236,8 @@ func runLint(ctx context.Context, stdout io.Writer, opts Options, cfg Config) (b
 		return false, fmt.Errorf("register rules: %w", err)
 	}
 	if cfg.MergeFeatures {
-		var fetcherOpts []feature.FetcherOption
-		if cfg.InsecureRegistry {
-			fetcherOpts = append(fetcherOpts, feature.WithInsecureRegistry())
-		}
 		// One Fetcher per run, so a Feature shared by several files is fetched at most once.
-		fetcher := feature.NewFetcher(fetcherOpts...)
+		fetcher := feature.NewFetcher()
 		l.SetTransform(func(ctx context.Context, fctx *linter.Context) error {
 			if fctx.Type != linter.Devcontainer {
 				return nil

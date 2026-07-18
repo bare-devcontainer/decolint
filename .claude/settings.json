@@ -9,11 +9,12 @@
   },
   "permissions": {
     "allow": [
-      "Read(//workspaces)",
-      "Edit(//workspaces)",
+      "Read(//workspaces/**)",
+      "Edit(//workspaces/**)",
       "Bash(make *)",
       "Bash(go build *)",
-      "Bash(go test *)"
+      "Bash(go test *)",
+      "Bash(go doc *)"
     ],
     "deny": [
       "Edit(//**/.env)",

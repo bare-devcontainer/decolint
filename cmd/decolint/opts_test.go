@@ -189,38 +189,6 @@ func TestParseOptionsMergeFeatures(t *testing.T) {
 	}
 }
 
-func TestParseOptionsInsecureRegistry(t *testing.T) {
-	t.Parallel()
-
-	tests := []struct {
-		name    string
-		args    []string
-		want    bool
-		wantSet bool
-	}{
-		{"no flag", nil, false, false},
-		{"single dash", []string{"-insecure-registry"}, true, true},
-		{"double dash", []string{"--insecure-registry"}, true, true},
-		{"explicit true", []string{"-insecure-registry=true"}, true, true},
-		{"explicit false", []string{"-insecure-registry=false"}, false, true},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-			opts, err := parseOptions(tt.args, io.Discard)
-			if err != nil {
-				t.Fatalf("parseOptions(%v): %v", tt.args, err)
-			}
-			if opts.InsecureRegistry != tt.want {
-				t.Errorf("InsecureRegistry = %v, want %v", opts.InsecureRegistry, tt.want)
-			}
-			if opts.insecureRegistrySet != tt.wantSet {
-				t.Errorf("insecureRegistrySet = %v, want %v", opts.insecureRegistrySet, tt.wantSet)
-			}
-		})
-	}
-}
-
 func TestParseOptionsConfig(t *testing.T) {
 	t.Parallel()
 

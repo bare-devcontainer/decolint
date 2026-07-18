@@ -33,15 +33,6 @@ type Options struct {
 	// from its default false value so mergeConfig can tell "not given" (defer to the config file)
 	// apart from "explicitly given as false" (override the config file's "mergeFeatures": true).
 	mergeFeaturesSet bool
-	// InsecureRegistry, when set, allows fetching a Feature from an OCI registry over plain HTTP
-	// instead of HTTPS; it has no effect on Feature tarball requests, which always require HTTPS.
-	// The config file's "insecureRegistry" member sets it as well, but -insecure-registry takes
-	// precedence over it, in either direction, when explicitly given (see insecureRegistrySet and
-	// mergeConfig).
-	InsecureRegistry bool
-	// insecureRegistrySet records whether -insecure-registry was explicitly passed; see
-	// mergeFeaturesSet for why this distinction is needed.
-	insecureRegistrySet bool
 	// Format selects how lint issues are written to stdout.
 	Format Format
 	// Version, when set, causes the program to print its version and exit.
@@ -66,7 +57,6 @@ func parseOptions(args []string, output io.Writer) (Options, error) {
 	fs.StringVar(&platformFlag, "platform", "", "comma-separated target platforms to include in addition to \"all\" (vscode, codespaces); overrides the config file's \"platforms\" member")
 	fs.StringVar(&formatFlag, "format", "text", "output format: text, json, or github")
 	fs.BoolVar(&opts.MergeFeatures, "merge-features", false, "fetch the Features referenced in \"features\" and lint the merged (effective) configuration; overrides the config file's \"mergeFeatures\" member")
-	fs.BoolVar(&opts.InsecureRegistry, "insecure-registry", false, "allow fetching a Feature from an OCI registry over plain HTTP instead of HTTPS; has no effect on Feature tarball requests, which always require HTTPS; overrides the config file's \"insecureRegistry\" member")
 	fs.BoolVar(&opts.Version, "version", false, "print version information and exit")
 	fs.BoolVar(&opts.ListRules, "rules", false, "print the built-in rules as a Markdown table (category, target platforms, current severity), then exit")
 	fs.BoolVar(&opts.Init, "init", false, "write a new .decolint.jsonc config file listing every rule at its default severity, then exit")
@@ -75,11 +65,8 @@ func parseOptions(args []string, output io.Writer) (Options, error) {
 		return Options{}, fmt.Errorf("parse flags: %w", err)
 	}
 	fs.Visit(func(f *flag.Flag) {
-		switch f.Name {
-		case "merge-features":
+		if f.Name == "merge-features" {
 			opts.mergeFeaturesSet = true
-		case "insecure-registry":
-			opts.insecureRegistrySet = true
 		}
 	})
 

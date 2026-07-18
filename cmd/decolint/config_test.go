@@ -98,25 +98,6 @@ func TestConfigMarshalJSONToWithMergeFeatures(t *testing.T) {
 	}
 }
 
-func TestConfigMarshalJSONToWithInsecureRegistry(t *testing.T) {
-	t.Parallel()
-
-	cfg := Config{
-		InsecureRegistry: true,
-		Rules:            map[string]linter.Severity{"no-image-latest": linter.SeverityError},
-	}
-
-	want := `{"insecureRegistry":true,"rules":{"no-image-latest":"error"}}`
-
-	got, err := json.Marshal(cfg)
-	if err != nil {
-		t.Fatalf("json.Marshal: %v", err)
-	}
-	if string(got) != want {
-		t.Errorf("json.Marshal(cfg) = %s, want %s", got, want)
-	}
-}
-
 func TestParseConfig(t *testing.T) {
 	t.Parallel()
 
@@ -178,12 +159,6 @@ func TestParseConfig(t *testing.T) {
 			"mergeFeatures",
 			`{"mergeFeatures": true}`,
 			Config{MergeFeatures: true},
-			false,
-		},
-		{
-			"insecureRegistry",
-			`{"insecureRegistry": true}`,
-			Config{InsecureRegistry: true},
 			false,
 		},
 		{"invalid severity", `{"rules": {"no-image-latest": "critical"}}`, Config{}, true},
@@ -319,24 +294,6 @@ func TestMergeConfig(t *testing.T) {
 			Options{MergeFeatures: false, mergeFeaturesSet: true},
 			Config{MergeFeatures: true},
 			Config{MergeFeatures: false},
-		},
-		{
-			"CLI insecure-registry flag enables it",
-			Options{InsecureRegistry: true, insecureRegistrySet: true},
-			Config{},
-			Config{InsecureRegistry: true},
-		},
-		{
-			"CLI insecure-registry flag not given falls back to config file insecureRegistry",
-			Options{},
-			Config{InsecureRegistry: true},
-			Config{InsecureRegistry: true},
-		},
-		{
-			"CLI insecure-registry=false overrides config file insecureRegistry: true",
-			Options{InsecureRegistry: false, insecureRegistrySet: true},
-			Config{InsecureRegistry: true},
-			Config{InsecureRegistry: false},
 		},
 	}
 	for _, tt := range tests {

@@ -3,17 +3,19 @@ package feature
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"os"
 	"path/filepath"
 	"sync"
+	"time"
 )
 
 // Size limits for downloaded content, so a misbehaving registry or tarball cannot exhaust memory.
 const (
 	// maxArchiveBytes caps a downloaded Feature archive (an OCI layer blob or a tarball).
-	maxArchiveBytes = 64 << 20
+	maxArchiveBytes = 64 << 20 // 64 MB
 	// maxMetadataBytes caps a devcontainer-feature.json, whether read from disk or from an archive.
-	maxMetadataBytes = 4 << 20
+	maxMetadataBytes = 4 << 20 // 4 MB
 )
 
 // metadataFileName is the file declaring a Feature, located at the root of the Feature's directory
@@ -24,7 +26,7 @@ const metadataFileName = "devcontainer-feature.json"
 // caches every result in memory for the lifetime of the Fetcher, including failures, so a
 // reference shared by several files is fetched at most once per run.
 type Fetcher struct {
-	client *externalClient
+	client *http.Client
 
 	mu    sync.Mutex
 	cache map[string]fetchResult
@@ -35,29 +37,10 @@ type fetchResult struct {
 	err error
 }
 
-// FetcherOption configures a Fetcher constructed by NewFetcher.
-type FetcherOption func(*fetcherConfig)
-
-type fetcherConfig struct {
-	allowInsecureRegistry bool
-}
-
-// WithInsecureRegistry allows a request to an OCI registry (manifest, blob, or token endpoint) to
-// use plain HTTP instead of HTTPS. It has no effect on Feature tarball requests, which always
-// require HTTPS.
-func WithInsecureRegistry() FetcherOption {
-	return func(cfg *fetcherConfig) { cfg.allowInsecureRegistry = true }
-}
-
-// NewFetcher returns a Fetcher. By default, every request it makes to an external host must use
-// HTTPS; pass WithInsecureRegistry to allow OCI registry requests over plain HTTP instead.
-func NewFetcher(opts ...FetcherOption) *Fetcher {
-	var cfg fetcherConfig
-	for _, opt := range opts {
-		opt(&cfg)
-	}
+// NewFetcher returns a Fetcher with a default HTTP client.
+func NewFetcher() *Fetcher {
 	return &Fetcher{
-		client: newExternalClient(cfg.allowInsecureRegistry),
+		client: &http.Client{Timeout: 30 * time.Second},
 		cache:  map[string]fetchResult{},
 	}
 }
@@ -112,14 +95,14 @@ func fetchLocal(dir *os.Root, featureDir string) (*Metadata, error) {
 	path := filepath.Join(featureDir, metadataFileName)
 	info, err := dir.Stat(path)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("stat %s: %w", path, err)
 	}
 	if info.Size() > maxMetadataBytes {
 		return nil, fmt.Errorf("%s exceeds %d bytes", path, maxMetadataBytes)
 	}
 	src, err := dir.ReadFile(path)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("read %s: %w", path, err)
 	}
 	return parseMetadata(src)
 }

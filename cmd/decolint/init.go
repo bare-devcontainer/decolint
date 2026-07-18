@@ -47,6 +47,8 @@ func initConfigFile(output io.Writer) error {
 		return fmt.Errorf("write %s: %w", name, err)
 	}
 
-	_, err := fmt.Fprintf(output, "wrote %s\n", name)
-	return err
+	if _, err := fmt.Fprintf(output, "wrote %s\n", name); err != nil {
+		return fmt.Errorf("write confirmation: %w", err)
+	}
+	return nil
 }

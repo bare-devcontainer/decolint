@@ -16,7 +16,7 @@ func (TextFormat) WriteIssues(w io.Writer, issues []linter.Issue) error {
 
 	for _, issue := range issues {
 		if _, err := fmt.Fprintln(w, issue); err != nil {
-			return err
+			return fmt.Errorf("write issue: %w", err)
 		}
 
 		switch issue.Severity {
@@ -28,7 +28,7 @@ func (TextFormat) WriteIssues(w io.Writer, issues []linter.Issue) error {
 	}
 
 	if _, err := fmt.Fprintf(w, "Found %d error%s and %d warning%s.\n", numErrors, pluralize(numErrors), numWarnings, pluralize(numWarnings)); err != nil {
-		return err
+		return fmt.Errorf("write summary: %w", err)
 	}
 
 	return nil

@@ -3,6 +3,7 @@ package format
 import (
 	"bytes"
 	"encoding/json/v2"
+	"fmt"
 	"io"
 
 	"github.com/bare-devcontainer/decolint/linter"
@@ -19,9 +20,11 @@ func (JSONFormat) WriteIssues(w io.Writer, issues []linter.Issue) error {
 	}
 	var buf bytes.Buffer
 	if err := json.MarshalWrite(&buf, issues); err != nil {
-		return err
+		return fmt.Errorf("marshal issues: %w", err)
 	}
 	buf.WriteByte('\n')
-	_, err := w.Write(buf.Bytes())
-	return err
+	if _, err := w.Write(buf.Bytes()); err != nil {
+		return fmt.Errorf("write issues: %w", err)
+	}
+	return nil
 }

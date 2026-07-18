@@ -85,73 +85,38 @@ func TestParseOptionsFormat(t *testing.T) {
 	}
 }
 
-func TestParseOptionsVersion(t *testing.T) {
+// dashPrefixes are the two ways a boolean flag can be spelled on the command line; the standard
+// flag package accepts either, so every bare boolean flag is tested with both automatically instead
+// of listing each variant as a separate table row.
+var dashPrefixes = []string{"-", "--"}
+
+func TestParseOptionsBoolFlags(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
-		name string
-		args []string
+		flag string
+		get  func(Options) bool
 	}{
-		{"single dash", []string{"-version"}},
-		{"double dash", []string{"--version"}},
+		{"version", func(o Options) bool { return o.Version }},
+		{"rules", func(o Options) bool { return o.ListRules }},
+		{"init", func(o Options) bool { return o.Init }},
+		{"merge-features", func(o Options) bool { return o.MergeFeatures }},
 	}
 	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
+		t.Run(tt.flag, func(t *testing.T) {
 			t.Parallel()
-			opts, err := parseOptions(tt.args, io.Discard)
-			if err != nil {
-				t.Fatalf("parseOptions(%v): %v", tt.args, err)
-			}
-			if !opts.Version {
-				t.Errorf("Version = false, want true")
-			}
-		})
-	}
-}
-
-func TestParseOptionsListRules(t *testing.T) {
-	t.Parallel()
-
-	tests := []struct {
-		name string
-		args []string
-	}{
-		{"single dash", []string{"-rules"}},
-		{"double dash", []string{"--rules"}},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-			opts, err := parseOptions(tt.args, io.Discard)
-			if err != nil {
-				t.Fatalf("parseOptions(%v): %v", tt.args, err)
-			}
-			if !opts.ListRules {
-				t.Errorf("ListRules = false, want true")
-			}
-		})
-	}
-}
-
-func TestParseOptionsInit(t *testing.T) {
-	t.Parallel()
-
-	tests := []struct {
-		name string
-		args []string
-	}{
-		{"single dash", []string{"-init"}},
-		{"double dash", []string{"--init"}},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-			opts, err := parseOptions(tt.args, io.Discard)
-			if err != nil {
-				t.Fatalf("parseOptions(%v): %v", tt.args, err)
-			}
-			if !opts.Init {
-				t.Errorf("Init = false, want true")
+			for _, prefix := range dashPrefixes {
+				t.Run(prefix, func(t *testing.T) {
+					t.Parallel()
+					args := []string{prefix + tt.flag}
+					opts, err := parseOptions(args, io.Discard)
+					if err != nil {
+						t.Fatalf("parseOptions(%v): %v", args, err)
+					}
+					if !tt.get(opts) {
+						t.Errorf("%s = false, want true", tt.flag)
+					}
+				})
 			}
 		})
 	}
@@ -160,6 +125,8 @@ func TestParseOptionsInit(t *testing.T) {
 func TestParseOptionsMergeFeatures(t *testing.T) {
 	t.Parallel()
 
+	// Dash style is covered by TestParseOptionsBoolFlags; this exercises the mergeFeaturesSet
+	// bookkeeping and the explicit-value forms unique to this flag.
 	tests := []struct {
 		name    string
 		args    []string
@@ -167,8 +134,7 @@ func TestParseOptionsMergeFeatures(t *testing.T) {
 		wantSet bool
 	}{
 		{"no flag", nil, false, false},
-		{"single dash", []string{"-merge-features"}, true, true},
-		{"double dash", []string{"--merge-features"}, true, true},
+		{"bare flag", []string{"-merge-features"}, true, true},
 		{"explicit true", []string{"-merge-features=true"}, true, true},
 		{"explicit false", []string{"-merge-features=false"}, false, true},
 	}

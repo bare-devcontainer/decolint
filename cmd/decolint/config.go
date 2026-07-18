@@ -38,14 +38,14 @@ type Config struct {
 // generated configs (see initConfigFile) stay minimal.
 func (cfg Config) MarshalJSONTo(enc *jsontext.Encoder) error {
 	if err := enc.WriteToken(jsontext.BeginObject); err != nil {
-		return err
+		return fmt.Errorf("encode config: %w", err)
 	}
 	if len(cfg.Platforms) > 0 {
 		if err := enc.WriteToken(jsontext.String("platforms")); err != nil {
-			return err
+			return fmt.Errorf("encode config: %w", err)
 		}
 		if err := json.MarshalEncode(enc, cfg.Platforms); err != nil {
-			return err
+			return fmt.Errorf("encode config: %w", err)
 		}
 	}
 	if cfg.MergeFeatures {
@@ -66,35 +66,41 @@ func (cfg Config) MarshalJSONTo(enc *jsontext.Encoder) error {
 	}
 	if len(cfg.Categories) > 0 {
 		if err := enc.WriteToken(jsontext.String("categories")); err != nil {
-			return err
+			return fmt.Errorf("encode config: %w", err)
 		}
 		if err := writeSeverityMap(enc, cfg.Categories); err != nil {
 			return err
 		}
 	}
 	if err := enc.WriteToken(jsontext.String("rules")); err != nil {
-		return err
+		return fmt.Errorf("encode config: %w", err)
 	}
 	if err := writeSeverityMap(enc, cfg.Rules); err != nil {
 		return err
 	}
-	return enc.WriteToken(jsontext.EndObject)
+	if err := enc.WriteToken(jsontext.EndObject); err != nil {
+		return fmt.Errorf("encode config: %w", err)
+	}
+	return nil
 }
 
 // writeSeverityMap encodes m as a JSON object with its members in sorted key order.
 func writeSeverityMap(enc *jsontext.Encoder, m map[string]linter.Severity) error {
 	if err := enc.WriteToken(jsontext.BeginObject); err != nil {
-		return err
+		return fmt.Errorf("encode severity map: %w", err)
 	}
 	for _, key := range slices.Sorted(maps.Keys(m)) {
 		if err := enc.WriteToken(jsontext.String(key)); err != nil {
-			return err
+			return fmt.Errorf("encode severity map: %w", err)
 		}
 		if err := json.MarshalEncode(enc, m[key]); err != nil {
-			return err
+			return fmt.Errorf("encode severity map: %w", err)
 		}
 	}
-	return enc.WriteToken(jsontext.EndObject)
+	if err := enc.WriteToken(jsontext.EndObject); err != nil {
+		return fmt.Errorf("encode severity map: %w", err)
+	}
+	return nil
 }
 
 // mergeConfig returns cfg with any CLI-provided opts fields applied as overrides. Platforms

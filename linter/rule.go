@@ -45,7 +45,10 @@ func (p Platform) String() string {
 
 // MarshalJSONTo encodes the platform as its name (see String), for use with encoding/json/v2.
 func (p Platform) MarshalJSONTo(enc *jsontext.Encoder) error {
-	return enc.WriteToken(jsontext.String(p.String()))
+	if err := enc.WriteToken(jsontext.String(p.String())); err != nil {
+		return fmt.Errorf("marshal platform: %w", err)
+	}
+	return nil
 }
 
 // UnmarshalJSONFrom decodes a platform from its name (see ParsePlatform), for use with
@@ -53,7 +56,7 @@ func (p Platform) MarshalJSONTo(enc *jsontext.Encoder) error {
 func (p *Platform) UnmarshalJSONFrom(dec *jsontext.Decoder) error {
 	tok, err := dec.ReadToken()
 	if err != nil {
-		return err
+		return fmt.Errorf("unmarshal platform: %w", err)
 	}
 	if tok.Kind() != '"' {
 		return fmt.Errorf("unmarshal platform: unexpected token kind %q", tok.Kind())
@@ -182,7 +185,10 @@ func (s Severity) String() string {
 
 // MarshalJSONTo encodes the severity as its name (see String), for use with encoding/json/v2.
 func (s Severity) MarshalJSONTo(enc *jsontext.Encoder) error {
-	return enc.WriteToken(jsontext.String(s.String()))
+	if err := enc.WriteToken(jsontext.String(s.String())); err != nil {
+		return fmt.Errorf("marshal severity: %w", err)
+	}
+	return nil
 }
 
 // UnmarshalJSONFrom decodes a severity from its name (see ParseSeverity), for use with
@@ -190,7 +196,7 @@ func (s Severity) MarshalJSONTo(enc *jsontext.Encoder) error {
 func (s *Severity) UnmarshalJSONFrom(dec *jsontext.Decoder) error {
 	tok, err := dec.ReadToken()
 	if err != nil {
-		return err
+		return fmt.Errorf("unmarshal severity: %w", err)
 	}
 	if tok.Kind() != '"' {
 		return fmt.Errorf("unmarshal severity: unexpected token kind %q", tok.Kind())

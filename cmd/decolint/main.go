@@ -54,7 +54,7 @@ func main() {
 func run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 	opts, err := parseOptions(args, stderr)
 	if err != nil {
-		if err == flag.ErrHelp {
+		if errors.Is(err, flag.ErrHelp) {
 			return exitCodeSuccess
 		}
 		_, _ = fmt.Fprintln(stderr, progName+":", err)
@@ -179,8 +179,10 @@ func writeTableRow(output io.Writer, cells []string, widths []int) error {
 	for i, cell := range cells {
 		padded[i] = cell + strings.Repeat(" ", widths[i]-displayWidth(cell))
 	}
-	_, err := fmt.Fprintf(output, "| %s |\n", strings.Join(padded, " | "))
-	return err
+	if _, err := fmt.Fprintf(output, "| %s |\n", strings.Join(padded, " | ")); err != nil {
+		return fmt.Errorf("write table row: %w", err)
+	}
+	return nil
 }
 
 // displayWidth estimates s's width in terminal columns. Plain ASCII/Latin text is single-width;
@@ -215,7 +217,7 @@ Defaults to the current directory.
 
 Flags:
 `, versionString(), fs.Name())); err != nil {
-		return err
+		return fmt.Errorf("write usage: %w", err)
 	}
 
 	fs.PrintDefaults()
@@ -260,7 +262,7 @@ func runLint(ctx context.Context, stdout io.Writer, opts Options, cfg Config) (b
 		}
 		allIssues = append(allIssues, issues...)
 		if err != nil {
-			lintErr = errors.Join(lintErr, fmt.Errorf("lint %s: %w", path, err))
+			lintErr = errors.Join(lintErr, err)
 		}
 	}
 
@@ -279,9 +281,13 @@ func runLint(ctx context.Context, stdout io.Writer, opts Options, cfg Config) (b
 func lintPath(ctx context.Context, l *linter.Linter, path string) ([]linter.Issue, error) {
 	root, err := os.OpenRoot(path)
 	if err != nil {
-		return nil, fmt.Errorf("resolve directory: %w", err)
+		return nil, fmt.Errorf("resolve directory %s: %w", path, err)
 	}
 	// The root is only read from, so a close error is inconsequential.
 	defer func() { _ = root.Close() }()
-	return l.LintDir(ctx, root)
+	issues, err := l.LintDir(ctx, root)
+	if err != nil {
+		return nil, fmt.Errorf("lint directory %s: %w", path, err)
+	}
+	return issues, nil
 }

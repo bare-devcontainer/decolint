@@ -2,6 +2,7 @@ package main
 
 import (
 	"flag"
+	"fmt"
 	"io"
 	"strings"
 
@@ -71,7 +72,7 @@ func parseOptions(args []string, output io.Writer) (Options, error) {
 	fs.BoolVar(&opts.Init, "init", false, "write a new .decolint.jsonc config file listing every rule at its default severity, then exit")
 	fs.Usage = func() { _ = usage(fs) }
 	if err := fs.Parse(args); err != nil {
-		return Options{}, err
+		return Options{}, fmt.Errorf("parse flags: %w", err)
 	}
 	fs.Visit(func(f *flag.Flag) {
 		switch f.Name {
@@ -116,7 +117,7 @@ func parsePlatforms(s string) ([]linter.Platform, error) {
 		}
 		p, err := linter.ParsePlatform(name)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("parse platform %q: %w", name, err)
 		}
 		platforms = append(platforms, p)
 	}

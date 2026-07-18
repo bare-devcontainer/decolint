@@ -1,6 +1,6 @@
 {
   "name": "Go",
-  "image": "ghcr.io/bare-devcontainer/golang:1.26-trixie@sha256:1ade4c60c87bbe9c5d5628cb1be76e3652d1549963b6d0d2c4ee2a7ac9e0f1c2",
+  "image": "ghcr.io/bare-devcontainer/golang:1.26-trixie@sha256:11720eb7d87878235c8cff56cd63da284594553ca9081c0d879fd485466c7198",
   "runArgs": [
     "--cap-drop=ALL"
   ],
@@ -29,7 +29,7 @@
     "vscode": {
       "extensions": [
         // renovate: datasource=github-tags depName=anthropics/claude-code
-        "anthropic.claude-code@2.1.197",
+        "anthropic.claude-code@2.1.201",
         // renovate: datasource=github-tags depName=editorconfig/editorconfig-vscode
         "EditorConfig.EditorConfig@0.18.2",
         // renovate: datasource=github-tags depName=golang/vscode-go

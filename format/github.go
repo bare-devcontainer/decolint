@@ -29,7 +29,7 @@ func (GitHubFormat) WriteIssues(w io.Writer, issues []linter.Issue) error {
 			escapeGitHubData(issue.Message),
 		)
 		if err != nil {
-			return err
+			return fmt.Errorf("write issue: %w", err)
 		}
 	}
 	return nil

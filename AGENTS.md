@@ -10,6 +10,7 @@
 - Use minimal external dependencies.
 - Documentation comments should explain the contract of a function/package, not the implementation details.
 - Inline comments should be used to explain "why" something is done, not "what" is done. The code itself should be clear enough to convey the "what".
+- All comments should be important for future maintainers. Do not add comments only meaningful to the current author/pull request.
 
 ## Workflows
 

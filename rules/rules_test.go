@@ -83,10 +83,7 @@ func TestRegisterRulesPlatformFilter(t *testing.T) {
 			if err := rules.RegisterRules(l, tt.platforms, rules.Overrides{}); err != nil {
 				t.Fatalf("RegisterRules: %v", err)
 			}
-			issues, err := l.Lint(t.Context(), "devcontainer.json", []byte(src), linter.Devcontainer)
-			if err != nil {
-				t.Fatalf("Lint: %v", err)
-			}
+			issues := lintSource(t, l, "devcontainer.json", linter.Devcontainer, src)
 			fired := ruleFired(issues, "no-bind-mount")
 			if fired != tt.wantFired {
 				t.Errorf("no-bind-mount fired = %v, want %v (issues: %v)", fired, tt.wantFired, issues)
@@ -106,10 +103,7 @@ func TestRegisterRulesDefaultOffRule(t *testing.T) {
 	if err := rules.RegisterRules(l, nil, rules.Overrides{}); err != nil {
 		t.Fatalf("RegisterRules: %v", err)
 	}
-	issues, err := l.Lint(t.Context(), "devcontainer.json", []byte(src), linter.Devcontainer)
-	if err != nil {
-		t.Fatalf("Lint: %v", err)
-	}
+	issues := lintSource(t, l, "devcontainer.json", linter.Devcontainer, src)
 	if ruleFired(issues, "no-seccomp-override") {
 		t.Errorf("no-seccomp-override fired despite being off by default: %v", issues)
 	}
@@ -125,10 +119,7 @@ func TestRegisterRulesOverrideEnablesOffDefaultRule(t *testing.T) {
 	if err := rules.RegisterRules(l, nil, overrides); err != nil {
 		t.Fatalf("RegisterRules: %v", err)
 	}
-	issues, err := l.Lint(t.Context(), "devcontainer.json", []byte(src), linter.Devcontainer)
-	if err != nil {
-		t.Fatalf("Lint: %v", err)
-	}
+	issues := lintSource(t, l, "devcontainer.json", linter.Devcontainer, src)
 	if !ruleFired(issues, "no-seccomp-override") {
 		t.Errorf("no-seccomp-override did not fire despite being overridden to error: %v", issues)
 	}
@@ -182,10 +173,7 @@ func TestRegisterRulesSeverityOverride(t *testing.T) {
 			if err := rules.RegisterRules(l, nil, rules.Overrides{Rules: tt.overrides}); err != nil {
 				t.Fatalf("RegisterRules: %v", err)
 			}
-			got, err := l.Lint(t.Context(), "devcontainer.json", []byte(src), linter.Devcontainer)
-			if err != nil {
-				t.Fatalf("Lint: %v", err)
-			}
+			got := lintSource(t, l, "devcontainer.json", linter.Devcontainer, src)
 			if diff := cmp.Diff(tt.want, got); diff != "" {
 				t.Errorf("issues mismatch (-want +got):\n%s", diff)
 			}

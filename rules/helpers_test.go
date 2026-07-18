@@ -8,6 +8,18 @@ import (
 	"github.com/google/go-cmp/cmp/cmpopts"
 )
 
+// lintSource parses src and applies l's registered rules to it as a file at the given path and of
+// the given type, failing the test on any error. It is the in-memory entry the rule tests use in
+// place of a real directory.
+func lintSource(t *testing.T, l *linter.Linter, path string, fileType linter.FileType, src string) []linter.Issue {
+	t.Helper()
+	doc, err := linter.ParseDocument([]byte(src))
+	if err != nil {
+		t.Fatalf("ParseDocument: %v", err)
+	}
+	return l.LintDocument(path, fileType, doc)
+}
+
 // assertIssues lints src as a devcontainer.json with r as the only active rule, registered at
 // severity, exercising the same path-matching and traversal logic the linter uses in production,
 // and fails the test if the resulting issues don't match want. Issues are compared irrespective of
@@ -25,10 +37,7 @@ func assertIssuesAt(t *testing.T, r *linter.Rule, severity linter.Severity, path
 
 	l := linter.New()
 	l.RegisterRule(r, severity)
-	got, err := l.Lint(t.Context(), path, []byte(src), fileType)
-	if err != nil {
-		t.Fatalf("Lint: %v", err)
-	}
+	got := lintSource(t, l, path, fileType, src)
 
 	// want is written without Severity since it's the same for every case in a table-driven test: the
 	// severity r was registered at.

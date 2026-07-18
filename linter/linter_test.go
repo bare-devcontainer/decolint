@@ -40,15 +40,16 @@ var noImageLatestRule = &Rule{
 	},
 }
 
-func lintSrc(t *testing.T, src string) []Issue {
+// lintSource parses src and applies l's registered rules to it as a file at the given path and of
+// the given type, failing the test on any parse error. Like the rule tests' entry, it runs no
+// Transform (see LintDocument).
+func lintSource(t *testing.T, l *Linter, path string, fileType FileType, src string) []Issue {
 	t.Helper()
-	l := New()
-	l.RegisterRule(noImageLatestRule, SeverityWarn)
-	issues, err := l.Lint(t.Context(), "devcontainer.json", []byte(src), Devcontainer)
+	doc, err := ParseDocument([]byte(src))
 	if err != nil {
-		t.Fatalf("Lint: %v", err)
+		t.Fatalf("ParseDocument: %v", err)
 	}
-	return issues
+	return l.LintDocument(path, fileType, doc)
 }
 
 // symlink creates a symbolic link, skipping the test on platforms where symlink creation is not
@@ -263,7 +264,9 @@ func TestIssuePosition(t *testing.T) {
   "name": "test",
   "image": "ubuntu:latest"
 }`
-	got := lintSrc(t, src)
+	l := New()
+	l.RegisterRule(noImageLatestRule, SeverityWarn)
+	got := lintSource(t, l, "devcontainer.json", Devcontainer, src)
 	if len(got) != 1 {
 		t.Fatalf("got %d issues, want 1", len(got))
 	}
@@ -275,9 +278,8 @@ func TestIssuePosition(t *testing.T) {
 func TestLintParseError(t *testing.T) {
 	t.Parallel()
 
-	l := New()
-	if _, err := l.Lint(t.Context(), "bad.json", []byte(`{`), Devcontainer); err == nil {
-		t.Error("Lint on malformed input: got nil error, want parse error")
+	if _, err := ParseDocument([]byte(`{`)); err == nil {
+		t.Error("ParseDocument on malformed input: got nil error, want parse error")
 	}
 }
 
@@ -296,29 +298,41 @@ var flagRule = &Rule{
 	},
 }
 
+// lintTempDir writes src as the .devcontainer.json of a fresh temp directory and lints it through
+// LintDir, exercising the full production path including any installed Transform.
+func lintTempDir(t *testing.T, l *Linter, src string) ([]Issue, error) {
+	t.Helper()
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, ".devcontainer.json"), []byte(src), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	return l.LintDir(t.Context(), openRoot(t, dir))
+}
+
 func TestLintTransform(t *testing.T) {
 	t.Parallel()
 
 	// The transform adds a synthetic "flag": true member whose offsets point at the "name" member of
 	// the original source, so the finding must resolve to that position.
 	src := "{\n  \"name\": \"test\"\n}"
+	addFlag := func(_ context.Context, fctx *Context) error {
+		obj := fctx.Root.Value.(*hujson.Object)
+		anchor := obj.Members[0].Name.StartOffset
+		obj.Members = append(obj.Members, hujson.ObjectMember{
+			Name:  hujson.Value{Value: hujson.String("flag"), StartOffset: anchor, EndOffset: anchor},
+			Value: hujson.Value{Value: hujson.Bool(true), StartOffset: anchor, EndOffset: anchor},
+		})
+		return nil
+	}
 
 	t.Run("rules see the transformed tree at anchored positions", func(t *testing.T) {
 		t.Parallel()
 		l := New()
 		l.RegisterRule(flagRule, SeverityWarn)
-		l.SetTransform(func(_ context.Context, fctx *Context) error {
-			obj := fctx.Root.Value.(*hujson.Object)
-			anchor := obj.Members[0].Name.StartOffset
-			obj.Members = append(obj.Members, hujson.ObjectMember{
-				Name:  hujson.Value{Value: hujson.String("flag"), StartOffset: anchor, EndOffset: anchor},
-				Value: hujson.Value{Value: hujson.Bool(true), StartOffset: anchor, EndOffset: anchor},
-			})
-			return nil
-		})
-		issues, err := l.Lint(t.Context(), "devcontainer.json", []byte(src), Devcontainer)
+		l.SetTransform(addFlag)
+		issues, err := lintTempDir(t, l, src)
 		if err != nil {
-			t.Fatalf("Lint: %v", err)
+			t.Fatalf("LintDir: %v", err)
 		}
 		if len(issues) != 1 {
 			t.Fatalf("got %d issues %v, want 1", len(issues), issues)
@@ -334,8 +348,8 @@ func TestLintTransform(t *testing.T) {
 		l.RegisterRule(flagRule, SeverityWarn)
 		wantErr := errors.New("fetch failed")
 		l.SetTransform(func(context.Context, *Context) error { return wantErr })
-		if _, err := l.Lint(t.Context(), "devcontainer.json", []byte(src), Devcontainer); !errors.Is(err, wantErr) {
-			t.Errorf("Lint error = %v, want %v", err, wantErr)
+		if _, err := lintTempDir(t, l, src); !errors.Is(err, wantErr) {
+			t.Errorf("LintDir error = %v, want %v", err, wantErr)
 		}
 	})
 
@@ -347,8 +361,8 @@ func TestLintTransform(t *testing.T) {
 			called = true
 			return nil
 		})
-		if _, err := l.Lint(t.Context(), "devcontainer.json", []byte(src), Devcontainer); err != nil {
-			t.Fatalf("Lint: %v", err)
+		if _, err := lintTempDir(t, l, src); err != nil {
+			t.Fatalf("LintDir: %v", err)
 		}
 		if called {
 			t.Error("transform ran although no rule is registered")
@@ -373,10 +387,7 @@ func TestLintRulePanicIsRecovered(t *testing.T) {
 
 	l := New()
 	l.RegisterRule(panicRule, SeverityError)
-	issues, err := l.Lint(t.Context(), "devcontainer.json", []byte(`{}`), Devcontainer)
-	if err != nil {
-		t.Fatalf("Lint: %v", err)
-	}
+	issues := lintSource(t, l, "devcontainer.json", Devcontainer, `{}`)
 	if len(issues) != 1 {
 		t.Fatalf("got %d issues %v, want 1", len(issues), issues)
 	}

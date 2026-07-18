@@ -12,8 +12,6 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
-
-	"github.com/tailscale/hujson"
 )
 
 // Issue is a rule finding resolved to a file position.
@@ -41,9 +39,9 @@ type configEntry struct {
 }
 
 // Transform mutates a parsed configuration file before rules run, e.g. to merge Feature-contributed
-// properties into the effective configuration. It may modify ctx.Root in place; ctx.Src is left
-// untouched, so any node a Transform adds must carry offsets pointing into the original source. An
-// error aborts the lint of that file.
+// properties into the effective configuration. It may modify ctx.Root in place, but any node it
+// adds must carry offsets pointing into the original source, since findings are still positioned
+// against that source. An error aborts the lint of that file.
 type Transform func(ctx context.Context, fctx *Context) error
 
 // Linter runs a set of rules against devcontainer configuration files.
@@ -98,7 +96,7 @@ func (l *Linter) LintDir(ctx context.Context, root *os.Root) ([]Issue, error) {
 		if err := ctx.Err(); err != nil {
 			return fmt.Errorf("aborted %s: %w", filepath.Join(dir, f.rel), err)
 		}
-		fileIssues, err := l.lintConfig(ctx, dir, f)
+		fileIssues, err := l.LintFile(ctx, dir, f)
 		if err != nil {
 			// A broken file must not stop the remaining files from being linted, so record the
 			// error and keep visiting.
@@ -117,56 +115,48 @@ func (l *Linter) LintDir(ctx context.Context, root *os.Root) ([]Issue, error) {
 	return issues, errors.Join(errs...)
 }
 
-// lintConfig reads and lints the single configuration file f, reporting issues under
+// LintFile reads and lints the single configuration file f, reporting issues under
 // filepath.Join(dir, f.rel). The file is read through f.root, so its resolution cannot escape that
-// boundary; the same f.root, and f's own directory relative to it, are passed through as the
-// resulting Context's Dir and FileDir, so a Transform resolving a path relative to the file cannot
-// escape that boundary either.
-func (l *Linter) lintConfig(ctx context.Context, dir string, f configEntry) ([]Issue, error) {
+// boundary; f.root and f's own directory relative to it are passed to any Transform as Context.Dir
+// and Context.FileDir, so a Transform resolving a path relative to the file cannot escape that
+// boundary either. The Transform, if installed, runs before rules and is skipped when no rule
+// applies to f's type, so a file with no active rules does no transform work (e.g. no Feature fetches).
+func (l *Linter) LintFile(ctx context.Context, dir string, f configEntry) ([]Issue, error) {
 	display := filepath.Join(dir, f.rel)
 	src, err := f.root.ReadFile(f.path)
 	if err != nil {
 		return nil, fmt.Errorf("read config %s: %w", display, err)
 	}
-	return l.lintWithDir(ctx, display, src, f.typ, f.root, filepath.Dir(f.path))
-}
-
-// Lint lints src, which is the content of a configuration file of the given type. path is used only
-// for reporting.
-func (l *Linter) Lint(ctx context.Context, path string, src []byte, fileType FileType) ([]Issue, error) {
-	return l.lintWithDir(ctx, path, src, fileType, nil, "")
-}
-
-// lintWithDir is Lint, additionally attaching dir and fileDir to the Context passed to the
-// transform and rules; see Context.Dir and Context.FileDir.
-func (l *Linter) lintWithDir(ctx context.Context, path string, src []byte, fileType FileType, dir *os.Root, fileDir string) ([]Issue, error) {
-	if err := ctx.Err(); err != nil {
-		return nil, fmt.Errorf("aborted %s: %w", path, err)
-	}
-	root, err := hujson.Parse(src)
+	doc, err := ParseDocument(src)
 	if err != nil {
-		return nil, fmt.Errorf("parse %s: %w", path, err)
+		return nil, fmt.Errorf("%s: %w", display, err)
 	}
-	patterns := l.patterns[fileType]
-	if len(patterns) == 0 {
-		return nil, nil
-	}
-	rctx := &Context{Path: path, Type: fileType, Src: src, Root: &root, Dir: dir, FileDir: fileDir}
-	if l.transform != nil {
-		if err := l.transform(ctx, rctx); err != nil {
-			return nil, fmt.Errorf("transform %s: %w", path, err)
+	if l.transform != nil && len(l.patterns[f.typ]) > 0 {
+		fctx := &Context{Path: display, Type: f.typ, Root: doc.tree, Dir: f.root, FileDir: filepath.Dir(f.path)}
+		if err := l.transform(ctx, fctx); err != nil {
+			return nil, fmt.Errorf("transform %s: %w", display, err)
 		}
 	}
-	pos := newPositions(src)
-	ignores := buildIgnoreIndex(&root, pos)
+	return l.LintDocument(display, f.typ, doc), nil
+}
 
+// LintDocument applies the linter's rules to doc, a configuration file of the given type, and
+// returns the findings sorted by position. path is used only for reporting. It applies rules only
+// and never runs a Transform, so linting an already-parsed document is independent of feature
+// merging; the production path lintFile runs any Transform before delegating here.
+func (l *Linter) LintDocument(path string, fileType FileType, doc *Document) []Issue {
+	patterns := l.patterns[fileType]
+	if len(patterns) == 0 {
+		return nil
+	}
+	rctx := &Context{Path: path, Type: fileType, Root: doc.tree}
 	var issues []Issue
-	walk(&root, "", nil, patterns, func(r *Rule, node *Node) {
+	walk(doc.tree, "", nil, patterns, func(r *Rule, node *Node) {
 		id := r.ID
 		severity := l.severities[id]
 		for _, f := range safeCheck(r, rctx, node) {
-			line, col := pos.lineCol(f.Offset)
-			if ignores.ignores(line, id) {
+			line, col := doc.pos.lineCol(f.Offset)
+			if doc.ignores.ignores(line, id) {
 				continue
 			}
 			issues = append(issues, Issue{
@@ -189,7 +179,7 @@ func (l *Linter) lintWithDir(ctx context.Context, path string, src []byte, fileT
 		}
 		return a.RuleID < b.RuleID
 	})
-	return issues, nil
+	return issues
 }
 
 // safeCheck calls r.Check and recovers from any panic, so that a defect in one rule (e.g. a nil

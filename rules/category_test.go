@@ -121,10 +121,7 @@ func TestRegisterRulesCategoryOverride(t *testing.T) {
 			if err := rules.RegisterRules(l, nil, tt.overrides); err != nil {
 				t.Fatalf("RegisterRules: %v", err)
 			}
-			issues, err := l.Lint(t.Context(), "devcontainer.json", []byte(src), linter.Devcontainer)
-			if err != nil {
-				t.Fatalf("Lint: %v", err)
-			}
+			issues := lintSource(t, l, "devcontainer.json", linter.Devcontainer, src)
 			if fired := ruleFired(issues, "no-seccomp-override"); fired != tt.wantFired {
 				t.Errorf("no-seccomp-override fired = %v, want %v (issues: %v)", fired, tt.wantFired, issues)
 			}

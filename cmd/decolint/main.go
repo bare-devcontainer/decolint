@@ -305,9 +305,9 @@ func lintDir(ctx context.Context, l *linter.Linter, merge mergeFn, root *os.Root
 	err := discovery.VisitConfigs(root, func(f discovery.ConfigFile) error {
 		found = true
 		if err := ctx.Err(); err != nil {
-			return fmt.Errorf("aborted %s: %w", filepath.Join(dir, f.Rel), err)
+			return fmt.Errorf("aborted %s: %w", filepath.Join(f.Root.Name(), f.Path), err)
 		}
-		fileIssues, err := lintFile(ctx, l, merge, dir, f)
+		fileIssues, err := lintFile(ctx, l, merge, f)
 		if err != nil {
 			// A broken file must not stop the remaining files from being linted, so record the
 			// error and keep visiting.
@@ -327,11 +327,11 @@ func lintDir(ctx context.Context, l *linter.Linter, merge mergeFn, root *os.Root
 }
 
 // lintFile reads and lints the single configuration file f, reporting issues under
-// filepath.Join(dir, f.Rel). The file is read through f.Root, so its resolution cannot escape that
-// boundary. merge, if non-nil, runs on dev container configurations before rules and is skipped
-// when no rule applies to f's type, so a file with no active rules does no Feature fetches.
-func lintFile(ctx context.Context, l *linter.Linter, merge mergeFn, dir string, f discovery.ConfigFile) ([]linter.Issue, error) {
-	display := filepath.Join(dir, f.Rel)
+// filepath.Join(f.Root.Name(), f.Path). The file is read through f.Root, so its resolution cannot
+// escape that boundary. merge, if non-nil, runs on dev container configurations before rules and is
+// skipped when no rule applies to f's type, so a file with no active rules does no Feature fetches.
+func lintFile(ctx context.Context, l *linter.Linter, merge mergeFn, f discovery.ConfigFile) ([]linter.Issue, error) {
+	display := filepath.Join(f.Root.Name(), f.Path)
 	src, err := f.Root.ReadFile(f.Path)
 	if err != nil {
 		return nil, fmt.Errorf("read config %s: %w", display, err)

@@ -53,7 +53,7 @@ func TestVisitConfigsSymlink(t *testing.T) {
 		err := VisitConfigs(openRoot(t, dir), func(f ConfigFile) error {
 			count++
 			if _, err := f.Root.ReadFile(f.Path); err != nil {
-				t.Errorf("entry %q is not readable through its Root: %v", f.Rel, err)
+				t.Errorf("entry %q is not readable through its Root: %v", filepath.Join(f.Root.Name(), f.Path), err)
 			}
 			return nil
 		})
@@ -210,9 +210,15 @@ func TestVisitConfigs(t *testing.T) {
 			var got []configRef
 			err := VisitConfigs(openRoot(t, tt.dir), func(f ConfigFile) error {
 				if _, err := f.Root.Stat(f.Path); err != nil {
-					t.Errorf("entry %q is not accessible through its Root: %v", f.Rel, err)
+					t.Errorf("entry %q is not accessible through its Root: %v", f.Path, err)
 				}
-				got = append(got, configRef{f.Rel, f.Type})
+				// A sub-root's name carries the .devcontainer prefix, so the file's path relative to
+				// the lint directory is its Root name joined with Path, made relative to that directory.
+				rel, err := filepath.Rel(tt.dir, filepath.Join(f.Root.Name(), f.Path))
+				if err != nil {
+					t.Fatalf("Rel(%q, %q): %v", tt.dir, filepath.Join(f.Root.Name(), f.Path), err)
+				}
+				got = append(got, configRef{rel, f.Type})
 				return nil
 			})
 			if err != nil {

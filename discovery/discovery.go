@@ -15,11 +15,10 @@ import (
 // ConfigFile is a discovered configuration file and the boundary it must be read through.
 type ConfigFile struct {
 	// Root is the os.Root confining access to the file: the lint root, or its .devcontainer
-	// sub-root. Path is the file's location relative to Root, for reading.
+	// sub-root.
 	Root *os.Root
+	// Path is the file's location relative to Root, for reading through it.
 	Path string
-	// Rel is the file's path relative to the lint directory, for display.
-	Rel  string
 	Type linter.FileType
 }
 
@@ -43,13 +42,13 @@ type ConfigFile struct {
 // resolve inside the boundary, and a link escaping it is treated as nonexistent.
 func VisitConfigs(root *os.Root, fn func(ConfigFile) error) error {
 	if p := "devcontainer-feature.json"; isFile(root, p) {
-		if err := fn(ConfigFile{root, p, p, linter.Feature}); err != nil {
+		if err := fn(ConfigFile{root, p, linter.Feature}); err != nil {
 			return err
 		}
 		return nil
 	}
 	if p := "devcontainer-template.json"; isFile(root, p) {
-		if err := fn(ConfigFile{root, p, p, linter.Template}); err != nil {
+		if err := fn(ConfigFile{root, p, linter.Template}); err != nil {
 			return err
 		}
 	}
@@ -65,7 +64,7 @@ const devcontainerDir = ".devcontainer"
 // root confined to that directory, opened once for the whole visit.
 func visitDevcontainerConfigs(root *os.Root, fn func(ConfigFile) error) error {
 	if p := ".devcontainer.json"; isFile(root, p) {
-		if err := fn(ConfigFile{root, p, p, linter.Devcontainer}); err != nil {
+		if err := fn(ConfigFile{root, p, linter.Devcontainer}); err != nil {
 			return err
 		}
 	}
@@ -76,7 +75,7 @@ func visitDevcontainerConfigs(root *os.Root, fn func(ConfigFile) error) error {
 	// The root is only read from, so a close error is inconsequential.
 	defer func() { _ = sub.Close() }()
 	if p := "devcontainer.json"; isFile(sub, p) {
-		if err := fn(ConfigFile{sub, p, filepath.Join(devcontainerDir, p), linter.Devcontainer}); err != nil {
+		if err := fn(ConfigFile{sub, p, linter.Devcontainer}); err != nil {
 			return err
 		}
 	}
@@ -92,7 +91,7 @@ func visitDevcontainerConfigs(root *os.Root, fn func(ConfigFile) error) error {
 		if !isFile(sub, p) {
 			continue
 		}
-		if err := fn(ConfigFile{sub, p, filepath.Join(devcontainerDir, p), linter.Devcontainer}); err != nil {
+		if err := fn(ConfigFile{sub, p, linter.Devcontainer}); err != nil {
 			return err
 		}
 	}

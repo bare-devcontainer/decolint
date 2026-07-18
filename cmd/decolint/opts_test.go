@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"io"
 	"testing"
 
@@ -118,25 +119,38 @@ func TestParseOptionsBoolFlags(t *testing.T) {
 					}
 				})
 			}
+			for _, want := range []bool{true, false} {
+				name := fmt.Sprintf("=%v", want)
+				t.Run(name, func(t *testing.T) {
+					t.Parallel()
+					args := []string{fmt.Sprintf("-%s=%v", tt.flag, want)}
+					opts, err := parseOptions(args, io.Discard)
+					if err != nil {
+						t.Fatalf("parseOptions(%v): %v", args, err)
+					}
+					if got := tt.get(opts); got != want {
+						t.Errorf("%s = %v, want %v", tt.flag, got, want)
+					}
+				})
+			}
 		})
 	}
 }
 
-func TestParseOptionsMergeFeatures(t *testing.T) {
+func TestParseOptionsMergeFeaturesSet(t *testing.T) {
 	t.Parallel()
 
-	// Dash style is covered by TestParseOptionsBoolFlags; this exercises the mergeFeaturesSet
-	// bookkeeping and the explicit-value forms unique to this flag.
+	// The value of MergeFeatures itself is covered by TestParseOptionsBoolFlags; this exercises
+	// mergeFeaturesSet, the bookkeeping unique to this flag (see its doc comment in opts.go).
 	tests := []struct {
-		name    string
-		args    []string
-		want    bool
-		wantSet bool
+		name string
+		args []string
+		want bool
 	}{
-		{"no flag", nil, false, false},
-		{"bare flag", []string{"-merge-features"}, true, true},
-		{"explicit true", []string{"-merge-features=true"}, true, true},
-		{"explicit false", []string{"-merge-features=false"}, false, true},
+		{"no flag", nil, false},
+		{"bare flag", []string{"-merge-features"}, true},
+		{"explicit true", []string{"-merge-features=true"}, true},
+		{"explicit false", []string{"-merge-features=false"}, true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -145,11 +159,8 @@ func TestParseOptionsMergeFeatures(t *testing.T) {
 			if err != nil {
 				t.Fatalf("parseOptions(%v): %v", tt.args, err)
 			}
-			if opts.MergeFeatures != tt.want {
-				t.Errorf("MergeFeatures = %v, want %v", opts.MergeFeatures, tt.want)
-			}
-			if opts.mergeFeaturesSet != tt.wantSet {
-				t.Errorf("mergeFeaturesSet = %v, want %v", opts.mergeFeaturesSet, tt.wantSet)
+			if opts.mergeFeaturesSet != tt.want {
+				t.Errorf("mergeFeaturesSet = %v, want %v", opts.mergeFeaturesSet, tt.want)
 			}
 		})
 	}

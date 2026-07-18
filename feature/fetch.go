@@ -14,6 +14,9 @@ import (
 const (
 	// maxArchiveBytes caps a downloaded Feature archive (an OCI layer blob or a tarball).
 	maxArchiveBytes = 64 << 20 // 64 MB
+	// maxDecompressedBytes caps the bytes read out of a gzip stream, so a highly compressed
+	// archive (a decompression bomb) cannot burn CPU expanding entries that precede the metadata.
+	maxDecompressedBytes = 256 << 20 // 256 MB
 	// maxMetadataBytes caps a devcontainer-feature.json, whether read from disk or from an archive.
 	maxMetadataBytes = 4 << 20 // 4 MB
 )
@@ -40,9 +43,23 @@ type fetchResult struct {
 // NewFetcher returns a Fetcher with a default HTTP client.
 func NewFetcher() *Fetcher {
 	return &Fetcher{
-		client: &http.Client{Timeout: 30 * time.Second},
-		cache:  map[string]fetchResult{},
+		client: &http.Client{
+			Timeout:       30 * time.Second,
+			CheckRedirect: refuseInsecureRedirect,
+		},
+		cache: map[string]fetchResult{},
 	}
+}
+
+// refuseInsecureRedirect rejects a redirect that downgrades an HTTPS request to plain HTTP. A tarball
+// or registry response is otherwise free to bounce a request to an internal host over plain HTTP,
+// dropping the transport guarantee the original HTTPS reference relied on. A chain that started over
+// plain HTTP (a loopback OCI registry) is left alone, since there is no downgrade to prevent.
+func refuseInsecureRedirect(req *http.Request, via []*http.Request) error {
+	if len(via) > 0 && via[0].URL.Scheme == "https" && req.URL.Scheme != "https" {
+		return fmt.Errorf("refusing insecure redirect to %s", req.URL.Redacted())
+	}
+	return nil
 }
 
 // Fetch retrieves the metadata of the Feature referenced by raw. dir and fileDir together locate

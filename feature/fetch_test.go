@@ -5,6 +5,8 @@ import (
 	"bytes"
 	"compress/gzip"
 	"encoding/json"
+	"io"
+	"maps"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -171,7 +173,7 @@ func TestFetchTarball(t *testing.T) {
 	t.Parallel()
 
 	archive := archiveWithMetadata(t, `{"id": "tarred", "version": "2.0.0"}`, true)
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/feature.tgz" {
 			http.NotFound(w, r)
 			return
@@ -180,7 +182,9 @@ func TestFetchTarball(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	md, err := NewFetcher().Fetch(t.Context(), srv.URL+"/feature.tgz", nil, "")
+	f := NewFetcher()
+	f.client = srv.Client()
+	md, err := f.Fetch(t.Context(), srv.URL+"/feature.tgz", nil, "")
 	if err != nil {
 		t.Fatalf("Fetch: %v", err)
 	}
@@ -192,11 +196,43 @@ func TestFetchTarball(t *testing.T) {
 func TestFetchTarballNotFound(t *testing.T) {
 	t.Parallel()
 
-	srv := httptest.NewServer(http.NotFoundHandler())
+	srv := httptest.NewTLSServer(http.NotFoundHandler())
 	defer srv.Close()
 
-	if _, err := NewFetcher().Fetch(t.Context(), srv.URL+"/feature.tgz", nil, ""); err == nil {
+	f := NewFetcher()
+	f.client = srv.Client()
+	if _, err := f.Fetch(t.Context(), srv.URL+"/feature.tgz", nil, ""); err == nil {
 		t.Error("Fetch of a missing tarball: got nil error")
+	}
+}
+
+func TestFetchTarballRefusesInsecureRedirect(t *testing.T) {
+	t.Parallel()
+
+	// A plain-HTTP endpoint that would serve a valid archive if the redirect were followed.
+	archive := archiveWithMetadata(t, `{"id": "downgraded"}`, true)
+	plain := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write(archive)
+	}))
+	defer plain.Close()
+
+	// An HTTPS reference that redirects to the plain-HTTP endpoint, downgrading the transport.
+	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, plain.URL+"/feature.tgz", http.StatusFound)
+	}))
+	defer srv.Close()
+
+	f := NewFetcher()
+	client := srv.Client()
+	client.CheckRedirect = refuseInsecureRedirect
+	f.client = client
+
+	_, err := f.Fetch(t.Context(), srv.URL+"/feature.tgz", nil, "")
+	if err == nil {
+		t.Fatal("Fetch following an HTTPS to HTTP redirect: got nil error")
+	}
+	if !strings.Contains(err.Error(), "insecure redirect") {
+		t.Errorf("error = %v, want it to mention an insecure redirect", err)
 	}
 }
 
@@ -318,6 +354,62 @@ func TestFetchOCIThroughIndex(t *testing.T) {
 	}
 	if md.ID != "go" {
 		t.Errorf("ID = %q, want go", md.ID)
+	}
+}
+
+// tamperingProxy fronts a registry, forwarding every request but replacing each layer blob it serves
+// with replacement. The blob no longer matches the digest declared in the (untampered) manifest,
+// while still being a well-formed archive: a caller that skips digest verification would parse it as
+// authentic. Config blobs and manifests are JSON and pass through unchanged.
+func tamperingProxy(t *testing.T, host string, replacement []byte) string {
+	t.Helper()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		req, err := http.NewRequestWithContext(r.Context(), r.Method, "http://"+host+r.URL.RequestURI(), r.Body)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		// Forward request headers, notably Accept, which the registry uses for manifest content
+		// negotiation; without it manifest resolution fails before the layer is ever fetched.
+		maps.Copy(req.Header, r.Header)
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadGateway)
+			return
+		}
+		defer func() { _ = resp.Body.Close() }()
+		body, err := io.ReadAll(resp.Body)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadGateway)
+			return
+		}
+		tampered := strings.Contains(r.URL.Path, "/blobs/") && len(body) > 0 && !json.Valid(body)
+		maps.Copy(w.Header(), resp.Header)
+		if tampered {
+			// The replacement length differs from the manifest's declared size; drop the upstream
+			// Content-Length so the response frames the substituted body correctly.
+			w.Header().Del("Content-Length")
+			body = replacement
+		}
+		w.WriteHeader(resp.StatusCode)
+		_, _ = w.Write(body)
+	}))
+	t.Cleanup(srv.Close)
+	return strings.TrimPrefix(srv.URL, "http://")
+}
+
+func TestFetchOCIRejectsTamperedLayer(t *testing.T) {
+	t.Parallel()
+
+	host := startOCIRegistry(t)
+	pushOCIFeature(t, host, "devcontainers/features/node", "1",
+		archiveWithMetadata(t, `{"id": "node"}`, false), false)
+
+	// A valid archive with different metadata: parseable, but not the layer the manifest commits to.
+	forged := archiveWithMetadata(t, `{"id": "evil"}`, false)
+	proxy := tamperingProxy(t, host, forged)
+	if _, err := NewFetcher().Fetch(t.Context(), proxy+"/devcontainers/features/node:1", nil, ""); err == nil {
+		t.Error("Fetch of a Feature whose layer bytes do not match the manifest digest: got nil error")
 	}
 }
 

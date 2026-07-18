@@ -16,7 +16,7 @@ const (
 	// KindOCI is a reference to a Feature distributed as an OCI artifact, e.g.
 	// "ghcr.io/devcontainers/features/node:1".
 	KindOCI RefKind = iota
-	// KindTarball is a direct HTTP(S) URI to a Feature tarball.
+	// KindTarball is a direct HTTPS URI to a Feature tarball.
 	KindTarball
 	// KindLocal is a relative path to a Feature directory next to the devcontainer.json.
 	KindLocal
@@ -38,13 +38,13 @@ type Ref struct {
 }
 
 // ParseRef parses a Feature reference. Relative paths ("./..." or "../...") are local Features,
-// HTTP(S) URIs are tarball Features, and everything else is parsed as an OCI reference of the form
+// HTTPS URIs are tarball Features, and everything else is parsed as an OCI reference of the form
 // "registry/repository[:tag][@digest]".
 func ParseRef(raw string) (Ref, error) {
 	if strings.HasPrefix(raw, "./") || strings.HasPrefix(raw, "../") {
 		return Ref{Raw: raw, Kind: KindLocal}, nil
 	}
-	if strings.HasPrefix(raw, "http://") || strings.HasPrefix(raw, "https://") {
+	if strings.HasPrefix(raw, "https://") {
 		return Ref{Raw: raw, Kind: KindTarball}, nil
 	}
 

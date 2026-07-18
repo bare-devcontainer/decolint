@@ -215,6 +215,34 @@ func TestMergeDependsOn(t *testing.T) {
 	}`)
 }
 
+func TestMergeAnchorsDeclaredDependencyAtOwnKey(t *testing.T) {
+	t.Parallel()
+
+	// b is declared directly and is also a dependency of the earlier-declared a. Its contributions
+	// must anchor to its own "./b" key, not to a's, so findings and inline suppressions land there.
+	src := `{
+  "features": {
+    "./a": {},
+    "./b": {}
+  }
+}`
+	root := mergeSrc(t, src, map[string]string{
+		"a": `{"id": "a", "dependsOn": {"./b": {}}}`,
+		"b": `{"id": "b", "privileged": true}`,
+	})
+	anchor := strings.Index(src, `"./b"`)
+	if anchor < 0 {
+		t.Fatal("anchor not found in source")
+	}
+	v := root.Find("/privileged")
+	if v == nil {
+		t.Fatal("merged tree lacks /privileged")
+	}
+	if v.StartOffset != anchor {
+		t.Errorf("/privileged StartOffset = %d, want %d (the ./b feature key)", v.StartOffset, anchor)
+	}
+}
+
 func TestMergeDependsOnCycle(t *testing.T) {
 	t.Parallel()
 

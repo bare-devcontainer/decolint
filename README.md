@@ -207,11 +207,11 @@ rules run in addition to platform-agnostic ones. `mergeFeatures` set
 to `true` enables [merging Features](#merging-features), same as the
 `-merge-features` flag.
 
-For a config file member with a corresponding flag (`platforms` /
-`-platform`, `mergeFeatures` / `-merge-features`), the flag, when
-given explicitly, takes precedence over the config file in either
-direction — e.g. `-merge-features=false` disables merging even if the
-config file sets `"mergeFeatures": true`.
+A non-empty `-platform` replaces the config file's `platforms`.
+`-merge-features`, when given explicitly, takes precedence over the
+config file's `mergeFeatures` in either direction — e.g.
+`-merge-features=false` disables merging even if the config file sets
+`"mergeFeatures": true`.
 
 For the strictest configuration, enable every category:
 

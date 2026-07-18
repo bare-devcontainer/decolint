@@ -102,6 +102,15 @@ func resolveAll(ctx context.Context, f *Fetcher, dir *os.Root, fileDir string, d
 	seen := map[string]*contributor{}
 	var out []*contributor
 
+	// A Feature that is both declared directly and pulled in as a dependency anchors to its own
+	// declaration, so findings and inline suppressions land on its own "features" entry rather than
+	// on a dependent's.
+	declaredByRef := map[string]*contributor{}
+	for i, c := range declared {
+		c.declIdx = i
+		declaredByRef[c.ref] = c
+	}
+
 	var visit func(c *contributor, stack []string) error
 	visit = func(c *contributor, stack []string) error {
 		if slices.Contains(stack, c.ref) {
@@ -119,7 +128,11 @@ func resolveAll(ctx context.Context, f *Fetcher, dir *os.Root, fileDir string, d
 		stack = append(stack, c.ref)
 		for _, dep := range md.DependsOn {
 			c.deps = append(c.deps, dep)
-			if err := visit(&contributor{ref: dep, anchor: c.anchor, declIdx: c.declIdx}, stack); err != nil {
+			next := declaredByRef[dep]
+			if next == nil {
+				next = &contributor{ref: dep, anchor: c.anchor, declIdx: c.declIdx}
+			}
+			if err := visit(next, stack); err != nil {
 				return err
 			}
 		}
@@ -127,8 +140,7 @@ func resolveAll(ctx context.Context, f *Fetcher, dir *os.Root, fileDir string, d
 		return nil
 	}
 
-	for i, c := range declared {
-		c.declIdx = i
+	for _, c := range declared {
 		if err := visit(c, nil); err != nil {
 			return nil, err
 		}

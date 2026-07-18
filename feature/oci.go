@@ -1,10 +1,10 @@
 package feature
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
 	"strings"
 
@@ -22,9 +22,10 @@ const featureLayerMediaType = "application/vnd.devcontainers.layer.v1+tar"
 // serves Features behind either media type.
 const dockerManifestListMediaType = "application/vnd.docker.distribution.manifest.list.v2+json"
 
-// fetchOCI retrieves a Feature distributed as an OCI artifact, using anonymous pull access. The
-// registry protocol (manifest resolution, the token handshake, blob download, and digest
-// verification) is handled by oras-go.
+// fetchOCI retrieves a Feature distributed as an OCI artifact, using anonymous pull access. oras-go
+// handles the registry protocol (manifest resolution and the token handshake). Every manifest and
+// the layer blob are read through content.FetchAll, which verifies the bytes against the digest in
+// their descriptor; repo.Fetch on its own does not.
 func (f *Fetcher) fetchOCI(ctx context.Context, feat Ref) (*Metadata, error) {
 	repo, err := remote.NewRepository(feat.Registry + "/" + feat.Repository)
 	if err != nil {
@@ -52,12 +53,21 @@ func (f *Fetcher) fetchOCI(ctx context.Context, feat Ref) (*Metadata, error) {
 		return nil, err
 	}
 
-	blob, err := repo.Fetch(ctx, layer)
+	// Reject an oversized layer before reading it into memory. Digest verification requires hashing
+	// the whole blob, so this path cannot stream and stop early the way the tarball path does; the
+	// declared size is the only bound available up front.
+	if layer.Size > maxArchiveBytes {
+		return nil, fmt.Errorf("layer %s size %d exceeds %d bytes", layer.Digest, layer.Size, maxArchiveBytes)
+	}
+	// content.FetchAll verifies the fetched bytes against the layer descriptor's size and digest.
+	// repo.Fetch alone does not hash the body (it only checks the optional Docker-Content-Digest
+	// header), so a tampered layer from a malicious or man-in-the-middle registry would otherwise be
+	// linted as if authentic, defeating digest-pinned references.
+	blob, err := content.FetchAll(ctx, repo, layer)
 	if err != nil {
 		return nil, fmt.Errorf("fetch layer %s: %w", layer.Digest, err)
 	}
-	defer func() { _ = blob.Close() }()
-	src, err := metadataFromArchive(io.LimitReader(blob, maxArchiveBytes))
+	src, err := metadataFromArchive(bytes.NewReader(blob))
 	if err != nil {
 		return nil, fmt.Errorf("read layer %s: %w", layer.Digest, err)
 	}

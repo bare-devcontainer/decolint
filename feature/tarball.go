@@ -54,7 +54,7 @@ func metadataFromArchive(r io.Reader) ([]byte, error) {
 			return nil, fmt.Errorf("new gzip reader: %w", err)
 		}
 		defer func() { _ = gz.Close() }()
-		return metadataFromTar(gz)
+		return metadataFromTar(io.LimitReader(gz, maxDecompressedBytes))
 	}
 	return metadataFromTar(br)
 }

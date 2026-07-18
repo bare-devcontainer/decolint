@@ -27,22 +27,20 @@ const dockerManifestListMediaType = "application/vnd.docker.distribution.manifes
 // the layer blob are read through content.FetchAll, which verifies the bytes against the digest in
 // their descriptor; repo.Fetch on its own does not.
 func (f *Fetcher) fetchOCI(ctx context.Context, feat Ref) (*Metadata, error) {
-	repo, err := remote.NewRepository(feat.Registry + "/" + feat.Repository)
+	repo, err := remote.NewRepository(feat.OCI.Registry + "/" + feat.OCI.Repository)
 	if err != nil {
-		return nil, fmt.Errorf("new repository %s/%s: %w", feat.Registry, feat.Repository, err)
+		return nil, fmt.Errorf("new repository %s/%s: %w", feat.OCI.Registry, feat.OCI.Repository, err)
 	}
 	// Loopback registries (local test registries) are reached over plain HTTP; all others use HTTPS.
-	repo.PlainHTTP = isLoopback(feat.Registry)
+	repo.PlainHTTP = isLoopback(feat.OCI.Registry)
 	repo.Client = &auth.Client{
 		Client: f.client,
 		Cache:  auth.NewCache(),
 		Header: http.Header{"User-Agent": []string{"decolint"}},
 	}
 
-	target := feat.Tag
-	if feat.Digest != "" {
-		target = feat.Digest
-	}
+	// ReferenceOrDefault resolves an unversioned reference to the "latest" tag.
+	target := feat.OCI.ReferenceOrDefault()
 	desc, err := repo.Resolve(ctx, target)
 	if err != nil {
 		return nil, fmt.Errorf("resolve %s: %w", target, err)

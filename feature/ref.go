@@ -7,6 +7,8 @@ package feature
 import (
 	"fmt"
 	"strings"
+
+	"oras.land/oras-go/v2/registry"
 )
 
 // RefKind identifies how a Feature reference locates the Feature.
@@ -29,12 +31,9 @@ type Ref struct {
 	Raw string
 	// Kind identifies how the reference locates the Feature.
 	Kind RefKind
-	// Registry, Repository, Tag, and Digest are the components of an OCI reference; they are empty
-	// for other kinds. Tag defaults to "latest" when the reference names neither a tag nor a digest.
-	Registry   string
-	Repository string
-	Tag        string
-	Digest     string
+	// OCI holds the parsed registry reference (registry, repository, and the tag or digest) for a
+	// KindOCI reference; it is the zero value for other kinds.
+	OCI registry.Reference
 }
 
 // ParseRef parses a Feature reference. Relative paths ("./..." or "../...") are local Features,
@@ -48,30 +47,11 @@ func ParseRef(raw string) (Ref, error) {
 		return Ref{Raw: raw, Kind: KindTarball}, nil
 	}
 
-	ref := Ref{Raw: raw, Kind: KindOCI}
-	rest := raw
-	if at := strings.LastIndex(rest, "@"); at >= 0 {
-		ref.Digest = rest[at+1:]
-		rest = rest[:at]
-		if !strings.HasPrefix(ref.Digest, "sha256:") {
-			return Ref{}, fmt.Errorf("invalid feature reference %q: digest must start with \"sha256:\"", raw)
-		}
+	// oras-go parses and validates the OCI reference (registry host, repository, tag, and digest),
+	// the same grammar it enforces when the Feature is later fetched from the registry.
+	parsed, err := registry.ParseReference(raw)
+	if err != nil {
+		return Ref{}, fmt.Errorf("invalid feature reference %q: %w", raw, err)
 	}
-	// A colon after the last slash separates the tag; a colon before it belongs to a registry host
-	// with a port (e.g. "localhost:5000/f").
-	if colon := strings.LastIndex(rest, ":"); colon > strings.LastIndex(rest, "/") {
-		ref.Tag = rest[colon+1:]
-		rest = rest[:colon]
-	}
-	if ref.Tag == "" && ref.Digest == "" {
-		ref.Tag = "latest"
-	}
-
-	registry, repository, ok := strings.Cut(rest, "/")
-	if !ok || registry == "" || repository == "" {
-		return Ref{}, fmt.Errorf("invalid feature reference %q: want \"registry/repository[:tag]\"", raw)
-	}
-	ref.Registry = registry
-	ref.Repository = repository
-	return ref, nil
+	return Ref{Raw: raw, Kind: KindOCI, OCI: parsed}, nil
 }

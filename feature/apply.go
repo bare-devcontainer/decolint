@@ -414,7 +414,7 @@ func mountTarget(v *hujson.Value) string {
 		if val.Kind() != '"' {
 			return ""
 		}
-		for _, part := range strings.Split(val.String(), ",") {
+		for part := range strings.SplitSeq(val.String(), ",") {
 			key, value, ok := strings.Cut(part, "=")
 			if !ok {
 				continue

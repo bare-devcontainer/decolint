@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"math"
 	"os"
+	"slices"
 	"strings"
 
 	"github.com/tailscale/hujson"
@@ -103,10 +104,8 @@ func resolveAll(ctx context.Context, f *Fetcher, dir *os.Root, fileDir string, d
 
 	var visit func(c *contributor, stack []string) error
 	visit = func(c *contributor, stack []string) error {
-		for _, s := range stack {
-			if s == c.ref {
-				return fmt.Errorf("feature dependency cycle: %s", strings.Join(append(stack, c.ref), " -> "))
-			}
+		if slices.Contains(stack, c.ref) {
+			return fmt.Errorf("feature dependency cycle: %s", strings.Join(append(stack, c.ref), " -> "))
 		}
 		if _, ok := seen[c.ref]; ok {
 			return nil

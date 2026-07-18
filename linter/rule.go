@@ -141,9 +141,8 @@ type Context struct {
 	Path string
 	// Type is the kind of configuration file being linted.
 	Type FileType
-	// Src is the raw content of the file.
-	Src []byte
-	// Root is the HuJSON syntax tree parsed from Src. It preserves comments and byte offsets into Src.
+	// Root is the HuJSON syntax tree of the file. It preserves comments and byte offsets into the
+	// original source.
 	Root *hujson.Value
 }
 
@@ -229,7 +228,7 @@ type Node struct {
 type Finding struct {
 	// Message describes the problem in a human-readable way.
 	Message string
-	// Offset is the byte offset into Context.Src where the problem is located, typically the
+	// Offset is the byte offset into the original source where the problem is located, typically the
 	// StartOffset of the offending value.
 	Offset int
 }

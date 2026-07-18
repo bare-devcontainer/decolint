@@ -563,3 +563,89 @@ func writeDevcontainer(t *testing.T, body string) string {
 	}
 	return dir
 }
+
+// imageRule is a stub rule that flags any "image" property, used to observe which files a lint
+// reaches without depending on the rules package.
+var imageRule = &linter.Rule{
+	ID:          "test-image",
+	Description: "flags any image property",
+	FileTypes:   []linter.FileType{linter.Devcontainer},
+	Paths:       []string{"/image"},
+	Check: func(_ *linter.Context, node *linter.Node) []linter.Finding {
+		return []linter.Finding{{Message: "image present", Offset: node.Value.StartOffset}}
+	},
+}
+
+func TestLintPath(t *testing.T) {
+	t.Parallel()
+
+	newLinter := func() *linter.Linter {
+		l := linter.New()
+		l.RegisterRule(imageRule, linter.SeverityWarn)
+		return l
+	}
+	body := `{"image": "ubuntu:24.04"}`
+
+	t.Run("aggregates issues across configs", func(t *testing.T) {
+		t.Parallel()
+		dir := writeDevcontainer(t, body)
+		if err := os.MkdirAll(filepath.Join(dir, ".devcontainer", "go"), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(dir, ".devcontainer", "go", "devcontainer.json"), []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+
+		issues, err := lintPath(t.Context(), newLinter(), dir)
+		if err != nil {
+			t.Fatalf("lintPath: %v", err)
+		}
+		var got []string
+		for _, issue := range issues {
+			got = append(got, issue.Path)
+		}
+		want := []string{
+			filepath.Join(dir, ".devcontainer", "devcontainer.json"),
+			filepath.Join(dir, ".devcontainer", "go", "devcontainer.json"),
+		}
+		if diff := cmp.Diff(want, got); diff != "" {
+			t.Errorf("issue paths mismatch (-want +got):\n%s", diff)
+		}
+	})
+
+	t.Run("a broken file does not stop other files in the same directory", func(t *testing.T) {
+		t.Parallel()
+		dir := writeDevcontainer(t, `{`)
+		if err := os.MkdirAll(filepath.Join(dir, ".devcontainer", "good"), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(dir, ".devcontainer", "good", "devcontainer.json"), []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+
+		root, err := os.OpenRoot(dir)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer func() { _ = root.Close() }()
+		issues, err := lintDir(t.Context(), newLinter(), root)
+		if err == nil {
+			t.Fatal("got nil error, want a parse error for the broken config")
+		}
+		if len(issues) != 1 {
+			t.Fatalf("got %d issues %v, want 1", len(issues), issues)
+		}
+		wantPath := filepath.Join(dir, ".devcontainer", "good", "devcontainer.json")
+		if issues[0].Path != wantPath {
+			t.Errorf("Path = %q, want %q", issues[0].Path, wantPath)
+		}
+	})
+
+	t.Run("directory without config", func(t *testing.T) {
+		t.Parallel()
+		_, err := lintPath(t.Context(), newLinter(), t.TempDir())
+		if err == nil || !strings.Contains(err.Error(), "no devcontainer configuration found") {
+			t.Errorf("err = %v, want 'no devcontainer configuration found'", err)
+		}
+	})
+}

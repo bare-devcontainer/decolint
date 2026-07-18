@@ -9,9 +9,11 @@ import (
 	"io"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"strings"
 	"syscall"
 
+	"github.com/bare-devcontainer/decolint/discovery"
 	"github.com/bare-devcontainer/decolint/linter"
 	"github.com/bare-devcontainer/decolint/rules"
 )
@@ -270,9 +272,60 @@ func lintPath(ctx context.Context, l *linter.Linter, path string) ([]linter.Issu
 	}
 	// The root is only read from, so a close error is inconsequential.
 	defer func() { _ = root.Close() }()
-	issues, err := l.LintDir(ctx, root)
+	issues, err := lintDir(ctx, l, root)
 	if err != nil {
 		return nil, fmt.Errorf("lint directory %s: %w", path, err)
 	}
 	return issues, nil
+}
+
+// lintDir lints every configuration file in the devcontainer directory root is opened on. It is an
+// error if the directory contains no configuration. Issue paths are the files' locations joined
+// onto root's name.
+func lintDir(ctx context.Context, l *linter.Linter, root *os.Root) ([]linter.Issue, error) {
+	dir := root.Name()
+	if err := ctx.Err(); err != nil {
+		return nil, fmt.Errorf("aborted %s: %w", dir, err)
+	}
+	var issues []linter.Issue
+	var errs []error
+	found := false
+	err := discovery.VisitConfigs(root, func(f discovery.ConfigFile) error {
+		found = true
+		if err := ctx.Err(); err != nil {
+			return fmt.Errorf("aborted %s: %w", filepath.Join(f.Root.Name(), f.Path), err)
+		}
+		fileIssues, err := lintFile(l, f)
+		if err != nil {
+			// A broken file must not stop the remaining files from being linted, so record the
+			// error and keep visiting.
+			errs = append(errs, err)
+			return nil
+		}
+		issues = append(issues, fileIssues...)
+		return nil
+	})
+	if err != nil {
+		return issues, errors.Join(append(errs, err)...)
+	}
+	if !found {
+		return nil, fmt.Errorf("no devcontainer configuration found in %s", dir)
+	}
+	return issues, errors.Join(errs...)
+}
+
+// lintFile reads and lints the single configuration file f, reporting issues under
+// filepath.Join(f.Root.Name(), f.Path). The file is read through f.Root, so its resolution cannot
+// escape that boundary.
+func lintFile(l *linter.Linter, f discovery.ConfigFile) ([]linter.Issue, error) {
+	display := filepath.Join(f.Root.Name(), f.Path)
+	src, err := f.Root.ReadFile(f.Path)
+	if err != nil {
+		return nil, fmt.Errorf("read config %s: %w", display, err)
+	}
+	doc, err := linter.ParseDocument(src)
+	if err != nil {
+		return nil, fmt.Errorf("%s: %w", display, err)
+	}
+	return l.LintDocument(display, f.Type, doc), nil
 }

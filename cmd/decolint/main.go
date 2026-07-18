@@ -9,9 +9,11 @@ import (
 	"io"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"strings"
 	"syscall"
 
+	"github.com/bare-devcontainer/decolint/discovery"
 	"github.com/bare-devcontainer/decolint/feature"
 	"github.com/bare-devcontainer/decolint/linter"
 	"github.com/bare-devcontainer/decolint/rules"
@@ -235,22 +237,20 @@ func runLint(ctx context.Context, stdout io.Writer, opts Options, cfg Config) (b
 	if err := rules.RegisterRules(l, cfg.Platforms, overrides); err != nil {
 		return false, fmt.Errorf("register rules: %w", err)
 	}
+	var merge mergeFn
 	if cfg.MergeFeatures {
 		// One Fetcher per run, so a Feature shared by several files is fetched at most once.
 		fetcher := feature.NewFetcher()
-		l.SetTransform(func(ctx context.Context, fctx *linter.Context) error {
-			if fctx.Type != linter.Devcontainer {
-				return nil
-			}
-			return feature.Merge(ctx, fetcher, fctx.Dir, fctx.FileDir, fctx.Root)
-		})
+		merge = func(ctx context.Context, f discovery.ConfigFile, doc *linter.Document) error {
+			return feature.Merge(ctx, fetcher, f.Root, filepath.Dir(f.Path), doc.Tree())
+		}
 	}
 
 	var allIssues []linter.Issue
 	var worstSeverity linter.Severity
 	var lintErr error
 	for _, path := range opts.Paths {
-		issues, err := lintPath(ctx, l, path)
+		issues, err := lintPath(ctx, l, merge, path)
 		for _, issue := range issues {
 			if issue.Severity > worstSeverity {
 				worstSeverity = issue.Severity
@@ -272,18 +272,78 @@ func runLint(ctx context.Context, stdout io.Writer, opts Options, cfg Config) (b
 	return worstSeverity >= threshold, nil
 }
 
+// mergeFn merges Feature-contributed properties into doc's tree before rules run; see lintFile.
+type mergeFn func(ctx context.Context, f discovery.ConfigFile, doc *linter.Document) error
+
 // lintPath lints the devcontainer directory at path. The directory is opened as an os.Root, so
 // every file the lint reads is confined to it. It is an error if path is not a directory.
-func lintPath(ctx context.Context, l *linter.Linter, path string) ([]linter.Issue, error) {
+func lintPath(ctx context.Context, l *linter.Linter, merge mergeFn, path string) ([]linter.Issue, error) {
 	root, err := os.OpenRoot(path)
 	if err != nil {
 		return nil, fmt.Errorf("resolve directory %s: %w", path, err)
 	}
 	// The root is only read from, so a close error is inconsequential.
 	defer func() { _ = root.Close() }()
-	issues, err := l.LintDir(ctx, root)
+	issues, err := lintDir(ctx, l, merge, root)
 	if err != nil {
 		return nil, fmt.Errorf("lint directory %s: %w", path, err)
 	}
 	return issues, nil
+}
+
+// lintDir lints every configuration file in the devcontainer directory root is opened on. It is an
+// error if the directory contains no configuration. Issue paths are the files' locations joined
+// onto root's name.
+func lintDir(ctx context.Context, l *linter.Linter, merge mergeFn, root *os.Root) ([]linter.Issue, error) {
+	dir := root.Name()
+	if err := ctx.Err(); err != nil {
+		return nil, fmt.Errorf("aborted %s: %w", dir, err)
+	}
+	var issues []linter.Issue
+	var errs []error
+	found := false
+	err := discovery.VisitConfigs(root, func(f discovery.ConfigFile) error {
+		found = true
+		if err := ctx.Err(); err != nil {
+			return fmt.Errorf("aborted %s: %w", filepath.Join(dir, f.Rel), err)
+		}
+		fileIssues, err := lintFile(ctx, l, merge, dir, f)
+		if err != nil {
+			// A broken file must not stop the remaining files from being linted, so record the
+			// error and keep visiting.
+			errs = append(errs, err)
+			return nil
+		}
+		issues = append(issues, fileIssues...)
+		return nil
+	})
+	if err != nil {
+		return issues, errors.Join(append(errs, err)...)
+	}
+	if !found {
+		return nil, fmt.Errorf("no devcontainer configuration found in %s", dir)
+	}
+	return issues, errors.Join(errs...)
+}
+
+// lintFile reads and lints the single configuration file f, reporting issues under
+// filepath.Join(dir, f.Rel). The file is read through f.Root, so its resolution cannot escape that
+// boundary. merge, if non-nil, runs on dev container configurations before rules and is skipped
+// when no rule applies to f's type, so a file with no active rules does no Feature fetches.
+func lintFile(ctx context.Context, l *linter.Linter, merge mergeFn, dir string, f discovery.ConfigFile) ([]linter.Issue, error) {
+	display := filepath.Join(dir, f.Rel)
+	src, err := f.Root.ReadFile(f.Path)
+	if err != nil {
+		return nil, fmt.Errorf("read config %s: %w", display, err)
+	}
+	doc, err := linter.ParseDocument(src)
+	if err != nil {
+		return nil, fmt.Errorf("%s: %w", display, err)
+	}
+	if merge != nil && f.Type == linter.Devcontainer && l.HasRules(f.Type) {
+		if err := merge(ctx, f, doc); err != nil {
+			return nil, fmt.Errorf("merge features %s: %w", display, err)
+		}
+	}
+	return l.LintDocument(display, f.Type, doc), nil
 }

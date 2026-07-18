@@ -2,12 +2,15 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"encoding/json/v2"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
+	"github.com/bare-devcontainer/decolint/discovery"
 	"github.com/bare-devcontainer/decolint/format"
 	"github.com/bare-devcontainer/decolint/linter"
 	"github.com/bare-devcontainer/decolint/rules"
@@ -626,6 +629,149 @@ func TestRunMergeFeatures(t *testing.T) {
 		}
 		if !strings.Contains(stderr.String(), "../sibling-feature") {
 			t.Errorf("stderr = %q, want it to mention the unresolvable feature", stderr.String())
+		}
+	})
+}
+
+// imageRule is a stub rule that flags any "image" property, used to observe which files a lint
+// reaches without depending on the rules package.
+var imageRule = &linter.Rule{
+	ID:          "test-image",
+	Description: "flags any image property",
+	FileTypes:   []linter.FileType{linter.Devcontainer},
+	Paths:       []string{"/image"},
+	Check: func(_ *linter.Context, node *linter.Node) []linter.Finding {
+		return []linter.Finding{{Message: "image present", Offset: node.Value.StartOffset}}
+	},
+}
+
+func TestLintPath(t *testing.T) {
+	t.Parallel()
+
+	newLinter := func() *linter.Linter {
+		l := linter.New()
+		l.RegisterRule(imageRule, linter.SeverityWarn)
+		return l
+	}
+	body := `{"image": "ubuntu:24.04"}`
+
+	t.Run("aggregates issues across configs", func(t *testing.T) {
+		t.Parallel()
+		dir := writeDevcontainer(t, body)
+		if err := os.MkdirAll(filepath.Join(dir, ".devcontainer", "go"), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(dir, ".devcontainer", "go", "devcontainer.json"), []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+
+		issues, err := lintPath(t.Context(), newLinter(), nil, dir)
+		if err != nil {
+			t.Fatalf("lintPath: %v", err)
+		}
+		var got []string
+		for _, issue := range issues {
+			got = append(got, issue.Path)
+		}
+		want := []string{
+			filepath.Join(dir, ".devcontainer", "devcontainer.json"),
+			filepath.Join(dir, ".devcontainer", "go", "devcontainer.json"),
+		}
+		if diff := cmp.Diff(want, got); diff != "" {
+			t.Errorf("issue paths mismatch (-want +got):\n%s", diff)
+		}
+	})
+
+	t.Run("a broken file does not stop other files in the same directory", func(t *testing.T) {
+		t.Parallel()
+		dir := writeDevcontainer(t, `{`)
+		if err := os.MkdirAll(filepath.Join(dir, ".devcontainer", "good"), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(dir, ".devcontainer", "good", "devcontainer.json"), []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+
+		root, err := os.OpenRoot(dir)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer func() { _ = root.Close() }()
+		issues, err := lintDir(t.Context(), newLinter(), nil, root)
+		if err == nil {
+			t.Fatal("got nil error, want a parse error for the broken config")
+		}
+		if len(issues) != 1 {
+			t.Fatalf("got %d issues %v, want 1", len(issues), issues)
+		}
+		wantPath := filepath.Join(dir, ".devcontainer", "good", "devcontainer.json")
+		if issues[0].Path != wantPath {
+			t.Errorf("Path = %q, want %q", issues[0].Path, wantPath)
+		}
+	})
+
+	t.Run("directory without config", func(t *testing.T) {
+		t.Parallel()
+		_, err := lintPath(t.Context(), newLinter(), nil, t.TempDir())
+		if err == nil || !strings.Contains(err.Error(), "no devcontainer configuration found") {
+			t.Errorf("err = %v, want 'no devcontainer configuration found'", err)
+		}
+	})
+
+	t.Run("merge error aborts the file", func(t *testing.T) {
+		t.Parallel()
+		dir := writeDevcontainer(t, body)
+		wantErr := errors.New("fetch failed")
+		merge := func(context.Context, discovery.ConfigFile, *linter.Document) error { return wantErr }
+
+		if _, err := lintPath(t.Context(), newLinter(), merge, dir); !errors.Is(err, wantErr) {
+			t.Errorf("lintPath error = %v, want %v", err, wantErr)
+		}
+	})
+
+	t.Run("merge is skipped when no rule applies", func(t *testing.T) {
+		t.Parallel()
+		dir := writeDevcontainer(t, body)
+		called := false
+		merge := func(context.Context, discovery.ConfigFile, *linter.Document) error {
+			called = true
+			return nil
+		}
+
+		if _, err := lintPath(t.Context(), linter.New(), merge, dir); err != nil {
+			t.Fatalf("lintPath: %v", err)
+		}
+		if called {
+			t.Error("merge ran although no rule is registered")
+		}
+	})
+
+	t.Run("merge is skipped for a non-devcontainer file", func(t *testing.T) {
+		t.Parallel()
+		dir := t.TempDir()
+		if err := os.WriteFile(filepath.Join(dir, "devcontainer-feature.json"), []byte(`{"id": "f"}`), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		l := linter.New()
+		// A Feature-type rule keeps HasRules true for the file, so only the type guard can skip the
+		// merge.
+		l.RegisterRule(&linter.Rule{
+			ID:        "test-feature",
+			FileTypes: []linter.FileType{linter.Feature},
+			Paths:     []string{"/id"},
+			Check:     func(*linter.Context, *linter.Node) []linter.Finding { return nil },
+		}, linter.SeverityWarn)
+		called := false
+		merge := func(context.Context, discovery.ConfigFile, *linter.Document) error {
+			called = true
+			return nil
+		}
+
+		if _, err := lintPath(t.Context(), l, merge, dir); err != nil {
+			t.Fatalf("lintPath: %v", err)
+		}
+		if called {
+			t.Error("merge ran on a Feature configuration")
 		}
 	})
 }

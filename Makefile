@@ -27,13 +27,19 @@ run: build ## Build and run the decolint binary
 test: ## Run all tests
 	go test ./...
 
+.PHONY: coverage
+coverage: ## Run tests and open an HTML coverage report
+	go test -coverprofile=coverage.out ./...
+	go tool cover -func=coverage.out
+	go tool cover -html=coverage.out -o coverage.html
+
 .PHONY: lint
 lint: ## Run all lint rules
 	go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@$(GOLANGCI_LINT_VERSION) run
 
 .PHONY: clean
 clean: ## Remove build artifacts
-	rm -rf bin
+	rm -rf bin coverage.out coverage.html
 
 .PHONY: install
 install: ## Install the decolint binary to GOPATH/bin

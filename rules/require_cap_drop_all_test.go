@@ -15,7 +15,7 @@ func TestRequireCapDropAll(t *testing.T) {
 		src  string
 		want []linter.Issue
 	}{
-		{"no capDrop or runArgs", `{"name": "test"}`, []linter.Issue{
+		{"no runArgs", `{"name": "test"}`, []linter.Issue{
 			{Path: "devcontainer.json", Line: 1, Col: 1, RuleID: "require-cap-drop-all",
 				Message: `"ALL" is not set via "runArgs", leaving the container with its default Linux capabilities`},
 		}},

@@ -37,6 +37,7 @@ var categoryDefaultSeverities = map[linter.Category]linter.Severity{
 
 // builtinRuleList lists the built-in rules, in a deterministic order (alphabetically by rule ID).
 var builtinRuleList = []*linter.Rule{
+	ConflictingContainerDef,
 	IDDirMismatch,
 	InvalidSemver,
 	MissingBuildDockerfile,

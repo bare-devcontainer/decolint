@@ -133,6 +133,7 @@ func resolveAll(ctx context.Context, f *Fetcher, fsRoot *os.Root, configDir stri
 
 		for _, dep := range md.DependsOn {
 			anchor := current.anchor
+			// Prefer the dependency's own declaration so its findings land on the entry the user can act on.
 			if a, ok := declaredAnchor[dep.Ref]; ok {
 				anchor = a
 			}

@@ -10,177 +10,140 @@ import (
 	"oras.land/oras-go/v2/registry"
 )
 
-// TestInstallOrderLocal covers resolving local ("./…") Feature graphs into an install order,
-// exercising installsAfter, dependsOn, their combination, and overrideFeatureInstallOrder.
-func TestInstallOrderLocal(t *testing.T) {
+func TestInstallOrder(t *testing.T) {
 	t.Parallel()
 
+	// node builds a minimal contributor whose KindLocal identity makes compareTo order nodes by ref,
+	// so a round's order is deterministic.
+	node := func(ref string) *contributor {
+		return &contributor{ref: ref, kind: KindLocal, resolvedPath: ref}
+	}
+
 	tests := []struct {
-		name     string
-		src      string
-		features map[string]string
-		want     []string
+		name    string
+		build   func() []*contributor
+		want    []string
+		wantErr bool
 	}{
 		{
-			name: "installs after",
-			src:  `{"features": {"./a": {}, "./c": {"magicNumber": "321"}}}`,
-			features: map[string]string{
-				"a": `{"id": "a", "installsAfter": ["./b", "./c"]}`,
-				"b": `{"id": "b"}`,
-				"c": `{"id": "c"}`,
-			},
-			want: []string{"./c{magicNumber=321}", "./a{}"},
+			name:  "independent nodes ordered by tiebreak",
+			build: func() []*contributor { return []*contributor{node("c"), node("a"), node("b")} },
+			want:  []string{"a{}", "b{}", "c{}"},
 		},
 		{
-			name: "depends on",
-			src:  `{"features": {"./a": {}}}`,
-			features: map[string]string{
-				"a": `{"id": "a", "dependsOn": {"./b": {"magicNumber": "50"}}}`,
-				"b": `{"id": "b"}`,
+			name: "hard dependency precedes dependent",
+			build: func() []*contributor {
+				a, b := node("a"), node("b")
+				a.dependsOn = []*contributor{b}
+				return []*contributor{a, b}
 			},
-			want: []string{"./b{magicNumber=50}", "./a{}"},
+			want: []string{"b{}", "a{}"},
 		},
 		{
-			name: "depends on with options",
-			src:  `{"features": {"./a": {"optA": "a", "optB": "b"}, "./b": {"optA": "a", "optB": "b"}}}`,
-			features: map[string]string{
-				"a": `{"id": "a", "dependsOn": {"./b": {"optA": "a", "optB": "a"}, "./c": {}}}`,
-				"b": `{"id": "b"}`,
-				"c": `{"id": "c", "dependsOn": {"./b": {"optA": "b", "optB": "a"}, "./d": {}, "./e": {}}}`,
-				"d": `{"id": "d", "dependsOn": {"./b": {"optA": "b", "optB": "b"}}}`,
-				"e": `{"id": "e", "dependsOn": {"./b": {}}}`,
+			name: "soft dependency orders after",
+			build: func() []*contributor {
+				a, b := node("a"), node("b")
+				a.installsAfter = []*contributor{b}
+				return []*contributor{a, b}
 			},
-			want: []string{
-				"./b{}",
-				"./b{optA=a,optB=a}",
-				"./b{optA=a,optB=b}",
-				"./b{optA=b,optB=a}",
-				"./b{optA=b,optB=b}",
-				"./d{}",
-				"./e{}",
-				"./c{}",
-				"./a{optA=a,optB=b}",
-			},
+			want: []string{"b{}", "a{}"},
 		},
 		{
-			name: "depends on and installs after",
-			src:  `{"features": {"./a": {}}}`,
-			features: map[string]string{
-				"a": `{"id": "a", "installsAfter": ["./b"], "dependsOn": {"./c": {"magicNumber": "321"}}}`,
-				"b": `{"id": "b"}`,
-				"c": `{"id": "c"}`,
+			// A soft dependency on a Feature absent from the merge is dropped, so it neither gates nor
+			// delays: a stays eligible in the first round alongside the independent z.
+			name: "absent soft dependency ignored",
+			build: func() []*contributor {
+				a, z := node("a"), node("z")
+				a.installsAfter = []*contributor{node("x")} // x is not among the nodes
+				return []*contributor{a, z}
 			},
-			want: []string{"./c{magicNumber=321}", "./a{}"},
+			want: []string{"a{}", "z{}"},
 		},
 		{
-			name: "override simple",
-			src:  `{"features": {"./a": {}}, "overrideFeatureInstallOrder": ["./c"]}`,
-			features: map[string]string{
-				"a": `{"id": "a", "dependsOn": {"./b": {}, "./c": {}, "./d": {}}}`,
-				"b": `{"id": "b"}`,
-				"c": `{"id": "c"}`,
-				"d": `{"id": "d"}`,
+			name: "hard chain spans rounds",
+			build: func() []*contributor {
+				a, b, c := node("a"), node("b"), node("c")
+				a.dependsOn = []*contributor{b}
+				b.dependsOn = []*contributor{c}
+				return []*contributor{a, b, c}
 			},
-			want: []string{"./c{}", "./b{}", "./d{}", "./a{}"},
+			want: []string{"c{}", "b{}", "a{}"},
 		},
 		{
-			// The override reverses c and d relative to their natural round order (./c < ./d), so it must
-			// take effect for the ordering to hold: d before c, even though both are eligible in the same
-			// round and sit mid-graph (a depends on b->c and on d, and installsAfter c).
-			name: "override intermediate",
-			src:  `{"features": {"./a": {}}, "overrideFeatureInstallOrder": ["./d", "./c"]}`,
-			features: map[string]string{
-				"a": `{"id": "a", "dependsOn": {"./b": {}, "./d": {}}, "installsAfter": ["./c"]}`,
-				"b": `{"id": "b", "dependsOn": {"./c": {}}}`,
-				"c": `{"id": "c"}`,
-				"d": `{"id": "d"}`,
+			// roundPriority raises b into the first round and requeues the lower-priority a and c to the
+			// next, even though a would otherwise sort first by tiebreak.
+			name: "round priority raises node and requeues the rest",
+			build: func() []*contributor {
+				a, b, c := node("a"), node("b"), node("c")
+				b.roundPriority = 1
+				return []*contributor{a, b, c}
 			},
-			want: []string{"./d{}", "./c{}", "./b{}", "./a{}"},
+			want: []string{"b{}", "a{}", "c{}"},
 		},
 		{
-			// roundPriority beats an independent, otherwise eligible Feature: c is installable in the
-			// first round but a (higher priority) and then b (which depends on a) install before it.
-			name: "override round priority",
-			src:  `{"features": {"./b": {}, "./c": {}}, "overrideFeatureInstallOrder": ["./a", "./b", "./c"]}`,
-			features: map[string]string{
-				"a": `{"id": "a"}`,
-				"b": `{"id": "b", "dependsOn": {"./a": {}}}`,
-				"c": `{"id": "c"}`,
+			// Priority never overrides a hard edge: b outranks a but depends on it, so a still installs
+			// first.
+			name: "round priority cannot precede own hard dependency",
+			build: func() []*contributor {
+				a, b := node("a"), node("b")
+				b.roundPriority = 1
+				b.dependsOn = []*contributor{a}
+				return []*contributor{a, b}
 			},
-			want: []string{"./a{}", "./b{}", "./c{}"},
+			want: []string{"a{}", "b{}"},
+		},
+		{
+			name: "hard dependency cycle fails",
+			build: func() []*contributor {
+				a, b := node("a"), node("b")
+				a.dependsOn = []*contributor{b}
+				b.dependsOn = []*contributor{a}
+				return []*contributor{a, b}
+			},
+			wantErr: true,
+		},
+		{
+			name: "soft dependency cycle fails",
+			build: func() []*contributor {
+				a, b := node("a"), node("b")
+				a.installsAfter = []*contributor{b}
+				b.installsAfter = []*contributor{a}
+				return []*contributor{a, b}
+			},
+			wantErr: true,
+		},
+		{
+			// A round of differing source types is ordered by compareTo's cross-type fallback, the
+			// requested reference string: "./local" < "reg.example.invalid/ns/x" < "tarball:z".
+			name: "mixed source types ordered by reference",
+			build: func() []*contributor {
+				local := &contributor{ref: "./local", kind: KindLocal, resolvedPath: "./local"}
+				tarball := &contributor{ref: "tarball:z", kind: KindTarball, tarballURI: "tarball:z"}
+				oci := &contributor{ref: "reg.example.invalid/ns/x", kind: KindOCI, digest: "sha256:abc"}
+				return []*contributor{tarball, oci, local}
+			},
+			want: []string{"./local{}", "reg.example.invalid/ns/x@sha256:abc{}", "tarball:z{}"},
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			got := resolveOrder(t, tt.src, tt.features)
+			got, err := installOrder(tt.build())
+			if tt.wantErr {
+				if err == nil {
+					t.Fatal("installOrder: got nil error, want cycle error")
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("installOrder: %v", err)
+			}
 			assertOrder(t, got, tt.want)
 		})
 	}
 }
 
-// TestInstallOrderCycle covers detecting a dependency cycle among local Features: installSequence
-// must fail rather than return an order for both an installsAfter cycle and a dependsOn cycle.
-func TestInstallOrderCycle(t *testing.T) {
-	t.Parallel()
-
-	tests := []struct {
-		name     string
-		src      string
-		features map[string]string
-	}{
-		{
-			name: "installs after",
-			src:  `{"features": {"./a": {}, "./b": {}, "./c": {}}}`,
-			features: map[string]string{
-				"a": `{"id": "a", "installsAfter": ["./b"]}`,
-				"b": `{"id": "b", "installsAfter": ["./c"]}`,
-				"c": `{"id": "c", "installsAfter": ["./a"]}`,
-			},
-		},
-		{
-			name: "depends on",
-			src:  `{"features": {"./a": {}}}`,
-			features: map[string]string{
-				"a": `{"id": "a", "dependsOn": {"./b": {}}}`,
-				"b": `{"id": "b", "dependsOn": {"./c": {"magicNumber": "50"}}}`,
-				"c": `{"id": "c", "dependsOn": {"./a": {"magicNumber": "50"}}}`,
-			},
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-			if _, err := installSequenceOf(t, tt.src, tt.features); err == nil {
-				t.Fatal("installSequence with a dependency cycle: got nil error")
-			}
-		})
-	}
-}
-
-// installSequenceOf resolves src against on-disk fixtures and returns the ordering result and error,
-// for cases that assert on failure.
-func installSequenceOf(t *testing.T, src string, features map[string]string) ([]*contributor, error) {
-	t.Helper()
-	dir := t.TempDir()
-	for name, content := range features {
-		writeLocalFeature(t, dir, name, content)
-	}
-	root, err := hujson.Parse([]byte(src))
-	if err != nil {
-		t.Fatalf("parse devcontainer.json: %v", err)
-	}
-	return installSequence(t.Context(), NewFetcher(), openRoot(t, dir), ".", &root)
-}
-
-// TestInstallOrderDependsOnOCI ports the CLI's "valid dependsOn with published oci Features" case
-// (dependsOn/oci-ab). The graph is the published codspace/dependson family:
-//
-//	a(A) -> E ;  b(B) -> C, D ;  c(C) -> A, E ;  d(D), e(E) -> (none)
-//
-// It exercises OCI comparison: two requests for the same canonical Feature (a@… with options 10 and
-// 40) are distinct but adjacent, and a round is ordered by resource id then options.
-func TestInstallOrderDependsOnOCI(t *testing.T) {
+func TestInstallOrder_OCIOrder(t *testing.T) {
 	t.Parallel()
 
 	const (
@@ -208,40 +171,45 @@ func TestInstallOrderDependsOnOCI(t *testing.T) {
 		t.Fatalf("installOrder: %v", err)
 	}
 	assertOrder(t, got, []string{
-		"ghcr.io/codspace/dependson/D@" + digestD + "{magicNumber=30}",
-		"ghcr.io/codspace/dependson/E@" + digestE + "{magicNumber=50}",
-		"ghcr.io/codspace/dependson/a@" + digestA + "{magicNumber=10}",
-		"ghcr.io/codspace/dependson/A@" + digestA + "{magicNumber=40}",
-		"ghcr.io/codspace/dependson/C@" + digestC + "{magicNumber=20}",
-		"ghcr.io/codspace/dependson/b@" + digestB + "{magicNumber=400}",
+		"reg.example.invalid/codspace/dependson/D@" + digestD + "{magicNumber=30}",
+		"reg.example.invalid/codspace/dependson/E@" + digestE + "{magicNumber=50}",
+		"reg.example.invalid/codspace/dependson/a@" + digestA + "{magicNumber=10}",
+		"reg.example.invalid/codspace/dependson/A@" + digestA + "{magicNumber=40}",
+		"reg.example.invalid/codspace/dependson/C@" + digestC + "{magicNumber=20}",
+		"reg.example.invalid/codspace/dependson/b@" + digestB + "{magicNumber=400}",
 	})
 }
 
-// ociContrib builds an OCI contributor under ghcr.io/codspace/dependson. userID is the identifier as
-// written in the referencing Feature (which may differ in case), repoID is the lowercase resource
-// segment used for comparison, and the alias is the published metadata id (uppercase).
-func ociContrib(userID, repoID, digest string, opts map[string]string) *contributor {
-	return &contributor{
-		ref:     "ghcr.io/codspace/dependson/" + userID,
-		kind:    KindOCI,
-		ociRef:  registry.Reference{Registry: "ghcr.io", Repository: "codspace/dependson/" + repoID},
-		digest:  digest,
-		aliases: []string{strings.ToUpper(repoID)},
-		options: optionsOf(opts),
+func TestInstallOrder_TarballOrder(t *testing.T) {
+	t.Parallel()
+
+	const host = "https://example.invalid/features/"
+	b := tarballContrib(host+"b.tgz", map[string]string{"magicNumber": "400"})
+	a := tarballContrib(host+"a.tgz", map[string]string{"magicNumber": "10"})
+	c := tarballContrib(host+"c.tgz", map[string]string{"magicNumber": "20"})
+	d := tarballContrib(host+"d.tgz", map[string]string{"magicNumber": "30"})
+	e := tarballContrib(host+"e.tgz", map[string]string{"magicNumber": "50"})
+	aDep := tarballContrib(host+"a.tgz", map[string]string{"magicNumber": "40"})
+
+	b.dependsOn = []*contributor{c, d}
+	a.dependsOn = []*contributor{e}
+	c.dependsOn = []*contributor{aDep, e}
+	aDep.dependsOn = []*contributor{e}
+
+	got, err := installOrder([]*contributor{b, a, c, d, e, aDep})
+	if err != nil {
+		t.Fatalf("installOrder: %v", err)
 	}
+	assertOrder(t, got, []string{
+		host + "d.tgz{magicNumber=30}",
+		host + "e.tgz{magicNumber=50}",
+		host + "a.tgz{magicNumber=10}",
+		host + "a.tgz{magicNumber=40}",
+		host + "c.tgz{magicNumber=20}",
+		host + "b.tgz{magicNumber=400}",
+	})
 }
 
-func optionsOf(m map[string]string) optionValue {
-	obj := map[string]optScalar{}
-	for k, v := range m {
-		obj[k] = optScalar{kind: kindString, str: v}
-	}
-	return optionValue{kind: kindObject, obj: obj}
-}
-
-// TestCompareTo covers each branch of the specification's ordering comparison, including the
-// source-type-specific keys the local and OCI ordering tests do not reach on their own (tarball URI,
-// OCI tag, digest tiebreak, and cross-type comparison by reference).
 func TestCompareTo(t *testing.T) {
 	t.Parallel()
 
@@ -253,9 +221,9 @@ func TestCompareTo(t *testing.T) {
 	}
 	oci := func(repo, tag, digest string, opts map[string]string) *contributor {
 		return &contributor{
-			ref:     "reg.example.com/" + repo,
+			ref:     "reg.example.invalid/" + repo,
 			kind:    KindOCI,
-			ociRef:  registry.Reference{Registry: "reg.example.com", Repository: repo, Reference: tag},
+			ociRef:  registry.Reference{Registry: "reg.example.invalid", Repository: repo, Reference: tag},
 			digest:  digest,
 			options: optionsOf(opts),
 		}
@@ -269,8 +237,8 @@ func TestCompareTo(t *testing.T) {
 		{"local by path", local("a", nil), local("b", nil), -1},
 		{"local by options", local("a", map[string]string{"o": "x"}), local("a", map[string]string{"o": "y"}), -1},
 		{"local equal", local("a", map[string]string{"o": "x"}), local("a", map[string]string{"o": "x"}), 0},
-		{"tarball by uri", tarball("https://ex/a.tgz", nil), tarball("https://ex/b.tgz", nil), -1},
-		{"tarball by options", tarball("https://ex/a.tgz", map[string]string{"v": "1"}), tarball("https://ex/a.tgz", map[string]string{"v": "2"}), -1},
+		{"tarball by uri", tarball("https://example.invalid/a.tgz", nil), tarball("https://example.invalid/b.tgz", nil), -1},
+		{"tarball by options", tarball("https://example.invalid/a.tgz", map[string]string{"v": "1"}), tarball("https://example.invalid/a.tgz", map[string]string{"v": "2"}), -1},
 		{"oci by resource id", oci("ns/a", "", "sha256:1", nil), oci("ns/b", "", "sha256:2", nil), -1},
 		{"oci by tag", oci("ns/a", "1.0.0", "sha256:1", nil), oci("ns/a", "2.0.0", "sha256:2", nil), -1},
 		// Tags compare lexicographically, not by semantic version: "10" sorts before "9" because
@@ -304,10 +272,6 @@ func TestCompareTo(t *testing.T) {
 	}
 }
 
-// TestOptionsCompareTo covers the option-set comparison branches the install-order and compareTo
-// tests do not reach on their own: boolean options, object options with undefined and boolean
-// scalars, and the cross-kind fallback that orders differing kinds lexicographically by their type
-// name, i.e. "boolean" < "object" < "string".
 func TestOptionsCompareTo(t *testing.T) {
 	t.Parallel()
 
@@ -352,9 +316,6 @@ func TestOptionsCompareTo(t *testing.T) {
 	}
 }
 
-// TestParseOptions covers normalizing a "features"/"dependsOn" value into an optionValue: the string
-// and boolean literal forms, an object with each scalar variant (string, boolean, and an undefined
-// value from a non-scalar member), and a bare non-scalar value that falls back to the empty object.
 func TestParseOptions(t *testing.T) {
 	t.Parallel()
 
@@ -393,8 +354,6 @@ func TestParseOptions(t *testing.T) {
 	}
 }
 
-// TestOCIRefHelpers covers the repository/tag decomposition edge cases: a bare repository with no
-// namespace separator, and a reference pinned by digest (which yields no tag).
 func TestOCIRefHelpers(t *testing.T) {
 	t.Parallel()
 
@@ -412,9 +371,6 @@ func TestOCIRefHelpers(t *testing.T) {
 	}
 }
 
-// TestSatisfiesSoftDependency covers the per-source-type matching used to drop and gate soft
-// dependencies: a tarball and a local Feature match on their URI/path, and an OCI Feature matches
-// either its exact resource or a legacy alias of the requested (renamed) Feature.
 func TestSatisfiesSoftDependency(t *testing.T) {
 	t.Parallel()
 
@@ -427,7 +383,7 @@ func TestSatisfiesSoftDependency(t *testing.T) {
 	oci := func(repo string, aliases []string) *contributor {
 		return &contributor{
 			kind:    KindOCI,
-			ociRef:  registry.Reference{Registry: "ghcr.io", Repository: repo},
+			ociRef:  registry.Reference{Registry: "reg.example.invalid", Repository: repo},
 			aliases: aliases,
 		}
 	}
@@ -437,9 +393,9 @@ func TestSatisfiesSoftDependency(t *testing.T) {
 		node, soft *contributor
 		want       bool
 	}{
-		{"different kinds never match", tarball("https://ex/a.tgz"), local("./a"), false},
-		{"tarball match", tarball("https://ex/a.tgz"), tarball("https://ex/a.tgz"), true},
-		{"tarball mismatch", tarball("https://ex/a.tgz"), tarball("https://ex/b.tgz"), false},
+		{"different kinds never match", tarball("https://example.invalid/a.tgz"), local("./a"), false},
+		{"tarball match", tarball("https://example.invalid/a.tgz"), tarball("https://example.invalid/a.tgz"), true},
+		{"tarball mismatch", tarball("https://example.invalid/a.tgz"), tarball("https://example.invalid/b.tgz"), false},
 		{"local match", local("./a"), local("./a"), true},
 		{"local mismatch", local("./a"), local("./b"), false},
 		{"oci exact resource", oci("ns/a", nil), oci("ns/a", nil), true},
@@ -456,39 +412,45 @@ func TestSatisfiesSoftDependency(t *testing.T) {
 	}
 }
 
-// TestDisplayID covers both branches of displayID: the metadata id when present, and the fallback to
-// the request reference when the Feature carries no metadata id.
 func TestDisplayID(t *testing.T) {
 	t.Parallel()
 
-	withID := &contributor{ref: "ghcr.io/ns/a", md: &Metadata{ID: "a"}}
+	withID := &contributor{ref: "reg.example.invalid/ns/a", md: &Metadata{ID: "a"}}
 	if got := withID.displayID(); got != "a" {
 		t.Errorf("displayID with metadata id = %q, want %q", got, "a")
 	}
 
-	noMetadata := &contributor{ref: "ghcr.io/ns/a"}
-	if got := noMetadata.displayID(); got != "ghcr.io/ns/a" {
-		t.Errorf("displayID without metadata = %q, want %q", got, "ghcr.io/ns/a")
+	noMetadata := &contributor{ref: "reg.example.invalid/ns/a"}
+	if got := noMetadata.displayID(); got != "reg.example.invalid/ns/a" {
+		t.Errorf("displayID without metadata = %q, want %q", got, "reg.example.invalid/ns/a")
 	}
 }
 
-// resolveOrder writes each named Feature under a temp directory (referenced as "./<name>"), resolves
-// the devcontainer.json in src, and returns the contributors in installation order.
-func resolveOrder(t *testing.T, src string, features map[string]string) []*contributor {
-	t.Helper()
-	dir := t.TempDir()
-	for name, content := range features {
-		writeLocalFeature(t, dir, name, content)
+// ociContrib builds an OCI contributor under reg.example.invalid/codspace/dependson. userID is the identifier as
+// written in the referencing Feature (which may differ in case), repoID is the lowercase resource
+// segment used for comparison, and the alias is the published metadata id (uppercase).
+func ociContrib(userID, repoID, digest string, opts map[string]string) *contributor {
+	return &contributor{
+		ref:     "reg.example.invalid/codspace/dependson/" + userID,
+		kind:    KindOCI,
+		ociRef:  registry.Reference{Registry: "reg.example.invalid", Repository: "codspace/dependson/" + repoID},
+		digest:  digest,
+		aliases: []string{strings.ToUpper(repoID)},
+		options: optionsOf(opts),
 	}
-	root, err := hujson.Parse([]byte(src))
-	if err != nil {
-		t.Fatalf("parse devcontainer.json: %v", err)
+}
+
+// tarballContrib builds a tarball contributor requested by uri with the given options.
+func tarballContrib(uri string, opts map[string]string) *contributor {
+	return &contributor{ref: uri, kind: KindTarball, tarballURI: uri, options: optionsOf(opts)}
+}
+
+func optionsOf(m map[string]string) optionValue {
+	obj := map[string]optScalar{}
+	for k, v := range m {
+		obj[k] = optScalar{kind: kindString, str: v}
 	}
-	ordered, err := installSequence(t.Context(), NewFetcher(), openRoot(t, dir), ".", &root)
-	if err != nil {
-		t.Fatalf("installSequence: %v", err)
-	}
-	return ordered
+	return optionValue{kind: kindObject, obj: obj}
 }
 
 // itemKey identifies a contributor in an ordering assertion by its reference, OCI digest (when set),

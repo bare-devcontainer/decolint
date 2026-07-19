@@ -45,6 +45,26 @@ func assertJSON(t *testing.T, root *hujson.Value, want string) {
 	}
 }
 
+// resolveOrder writes each named Feature under a temp directory (referenced as "./<name>"), resolves
+// the devcontainer.json in src through installSequence, and returns the contributors in installation
+// order. It asserts on the resolved contributors directly, at a finer grain than the merged tree.
+func resolveOrder(t *testing.T, src string, features map[string]string) []*contributor {
+	t.Helper()
+	dir := t.TempDir()
+	for name, content := range features {
+		writeLocalFeature(t, dir, name, content)
+	}
+	root, err := hujson.Parse([]byte(src))
+	if err != nil {
+		t.Fatalf("parse devcontainer.json: %v", err)
+	}
+	ordered, err := installSequence(t.Context(), NewFetcher(), openRoot(t, dir), ".", &root)
+	if err != nil {
+		t.Fatalf("installSequence: %v", err)
+	}
+	return ordered
+}
+
 func TestMergeNoFeatures(t *testing.T) {
 	t.Parallel()
 
@@ -410,6 +430,67 @@ func TestMergeOverrideFeatureInstallOrderOCILegacyAlias(t *testing.T) {
 			t.Errorf("SHARED = %q, want aaa", got)
 		}
 	})
+}
+
+// TestInstallSequence covers the contributor resolution installSequence performs before ordering
+// (merge.go's resolveAll), asserted at install-order precision rather than through the merged tree:
+// identical requests for the same Feature collapse to one node, while requests that differ only in
+// options stay distinct and order by the specification's options comparison. The ordering algorithm
+// itself is covered by TestInstallOrder, and the dependsOn/installsAfter/override wiring by the
+// merged-JSON tests above.
+func TestInstallSequence(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		src      string
+		features map[string]string
+		want     []string
+	}{
+		{
+			// ./c is pulled in by both ./a and ./b with identical options, so resolveAll deduplicates it
+			// to a single contributor installed once.
+			name: "collapses identical requests",
+			src:  `{"features": {"./a": {}, "./b": {}}}`,
+			features: map[string]string{
+				"a": `{"id": "a", "dependsOn": {"./c": {}}}`,
+				"b": `{"id": "b", "dependsOn": {"./c": {}}}`,
+				"c": `{"id": "c"}`,
+			},
+			want: []string{"./c{}", "./a{}", "./b{}"},
+		},
+		{
+			// The same ./b requested with different options is a distinct contributor each time, and the
+			// round of them is ordered by the specification's options comparison.
+			name: "keeps option-distinct requests distinct",
+			src:  `{"features": {"./a": {"optA": "a", "optB": "b"}, "./b": {"optA": "a", "optB": "b"}}}`,
+			features: map[string]string{
+				"a": `{"id": "a", "dependsOn": {"./b": {"optA": "a", "optB": "a"}, "./c": {}}}`,
+				"b": `{"id": "b"}`,
+				"c": `{"id": "c", "dependsOn": {"./b": {"optA": "b", "optB": "a"}, "./d": {}, "./e": {}}}`,
+				"d": `{"id": "d", "dependsOn": {"./b": {"optA": "b", "optB": "b"}}}`,
+				"e": `{"id": "e", "dependsOn": {"./b": {}}}`,
+			},
+			want: []string{
+				"./b{}",
+				"./b{optA=a,optB=a}",
+				"./b{optA=a,optB=b}",
+				"./b{optA=b,optB=a}",
+				"./b{optA=b,optB=b}",
+				"./d{}",
+				"./e{}",
+				"./c{}",
+				"./a{optA=a,optB=b}",
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			got := resolveOrder(t, tt.src, tt.features)
+			assertOrder(t, got, tt.want)
+		})
+	}
 }
 
 func TestMergeAnchorsPointAtFeatureKey(t *testing.T) {

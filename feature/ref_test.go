@@ -15,19 +15,19 @@ func TestParseRef(t *testing.T) {
 		wantErr bool
 	}{
 		{
-			raw:  "ghcr.io/devcontainers/features/node:1",
-			want: Ref{Raw: "ghcr.io/devcontainers/features/node:1", Kind: KindOCI, OCI: registry.Reference{Registry: "ghcr.io", Repository: "devcontainers/features/node", Reference: "1"}},
+			raw:  "reg.example.invalid/devcontainers/features/node:1",
+			want: Ref{Raw: "reg.example.invalid/devcontainers/features/node:1", Kind: KindOCI, OCI: registry.Reference{Registry: "reg.example.invalid", Repository: "devcontainers/features/node", Reference: "1"}},
 		},
 		{
 			// An unversioned reference is normalized to the "latest" tag at parse time.
-			raw:  "ghcr.io/devcontainers/features/node",
-			want: Ref{Raw: "ghcr.io/devcontainers/features/node", Kind: KindOCI, OCI: registry.Reference{Registry: "ghcr.io", Repository: "devcontainers/features/node", Reference: "latest"}},
+			raw:  "reg.example.invalid/devcontainers/features/node",
+			want: Ref{Raw: "reg.example.invalid/devcontainers/features/node", Kind: KindOCI, OCI: registry.Reference{Registry: "reg.example.invalid", Repository: "devcontainers/features/node", Reference: "latest"}},
 		},
 		{
-			raw: "ghcr.io/devcontainers/features/node@sha256:0000000000000000000000000000000000000000000000000000000000000000",
+			raw: "reg.example.invalid/devcontainers/features/node@sha256:0000000000000000000000000000000000000000000000000000000000000000",
 			want: Ref{
-				Raw: "ghcr.io/devcontainers/features/node@sha256:0000000000000000000000000000000000000000000000000000000000000000", Kind: KindOCI,
-				OCI: registry.Reference{Registry: "ghcr.io", Repository: "devcontainers/features/node", Reference: "sha256:0000000000000000000000000000000000000000000000000000000000000000"},
+				Raw: "reg.example.invalid/devcontainers/features/node@sha256:0000000000000000000000000000000000000000000000000000000000000000", Kind: KindOCI,
+				OCI: registry.Reference{Registry: "reg.example.invalid", Repository: "devcontainers/features/node", Reference: "sha256:0000000000000000000000000000000000000000000000000000000000000000"},
 			},
 		},
 		{
@@ -43,14 +43,14 @@ func TestParseRef(t *testing.T) {
 			want: Ref{Raw: "../sibling-feature", Kind: KindLocal},
 		},
 		{
-			raw:  "https://example.com/features/foo.tgz",
-			want: Ref{Raw: "https://example.com/features/foo.tgz", Kind: KindTarball},
+			raw:  "https://example.invalid/features/foo.tgz",
+			want: Ref{Raw: "https://example.invalid/features/foo.tgz", Kind: KindTarball},
 		},
 		{raw: "no-slash", wantErr: true},
-		{raw: "ghcr.io/features/node@md5:abc", wantErr: true},
+		{raw: "reg.example.invalid/features/node@md5:abc", wantErr: true},
 		// Only https:// is a tarball Feature; a plain-HTTP URI is neither a tarball nor a valid OCI
 		// reference and must be rejected.
-		{raw: "http://example.com/features/foo.tgz", wantErr: true},
+		{raw: "http://example.invalid/features/foo.tgz", wantErr: true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.raw, func(t *testing.T) {

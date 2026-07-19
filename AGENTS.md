@@ -17,6 +17,15 @@
 - Use `make` to run workflows locally. Run `make help` to see the full list of available targets.
 - Run `make lint` after making changes to ensure code quality.
 
+## Testing
+
+- Name a test after the function under test: `TestTarget` or `TestTarget_XXX`
+  (e.g. `TestInstallOrder`, `TestInstallOrder_OCIOrder`). Name it for the
+  function it calls.
+- Collapse same-shaped cases into table-driven subtests; keep tests with different targets separate.
+- Use the reserved `.invalid` TLD for placeholder hosts in test data.
+- Measure test coverage with `make coverage` after making changes. Ensure coverage does not decrease.
+
 ## GitHub Actions
 
 - Pin every action to a full commit SHA with a `# vX.Y.Z` comment,

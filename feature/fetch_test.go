@@ -137,7 +137,7 @@ func TestFetchMetadataParse(t *testing.T) {
 	  // JSONC comments are allowed in feature metadata.
 	  "id": "f",
 	  "dependsOn": {"./dep1": {}, "./dep2": {"opt": true}},
-	  "installsAfter": ["ghcr.io/devcontainers/features/common-utils"],
+	  "installsAfter": ["reg.example.invalid/devcontainers/features/common-utils"],
 	}`)
 
 	md, err := NewFetcher().Fetch(t.Context(), "./f", openRoot(t, dir), ".")
@@ -156,7 +156,7 @@ func TestFetchMetadataParse(t *testing.T) {
 	if got, want := md.DependsOn[1].Options, (optionValue{kind: kindObject, obj: map[string]optScalar{"opt": {kind: kindBool, b: true}}}); !reflect.DeepEqual(got, want) {
 		t.Errorf("DependsOn[1].Options = %+v, want %+v", got, want)
 	}
-	if got, want := strings.Join(md.InstallsAfter, ","), "ghcr.io/devcontainers/features/common-utils"; got != want {
+	if got, want := strings.Join(md.InstallsAfter, ","), "reg.example.invalid/devcontainers/features/common-utils"; got != want {
 		t.Errorf("InstallsAfter = %q, want %q", got, want)
 	}
 }

@@ -18,6 +18,12 @@ import (
 // Features distribution specification.
 const featureLayerMediaType = "application/vnd.devcontainers.layer.v1+tar"
 
+// featureConfigMediaType is the media type the Features distribution specification requires on a
+// Feature manifest's config descriptor. The reference implementation treats a manifest whose config
+// media type differs as not being a Feature; matching that keeps decolint from linting artifacts the
+// toolchain would reject.
+const featureConfigMediaType = "application/vnd.devcontainers"
+
 // dockerManifestListMediaType is the Docker (schema 2) equivalent of an OCI image index; ghcr.io
 // serves Features behind either media type.
 const dockerManifestListMediaType = "application/vnd.docker.distribution.manifest.list.v2+json"
@@ -39,16 +45,17 @@ func (f *Fetcher) fetchOCI(ctx context.Context, feat Ref) (*Metadata, error) {
 		Header: http.Header{"User-Agent": []string{"decolint"}},
 	}
 
-	// ReferenceOrDefault resolves an unversioned reference to the "latest" tag.
-	target := feat.OCI.ReferenceOrDefault()
-	desc, err := repo.Resolve(ctx, target)
+	desc, err := repo.Resolve(ctx, feat.OCI.Reference)
 	if err != nil {
-		return nil, fmt.Errorf("resolve %s: %w", target, err)
+		return nil, fmt.Errorf("resolve %s: %w", feat.OCI.Reference, err)
 	}
 
 	man, manifestDigest, err := imageManifest(ctx, repo, desc)
 	if err != nil {
 		return nil, err
+	}
+	if man.Config.MediaType != featureConfigMediaType {
+		return nil, fmt.Errorf("manifest %s config media type %q is not %s", manifestDigest, man.Config.MediaType, featureConfigMediaType)
 	}
 	layer, err := featureLayer(man, manifestDigest)
 	if err != nil {

@@ -53,5 +53,9 @@ func ParseRef(raw string) (Ref, error) {
 	if err != nil {
 		return Ref{}, fmt.Errorf("invalid feature reference %q: %w", raw, err)
 	}
+	// Resolve an unversioned reference to the "latest" tag, as the reference implementation does at
+	// parse time. Install-order comparison sorts by this tag; leaving it empty would drop an
+	// unversioned Feature out of the tag comparison and order it by digest alone.
+	parsed.Reference = parsed.ReferenceOrDefault()
 	return Ref{Raw: raw, Kind: KindOCI, OCI: parsed}, nil
 }

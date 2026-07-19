@@ -19,8 +19,9 @@ func TestParseRef(t *testing.T) {
 			want: Ref{Raw: "ghcr.io/devcontainers/features/node:1", Kind: KindOCI, OCI: registry.Reference{Registry: "ghcr.io", Repository: "devcontainers/features/node", Reference: "1"}},
 		},
 		{
+			// An unversioned reference is normalized to the "latest" tag at parse time.
 			raw:  "ghcr.io/devcontainers/features/node",
-			want: Ref{Raw: "ghcr.io/devcontainers/features/node", Kind: KindOCI, OCI: registry.Reference{Registry: "ghcr.io", Repository: "devcontainers/features/node"}},
+			want: Ref{Raw: "ghcr.io/devcontainers/features/node", Kind: KindOCI, OCI: registry.Reference{Registry: "ghcr.io", Repository: "devcontainers/features/node", Reference: "latest"}},
 		},
 		{
 			raw: "ghcr.io/devcontainers/features/node@sha256:0000000000000000000000000000000000000000000000000000000000000000",

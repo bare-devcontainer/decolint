@@ -136,6 +136,31 @@ func TestMergeMounts(t *testing.T) {
 	}`)
 }
 
+func TestMergeMountsUnparsableTargetPassthrough(t *testing.T) {
+	t.Parallel()
+
+	// A mount whose target cannot be determined (a string with no target key, or an object that
+	// declares none) is not deduplicated: it has no key to match on, so every such entry is kept as
+	// contributed, including two identical target-less strings from different features.
+	root := mergeSrc(t,
+		`{"features": {"./a": {}, "./b": {}}}`,
+		map[string]string{
+			"a": `{"id": "a", "mounts": [
+			  "source=shared,type=volume",
+			  {"type": "tmpfs", "source": "no-target"}
+			]}`,
+			"b": `{"id": "b", "mounts": ["source=shared,type=volume"]}`,
+		})
+	assertJSON(t, root, `{
+	  "mounts": [
+	    "source=shared,type=volume",
+	    {"type": "tmpfs", "source": "no-target"},
+	    "source=shared,type=volume"
+	  ],
+	  "features": {"./a": {}, "./b": {}}
+	}`)
+}
+
 func TestMergeCustomizations(t *testing.T) {
 	t.Parallel()
 
@@ -193,6 +218,26 @@ func TestMergeLifecycleHooks(t *testing.T) {
 		assertJSON(t, root, `{
 		  "postStartCommand": {"f": "f-start.sh"},
 		  "features": {"./f": {}}
+		}`)
+	})
+
+	t.Run("multiple features contribute the same hook", func(t *testing.T) {
+		t.Parallel()
+		// Each contributing Feature gets its own key, keyed by ID, alongside the user's own command;
+		// the object form holds them all rather than one command overwriting another.
+		root := mergeSrc(t,
+			`{"postCreateCommand": "make setup", "features": {"./a": {}, "./b": {}}}`,
+			map[string]string{
+				"a": `{"id": "a", "postCreateCommand": "a-setup.sh"}`,
+				"b": `{"id": "b", "postCreateCommand": ["echo", "b"]}`,
+			})
+		assertJSON(t, root, `{
+		  "postCreateCommand": {
+		    "a": "a-setup.sh",
+		    "b": ["echo", "b"],
+		    "devcontainer.json": "make setup"
+		  },
+		  "features": {"./a": {}, "./b": {}}
 		}`)
 	})
 }
@@ -305,6 +350,66 @@ func TestMergeOverrideFeatureInstallOrder(t *testing.T) {
 	  "features": {"./a": {}, "./b": {}},
 	  "containerEnv": {"SHARED": "a"}
 	}`)
+}
+
+// TestMergeOverrideFeatureInstallOrderOCILegacyAlias covers the alias branch of applyOverride: an
+// "overrideFeatureInstallOrder" entry that names a renamed OCI Feature by its current id must still
+// match a contributor requested under a legacy id, through the Feature's declared "legacyIds".
+func TestMergeOverrideFeatureInstallOrderOCILegacyAlias(t *testing.T) {
+	t.Parallel()
+
+	host := startOCIRegistry(t)
+	// The renamed Feature declares its legacy id and is published under both paths, so a reference by
+	// either the current id ("renamed", used in the override) or the legacy id ("legacy", used in
+	// "features") resolves to the same identity.
+	renamed := archiveWithMetadata(t, `{"id": "renamed", "legacyIds": ["legacy"], "containerEnv": {"SHARED": "renamed"}}`, false)
+	pushOCIFeature(t, host, "features/renamed", "1", renamed, false)
+	pushOCIFeature(t, host, "features/legacy", "1", renamed, false)
+	pushOCIFeature(t, host, "features/aaa", "1",
+		archiveWithMetadata(t, `{"id": "aaa", "containerEnv": {"SHARED": "aaa"}}`, false), false)
+
+	features := `"` + host + `/features/legacy:1": {}, "` + host + `/features/aaa:1": {}`
+	merge := func(t *testing.T, src string) *hujson.Value {
+		t.Helper()
+		root, err := hujson.Parse([]byte(src))
+		if err != nil {
+			t.Fatalf("parse devcontainer.json: %v", err)
+		}
+		// OCI Features need no confining root; local resolution is not exercised here.
+		if err := Merge(t.Context(), NewFetcher(), nil, "", &root); err != nil {
+			t.Fatalf("Merge: %v", err)
+		}
+		return &root
+	}
+	sharedEnv := func(t *testing.T, root *hujson.Value) string {
+		t.Helper()
+		v := root.Find("/containerEnv/SHARED")
+		if v == nil {
+			t.Fatal("merged tree lacks /containerEnv/SHARED")
+		}
+		lit, ok := v.Value.(hujson.Literal)
+		if !ok || lit.Kind() != '"' {
+			t.Fatalf("SHARED is not a string: %+v", v.Value)
+		}
+		return lit.String()
+	}
+
+	t.Run("without override the renamed feature installs last and wins", func(t *testing.T) {
+		// "aaa" < "legacy" by resource id, so legacy installs last and wins the SHARED conflict.
+		root := merge(t, `{"features": {`+features+`}}`)
+		if got := sharedEnv(t, root); got != "renamed" {
+			t.Errorf("SHARED = %q, want renamed", got)
+		}
+	})
+
+	t.Run("override matched by legacy alias reorders the round", func(t *testing.T) {
+		// The override names the current id; matching the legacy-named contributor through its alias
+		// raises it into the first round, so aaa installs last and wins instead.
+		root := merge(t, `{"overrideFeatureInstallOrder": ["`+host+`/features/renamed:1"], "features": {`+features+`}}`)
+		if got := sharedEnv(t, root); got != "aaa" {
+			t.Errorf("SHARED = %q, want aaa", got)
+		}
+	})
 }
 
 func TestMergeAnchorsPointAtFeatureKey(t *testing.T) {

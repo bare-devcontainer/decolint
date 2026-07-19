@@ -319,7 +319,21 @@ func TestCompareTo(t *testing.T) {
 		{"tarball by options", tarball("https://ex/a.tgz", map[string]string{"v": "1"}), tarball("https://ex/a.tgz", map[string]string{"v": "2"}), -1},
 		{"oci by resource id", oci("ns/a", "", "sha256:1", nil), oci("ns/b", "", "sha256:2", nil), -1},
 		{"oci by tag", oci("ns/a", "1.0.0", "sha256:1", nil), oci("ns/a", "2.0.0", "sha256:2", nil), -1},
+		// Tags compare lexicographically, not by semantic version: "10" sorts before "9" because
+		// '1' < '9'. The 1.0.0/2.0.0 case above agrees under either interpretation, so this pins the
+		// dictionary order the reference implementation actually uses.
+		{"oci tag lexical not semver", oci("ns/a", "10", "sha256:1", nil), oci("ns/a", "9", "sha256:2", nil), -1},
+		// "latest" is an ordinary tag string, ordered lexicographically against a numeric tag rather
+		// than treated as newest: 'l' > '9', so it sorts after.
+		{"oci tag latest sorts lexically after numeric", oci("ns/a", "latest", "sha256:1", nil), oci("ns/a", "9", "sha256:2", nil), 1},
+		// An unversioned reference parses to the "latest" tag, so it participates in the tag comparison
+		// rather than falling through to the digest tiebreak (which would order it before "1").
+		{"oci unversioned normalized to latest", oci("ns/a", "latest", "sha256:1", nil), oci("ns/a", "1", "sha256:2", nil), 1},
 		{"oci by digest tiebreak", oci("ns/a", "1", "sha256:1", nil), oci("ns/a", "1", "sha256:2", nil), -1},
+		// A digest-pinned reference carries no tag (the digest's algorithm separator disqualifies it),
+		// so it drops out of the tag comparison and ordering falls through to the digest tiebreak even
+		// against a tagged reference for the same resource.
+		{"oci digest-pinned vs tagged falls to digest", oci("ns/a", "sha256:1", "sha256:1", nil), oci("ns/a", "2", "sha256:2", nil), -1},
 		{"oci equal digest and options", oci("ns/a", "1", "sha256:1", map[string]string{"o": "x"}), oci("ns/a", "9", "sha256:1", map[string]string{"o": "x"}), 0},
 		{"cross type by reference", local("./a", nil), tarball("./b", nil), -1},
 	}

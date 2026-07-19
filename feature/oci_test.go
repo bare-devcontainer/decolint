@@ -78,6 +78,56 @@ func TestFetchOCIEmptyIndex(t *testing.T) {
 	}
 }
 
+// TestFetchOCIRejectsNonFeatureConfig covers rejecting a manifest whose config media type is not the
+// one the Features distribution specification mandates: such an artifact is not a Feature, and the
+// reference implementation refuses it rather than treating it as one.
+func TestFetchOCIRejectsNonFeatureConfig(t *testing.T) {
+	t.Parallel()
+
+	host := startOCIRegistry(t)
+	ctx := t.Context()
+	repo, err := remote.NewRepository(host + "/devcontainers/features/notafeature")
+	if err != nil {
+		t.Fatal(err)
+	}
+	repo.PlainHTTP = true
+
+	push := func(mediaType string, data []byte) ocispec.Descriptor {
+		desc := ocispec.Descriptor{MediaType: mediaType, Digest: digest.FromBytes(data), Size: int64(len(data))}
+		if err := repo.Push(ctx, desc, bytes.NewReader(data)); err != nil {
+			t.Fatal(err)
+		}
+		return desc
+	}
+
+	// A generic OCI image config rather than the Feature config media type.
+	configDesc := push("application/vnd.oci.image.config.v1+json", []byte("{}"))
+	layerDesc := push(featureLayerMediaType, archiveWithMetadata(t, `{"id": "notafeature"}`, false))
+
+	manBytes := mustMarshal(t, ocispec.Manifest{
+		Versioned: specs.Versioned{SchemaVersion: 2},
+		MediaType: ocispec.MediaTypeImageManifest,
+		Config:    configDesc,
+		Layers:    []ocispec.Descriptor{layerDesc},
+	})
+	manDesc := ocispec.Descriptor{
+		MediaType: ocispec.MediaTypeImageManifest,
+		Digest:    digest.FromBytes(manBytes),
+		Size:      int64(len(manBytes)),
+	}
+	if err := repo.PushReference(ctx, manDesc, bytes.NewReader(manBytes), "1"); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err = NewFetcher().Fetch(ctx, host+"/devcontainers/features/notafeature:1", nil, "")
+	if err == nil {
+		t.Fatal("Fetch of a manifest with a non-Feature config media type: got nil error")
+	}
+	if !strings.Contains(err.Error(), "config media type") {
+		t.Errorf("error = %v, want it to mention the config media type", err)
+	}
+}
+
 func TestFetchOCIRejectsOversizedLayer(t *testing.T) {
 	t.Parallel()
 

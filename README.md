@@ -143,6 +143,15 @@ not on disk. Note that Feature `options` never affect the merged
 configuration, and variable substitutions (e.g. `${devcontainerId}`)
 in contributed values are merged literally.
 
+Configuration baked into a base `image` is not merged. When the Dev
+Container tooling builds an image, it records the accumulated
+configuration in the image's `devcontainer.metadata` label, which a
+downstream `devcontainer.json` using that image inherits. Reading it
+would require pulling the image, so decolint — a static linter that
+never pulls images — cannot see it: settings a base image contributes
+(privileges, mounts, users, and the like) are invisible and go
+unchecked.
+
 ### Output formats
 
 By default, findings are printed one per line, with the rule's

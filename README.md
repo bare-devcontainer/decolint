@@ -265,6 +265,7 @@ Only `correctness` runs by default; the rest are `off` until enabled:
 <!-- Keep this table sorted by Category (correctness, security, reproducibility, style), then ID, in that priority order. -->
 | ID | Category | Platform | Description |
 | --- | --- | --- | --- |
+| `conflicting-container-def` | `correctness` | (all) | disallow a devcontainer.json that defines more than one of `image`, `build`, or `dockerComposeFile` |
 | `id-dir-mismatch` | `correctness` | (all) | disallow a Feature's or Template's `id` that does not match the name of its containing directory |
 | `invalid-semver` | `correctness` | (all) | disallow a Feature's or Template's `version` that is not a valid semantic version |
 | `missing-build-dockerfile` | `correctness` | (all) | disallow a devcontainer.json `build` object that is missing `dockerfile` |

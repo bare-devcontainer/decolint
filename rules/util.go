@@ -14,12 +14,17 @@ const dockerSocketPath = "/var/run/docker.sock"
 
 // hasMember reports whether obj has a member named name.
 func hasMember(obj *hujson.Object, name string) bool {
-	for _, m := range obj.Members {
-		if lit, ok := m.Name.Value.(hujson.Literal); ok && lit.String() == name {
-			return true
+	return memberNamed(obj, name) != nil
+}
+
+// memberNamed returns obj's member named name, or nil if obj has no such member.
+func memberNamed(obj *hujson.Object, name string) *hujson.ObjectMember {
+	for i := range obj.Members {
+		if lit, ok := obj.Members[i].Name.Value.(hujson.Literal); ok && lit.String() == name {
+			return &obj.Members[i]
 		}
 	}
-	return false
+	return nil
 }
 
 // stringArrayContains reports whether obj has a member named name whose value is an array

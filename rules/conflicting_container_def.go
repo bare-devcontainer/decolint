@@ -1,0 +1,44 @@
+package rules
+
+import (
+	"github.com/bare-devcontainer/decolint/linter"
+	"github.com/tailscale/hujson"
+)
+
+// ConflictingContainerDef reports a devcontainer.json that defines more than one of "image",
+// "build", or "dockerComposeFile". The schema treats these container-definition variants as mutually
+// exclusive, so exactly one may be set.
+var ConflictingContainerDef = &linter.Rule{
+	ID:          "conflicting-container-def",
+	Description: `disallow a devcontainer.json that defines more than one of "image", "build", or "dockerComposeFile"`,
+	Category:    linter.CategoryCorrectness,
+	FileTypes:   []linter.FileType{linter.Devcontainer},
+	Paths:       []string{""},
+	Check:       checkConflictingContainerDef,
+}
+
+func checkConflictingContainerDef(_ *linter.Context, node *linter.Node) []linter.Finding {
+	obj, ok := node.Value.Value.(*hujson.Object)
+	if !ok {
+		return nil
+	}
+	var defined []*hujson.ObjectMember
+	for _, name := range []string{"image", "build", "dockerComposeFile"} {
+		if m := memberNamed(obj, name); m != nil {
+			defined = append(defined, m)
+		}
+	}
+	if len(defined) < 2 {
+		return nil
+	}
+	// One finding per excess definition, anchored at the offending key, so the report points at the
+	// keys that conflict with the first-declared variant rather than at the whole object.
+	findings := make([]linter.Finding, 0, len(defined)-1)
+	for _, m := range defined[1:] {
+		findings = append(findings, linter.Finding{
+			Message: `devcontainer.json must define only one of "image", "build", or "dockerComposeFile"`,
+			Offset:  m.Name.StartOffset,
+		})
+	}
+	return findings
+}

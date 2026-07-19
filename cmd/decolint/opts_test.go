@@ -103,7 +103,7 @@ func TestParseOptionsBoolFlags(t *testing.T) {
 		{"version", func(o Options) bool { return o.Version }},
 		{"rules", func(o Options) bool { return o.ListRules }},
 		{"init", func(o Options) bool { return o.Init }},
-		{"merge-features", func(o Options) bool { return o.MergeFeatures }},
+		{"merge", func(o Options) bool { return o.Merge }},
 	}
 	for _, tt := range tests {
 		t.Run(tt.flag, func(t *testing.T) {
@@ -139,20 +139,20 @@ func TestParseOptionsBoolFlags(t *testing.T) {
 	}
 }
 
-func TestParseOptionsMergeFeaturesSet(t *testing.T) {
+func TestParseOptionsMergeSet(t *testing.T) {
 	t.Parallel()
 
-	// The value of MergeFeatures itself is covered by TestParseOptionsBoolFlags; this exercises
-	// mergeFeaturesSet, the bookkeeping unique to this flag (see its doc comment in opts.go).
+	// The value of Merge itself is covered by TestParseOptionsBoolFlags; this exercises
+	// mergeSet, the bookkeeping unique to this flag (see its doc comment in opts.go).
 	tests := []struct {
 		name string
 		args []string
 		want bool
 	}{
 		{"no flag", nil, false},
-		{"bare flag", []string{"-merge-features"}, true},
-		{"explicit true", []string{"-merge-features=true"}, true},
-		{"explicit false", []string{"-merge-features=false"}, true},
+		{"bare flag", []string{"-merge"}, true},
+		{"explicit true", []string{"-merge=true"}, true},
+		{"explicit false", []string{"-merge=false"}, true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -161,8 +161,8 @@ func TestParseOptionsMergeFeaturesSet(t *testing.T) {
 			if err != nil {
 				t.Fatalf("parseOptions(%v): %v", tt.args, err)
 			}
-			if opts.mergeFeaturesSet != tt.want {
-				t.Errorf("mergeFeaturesSet = %v, want %v", opts.mergeFeaturesSet, tt.want)
+			if opts.mergeSet != tt.want {
+				t.Errorf("mergeSet = %v, want %v", opts.mergeSet, tt.want)
 			}
 		})
 	}

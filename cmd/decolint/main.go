@@ -238,7 +238,7 @@ func runLint(ctx context.Context, stdout io.Writer, opts Options, cfg Config) (b
 		return false, fmt.Errorf("register rules: %w", err)
 	}
 	var merge mergeFn
-	if cfg.MergeFeatures {
+	if cfg.Merge {
 		// One Fetcher per run, so a Feature shared by several files is fetched at most once.
 		fetcher := feature.NewFetcher()
 		merge = func(ctx context.Context, f discovery.ConfigFile, doc *linter.Document) error {

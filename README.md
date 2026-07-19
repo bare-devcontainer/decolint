@@ -70,8 +70,8 @@ All file access for a linted directory is confined to it: a
 that directory, and a symbolic link resolving outside the boundary
 its config file was read through (see above) is treated as
 nonexistent rather than followed. The same boundary applies to local
-Feature references resolved while [merging
-Features](#merging-features) — a reference that would resolve outside
+Feature references resolved while [merging](#merging) — a reference
+that would resolve outside
 it is an error, even if the target exists elsewhere on disk.
 
 decolint supports the following flags; run `decolint -help` for the full
@@ -83,7 +83,7 @@ list.
 | `-format` | output format: `text` (default), `json`, or `github` (see [Output formats](#output-formats)) |
 | `-deny-warnings` | also exit non-zero on `warn`-severity findings (see [Exit codes](#exit-codes)) |
 | `-config` | path to a config file overriding rule and category severities (see [Config file](#config-file)) |
-| `-merge-features` | fetch the Features referenced in `features` and lint the merged configuration (see [Merging Features](#merging-features)) |
+| `-merge` | fetch the Features referenced in `features` and lint the merged configuration (see [Merging](#merging)) |
 | `-rules` | print the available rules |
 | `-init` | write a new `.decolint.jsonc` listing every rule at its default severity (see [Config file](#config-file)) |
 
@@ -102,7 +102,7 @@ decolint -platform=vscode,codespaces
 Target platforms can also be declared in the [config
 file](#config-file) with the `platforms` member.
 
-### Merging Features
+### Merging
 
 The [Features](https://containers.dev/implementors/features/) a
 `devcontainer.json` references contribute configuration of their own —
@@ -115,12 +115,12 @@ default decolint lints only the raw file, so an issue introduced by a
 Feature (say, one that sets `privileged: true` or bind-mounts the
 Docker socket) goes unnoticed.
 
-Pass `-merge-features` (or set `"mergeFeatures": true` in the [config
+Pass `-merge` (or set `"merge": true` in the [config
 file](#config-file)) to fetch every referenced Feature, merge the
 properties it contributes, and lint the merged configuration instead:
 
 ```console
-decolint -merge-features -config .decolint.jsonc
+decolint -merge -config .decolint.jsonc
 ```
 
 - OCI references (e.g. `ghcr.io/devcontainers/features/node:1`) are
@@ -212,15 +212,13 @@ to edit:
 rule in a [category](#rule-categories) at once; `rules` sets an
 individual rule's severity and takes precedence over its category.
 `platforms` lists the [target platforms](#target-platforms) whose
-rules run in addition to platform-agnostic ones. `mergeFeatures` set
-to `true` enables [merging Features](#merging-features), same as the
-`-merge-features` flag.
+rules run in addition to platform-agnostic ones. `merge` set
+to `true` enables [merging](#merging), same as the `-merge` flag.
 
 A non-empty `-platform` replaces the config file's `platforms`.
-`-merge-features`, when given explicitly, takes precedence over the
-config file's `mergeFeatures` in either direction — e.g.
-`-merge-features=false` disables merging even if the config file sets
-`"mergeFeatures": true`.
+`-merge`, when given explicitly, takes precedence over the config
+file's `merge` in either direction — e.g. `-merge=false` disables
+merging even if the config file sets `"merge": true`.
 
 For the strictest configuration, enable every category:
 

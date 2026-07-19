@@ -152,11 +152,11 @@ func TestRun(t *testing.T) {
 			wantExitCode: 0,
 		},
 		{
-			// With -merge-features, the local Feature's contributions (privileged mode and a Docker
+			// With -merge, the local Feature's contributions (privileged mode and a Docker
 			// socket mount) become part of the effective configuration and trip the security rules
 			// merge.jsonc enables.
 			name: "merge features",
-			args: []string{"-merge-features", "-config=testdata/e2e/merge.jsonc", "testdata/e2e/merge"},
+			args: []string{"-merge", "-config=testdata/e2e/merge.jsonc", "testdata/e2e/merge"},
 			want: []firing{
 				{mergeFile, "no-docker-socket-mount", linter.SeverityError},
 				{mergeFile, "no-privileged-container", linter.SeverityError},
@@ -171,7 +171,7 @@ func TestRun(t *testing.T) {
 			wantExitCode: 0,
 		},
 		{
-			// merge-on.jsonc enables merging via the config file's "mergeFeatures" member.
+			// merge-on.jsonc enables merging via the config file's "merge" member.
 			name: "merge features enabled by config",
 			args: []string{"-config=testdata/e2e/merge-on.jsonc", "testdata/e2e/merge"},
 			want: []firing{
@@ -181,10 +181,10 @@ func TestRun(t *testing.T) {
 			wantExitCode: 1,
 		},
 		{
-			// -merge-features=false, given explicitly, overrides merge-on.jsonc's "mergeFeatures":
+			// -merge=false, given explicitly, overrides merge-on.jsonc's "merge":
 			// true and disables merging.
 			name:         "merge features disabled by CLI flag overrides config",
-			args:         []string{"-merge-features=false", "-config=testdata/e2e/merge-on.jsonc", "testdata/e2e/merge"},
+			args:         []string{"-merge=false", "-config=testdata/e2e/merge-on.jsonc", "testdata/e2e/merge"},
 			want:         nil,
 			wantExitCode: 0,
 		},
@@ -569,14 +569,14 @@ func TestRunLint(t *testing.T) {
 	})
 }
 
-func TestRunMergeFeatures(t *testing.T) {
+func TestRunMerge(t *testing.T) {
 	t.Parallel()
 
 	t.Run("findings point at the feature reference", func(t *testing.T) {
 		t.Parallel()
 
 		var stdout, stderr bytes.Buffer
-		args := []string{"-format=json", "-merge-features", "-config=testdata/e2e/merge.jsonc", "testdata/e2e/merge"}
+		args := []string{"-format=json", "-merge", "-config=testdata/e2e/merge.jsonc", "testdata/e2e/merge"}
 		exitCode := run(t.Context(), args, &stdout, &stderr)
 		if exitCode != 1 {
 			t.Fatalf("exit code = %d, want 1; stderr: %s", exitCode, stderr.String())
@@ -600,7 +600,7 @@ func TestRunMergeFeatures(t *testing.T) {
 		dir := writeDevcontainer(t, `{"image": "ubuntu:24.04", "features": {"./missing": {}}}`)
 
 		var stdout, stderr bytes.Buffer
-		exitCode := run(t.Context(), []string{"-merge-features", dir}, &stdout, &stderr)
+		exitCode := run(t.Context(), []string{"-merge", dir}, &stdout, &stderr)
 		if exitCode != 2 {
 			t.Errorf("exit code = %d, want 2", exitCode)
 		}
@@ -623,7 +623,7 @@ func TestRunMergeFeatures(t *testing.T) {
 		}
 
 		var stdout, stderr bytes.Buffer
-		exitCode := run(t.Context(), []string{"-merge-features", dir}, &stdout, &stderr)
+		exitCode := run(t.Context(), []string{"-merge", dir}, &stdout, &stderr)
 		if exitCode != 2 {
 			t.Errorf("exit code = %d, want 2; stdout: %s", exitCode, stdout.String())
 		}

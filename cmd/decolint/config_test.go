@@ -17,11 +17,11 @@ func TestConfigMarshalJSONTo(t *testing.T) {
 		t.Parallel()
 		cfg := Config{
 			Platforms:     []linter.Platform{linter.PlatformVSCode, linter.PlatformCodespaces},
-			MergeFeatures: true,
+			Merge: true,
 			Categories:    map[string]linter.Severity{"security": linter.SeverityError},
 			Rules:         map[string]linter.Severity{"no-image-latest": linter.SeverityError},
 		}
-		want := `{"platforms":["vscode","codespaces"],"mergeFeatures":true,"categories":{"security":"error"},"rules":{"no-image-latest":"error"}}`
+		want := `{"platforms":["vscode","codespaces"],"merge":true,"categories":{"security":"error"},"rules":{"no-image-latest":"error"}}`
 		got, err := json.Marshal(cfg)
 		if err != nil {
 			t.Fatalf("json.Marshal: %v", err)
@@ -33,7 +33,7 @@ func TestConfigMarshalJSONTo(t *testing.T) {
 
 	t.Run("all optional fields absent", func(t *testing.T) {
 		t.Parallel()
-		// Platforms, mergeFeatures, and categories are omitted when empty; rules is always written.
+		// Platforms, merge, and categories are omitted when empty; rules is always written.
 		want := `{"rules":{}}`
 		got, err := json.Marshal(Config{})
 		if err != nil {
@@ -132,9 +132,9 @@ func TestParseConfig(t *testing.T) {
 			false,
 		},
 		{
-			"mergeFeatures",
-			`{"mergeFeatures": true}`,
-			Config{MergeFeatures: true},
+			"merge",
+			`{"merge": true}`,
+			Config{Merge: true},
 			false,
 		},
 		{"invalid severity", `{"rules": {"no-image-latest": "critical"}}`, Config{}, true},
@@ -254,22 +254,22 @@ func TestMergeConfig(t *testing.T) {
 			Config{Platforms: []linter.Platform{linter.PlatformCodespaces}},
 		},
 		{
-			"CLI merge-features flag enables it",
-			Options{MergeFeatures: true, mergeFeaturesSet: true},
+			"CLI merge flag enables it",
+			Options{Merge: true, mergeSet: true},
 			Config{},
-			Config{MergeFeatures: true},
+			Config{Merge: true},
 		},
 		{
-			"CLI merge-features flag not given falls back to config file mergeFeatures",
+			"CLI merge flag not given falls back to config file merge",
 			Options{},
-			Config{MergeFeatures: true},
-			Config{MergeFeatures: true},
+			Config{Merge: true},
+			Config{Merge: true},
 		},
 		{
-			"CLI merge-features=false overrides config file mergeFeatures: true",
-			Options{MergeFeatures: false, mergeFeaturesSet: true},
-			Config{MergeFeatures: true},
-			Config{MergeFeatures: false},
+			"CLI merge=false overrides config file merge: true",
+			Options{Merge: false, mergeSet: true},
+			Config{Merge: true},
+			Config{Merge: false},
 		},
 	}
 	for _, tt := range tests {

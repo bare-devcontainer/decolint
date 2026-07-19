@@ -17,9 +17,9 @@ type Config struct {
 	// Platforms lists target platforms whose rules are linted in addition to platform-agnostic
 	// ones. The -platform flag, when given, takes precedence.
 	Platforms []linter.Platform `json:"platforms"`
-	// MergeFeatures, when true, fetches the Features referenced in each devcontainer.json and
-	// lints the merged (effective) configuration. The -merge-features flag can enable it as well.
-	MergeFeatures bool `json:"mergeFeatures"`
+	// Merge, when true, fetches the Features referenced in each devcontainer.json and
+	// lints the merged (effective) configuration. The -merge flag can enable it as well.
+	Merge bool `json:"merge"`
 	// Categories maps a category name to the severity every rule in that category should be
 	// overridden to. Per-rule entries in Rules take precedence.
 	Categories map[string]linter.Severity `json:"categories"`
@@ -29,7 +29,7 @@ type Config struct {
 
 // MarshalJSONTo encodes cfg with its categories and rules written in sorted key order, for use
 // with encoding/json/v2. Map iteration order is otherwise unspecified, so without this, marshaling
-// the same Config twice could produce differently ordered output. The "platforms", "mergeFeatures",
+// the same Config twice could produce differently ordered output. The "platforms", "merge",
 // and "categories" members are omitted when empty or false, so generated configs (see
 // initConfigFile) stay minimal.
 func (cfg Config) MarshalJSONTo(enc *jsontext.Encoder) error {
@@ -44,8 +44,8 @@ func (cfg Config) MarshalJSONTo(enc *jsontext.Encoder) error {
 			return fmt.Errorf("encode config: %w", err)
 		}
 	}
-	if cfg.MergeFeatures {
-		if err := enc.WriteToken(jsontext.String("mergeFeatures")); err != nil {
+	if cfg.Merge {
+		if err := enc.WriteToken(jsontext.String("merge")); err != nil {
 			return fmt.Errorf("encode config: %w", err)
 		}
 		if err := enc.WriteToken(jsontext.Bool(true)); err != nil {
@@ -93,15 +93,15 @@ func writeSeverityMap(enc *jsontext.Encoder, m map[string]linter.Severity) error
 
 // mergeConfig returns cfg with any CLI-provided opts fields applied as overrides. A non-empty
 // -platform replaces the config file's Platforms (an empty -platform defers to the config file
-// rather than clearing it). -merge-features, when explicitly given, overrides MergeFeatures in
-// either direction (e.g. "-merge-features=false" disables merging even if the config file sets
-// "mergeFeatures": true). Categories and Rules are config-file only.
+// rather than clearing it). -merge, when explicitly given, overrides Merge in
+// either direction (e.g. "-merge=false" disables merging even if the config file sets
+// "merge": true). Categories and Rules are config-file only.
 func mergeConfig(opts Options, cfg Config) Config {
 	if len(opts.Platforms) > 0 {
 		cfg.Platforms = opts.Platforms
 	}
-	if opts.mergeFeaturesSet {
-		cfg.MergeFeatures = opts.MergeFeatures
+	if opts.mergeSet {
+		cfg.Merge = opts.Merge
 	}
 	return cfg
 }

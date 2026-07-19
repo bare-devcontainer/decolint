@@ -63,17 +63,6 @@ layout, and the configuration files it contains are linted:
 
 With no arguments, the current directory is linted.
 
-### Path handling
-
-All file access for a linted directory is confined to it: a
-`devcontainer.json` under `.devcontainer` is only read from within
-that directory, and a symbolic link resolving outside the boundary
-its config file was read through (see above) is treated as
-nonexistent rather than followed. The same boundary applies to local
-Feature references resolved while [merging](#merging) — a reference
-that would resolve outside
-it is an error, even if the target exists elsewhere on disk.
-
 decolint supports the following flags; run `decolint -help` for the full
 list.
 
@@ -105,52 +94,25 @@ file](#config-file) with the `platforms` member.
 ### Merging
 
 The [Features](https://containers.dev/implementors/features/) a
-`devcontainer.json` references contribute configuration of their own —
-`containerEnv`, `mounts`, `capAdd`, `securityOpt`, `privileged`,
-`init`, `customizations`, and lifecycle hooks — which the Dev
-Container tooling merges into the effective configuration following
-the specification's [merge
+`devcontainer.json` references contribute configuration of their own,
+which the Dev Container tooling merges into the effective
+configuration following the specification's [merge
 logic](https://containers.dev/implementors/spec/#merge-logic). By
 default decolint lints only the raw file, so an issue introduced by a
 Feature (say, one that sets `privileged: true` or bind-mounts the
 Docker socket) goes unnoticed.
 
 Pass `-merge` (or set `"merge": true` in the [config
-file](#config-file)) to fetch every referenced Feature, merge the
-properties it contributes, and lint the merged configuration instead:
+file](#config-file)) to lint the merged configuration instead:
 
 ```console
 decolint -merge -config .decolint.jsonc
 ```
 
-- OCI references (e.g. `ghcr.io/devcontainers/features/node:1`) are
-  pulled from the registry with anonymous access, direct HTTP(S)
-  tarball URIs are downloaded, and relative paths (e.g.
-  `./my-feature`) are read from disk (see [Path
-  handling](#path-handling)).
-- Features referenced by a Feature's `dependsOn` are resolved
-  recursively and contribute their properties as well; installation
-  order follows `dependsOn`, `installsAfter`, and
-  `overrideFeatureInstallOrder`.
-- Findings on merged-in properties are reported at the referencing
-  entry in `features`, so the usual [suppression
-  comments](#suppressing-findings) on that line apply to them.
-- A Feature that cannot be fetched (network failure, unknown
-  reference, private registry) is an error (exit code 2).
-
-Fetched metadata is cached in memory for the duration of the run, but
-not on disk. Note that Feature `options` never affect the merged
-configuration, and variable substitutions (e.g. `${devcontainerId}`)
-in contributed values are merged literally.
-
-Configuration baked into a base `image` is not merged. When the Dev
-Container tooling builds an image, it records the accumulated
-configuration in the image's `devcontainer.metadata` label, which a
-downstream `devcontainer.json` using that image inherits. Reading it
-would require pulling the image, so decolint — a static linter that
-never pulls images — cannot see it: settings a base image contributes
-(privileges, mounts, users, and the like) are invisible and go
-unchecked.
+This fetches every referenced Feature to read its contributed
+configuration: OCI references are pulled from their registry, HTTP(S)
+URLs are downloaded, and local paths are read from disk. A Feature
+that cannot be fetched is an error (exit code 2).
 
 ### Output formats
 

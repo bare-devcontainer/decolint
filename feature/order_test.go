@@ -10,197 +10,151 @@ import (
 	"oras.land/oras-go/v2/registry"
 )
 
-// The install-order tests mirror the official devcontainers/cli suite
-// (src/test/container-features/configs/feature-dependencies). Local (file-path) cases run through
-// the real resolve-and-order path against on-disk fixtures; the OCI case is exercised as a pure
-// installOrder call over hand-built nodes (identical to the graph the CLI resolves from published
-// Features), so it needs no network. The CLI's v1 "github-repo" cases are omitted: decolint does not
-// model that legacy source type.
+// TestInstallOrderLocal covers resolving local ("./…") Feature graphs into an install order,
+// exercising installsAfter, dependsOn, their combination, and overrideFeatureInstallOrder.
+func TestInstallOrderLocal(t *testing.T) {
+	t.Parallel()
 
-// resolveOrder writes each named Feature under a temp directory (referenced as "./<name>"), resolves
-// the devcontainer.json in src, and returns the contributors in installation order.
-func resolveOrder(t *testing.T, src string, features map[string]string) []*contributor {
-	t.Helper()
-	dir := t.TempDir()
-	for name, content := range features {
-		writeLocalFeature(t, dir, name, content)
+	tests := []struct {
+		name     string
+		src      string
+		features map[string]string
+		want     []string
+	}{
+		{
+			name: "installs after",
+			src:  `{"features": {"./a": {}, "./c": {"magicNumber": "321"}}}`,
+			features: map[string]string{
+				"a": `{"id": "a", "installsAfter": ["./b", "./c"]}`,
+				"b": `{"id": "b"}`,
+				"c": `{"id": "c"}`,
+			},
+			want: []string{"./c{magicNumber=321}", "./a{}"},
+		},
+		{
+			name: "depends on",
+			src:  `{"features": {"./a": {}}}`,
+			features: map[string]string{
+				"a": `{"id": "a", "dependsOn": {"./b": {"magicNumber": "50"}}}`,
+				"b": `{"id": "b"}`,
+			},
+			want: []string{"./b{magicNumber=50}", "./a{}"},
+		},
+		{
+			name: "depends on with options",
+			src:  `{"features": {"./a": {"optA": "a", "optB": "b"}, "./b": {"optA": "a", "optB": "b"}}}`,
+			features: map[string]string{
+				"a": `{"id": "a", "dependsOn": {"./b": {"optA": "a", "optB": "a"}, "./c": {}}}`,
+				"b": `{"id": "b"}`,
+				"c": `{"id": "c", "dependsOn": {"./b": {"optA": "b", "optB": "a"}, "./d": {}, "./e": {}}}`,
+				"d": `{"id": "d", "dependsOn": {"./b": {"optA": "b", "optB": "b"}}}`,
+				"e": `{"id": "e", "dependsOn": {"./b": {}}}`,
+			},
+			want: []string{
+				"./b{}",
+				"./b{optA=a,optB=a}",
+				"./b{optA=a,optB=b}",
+				"./b{optA=b,optB=a}",
+				"./b{optA=b,optB=b}",
+				"./d{}",
+				"./e{}",
+				"./c{}",
+				"./a{optA=a,optB=b}",
+			},
+		},
+		{
+			name: "depends on and installs after",
+			src:  `{"features": {"./a": {}}}`,
+			features: map[string]string{
+				"a": `{"id": "a", "installsAfter": ["./b"], "dependsOn": {"./c": {"magicNumber": "321"}}}`,
+				"b": `{"id": "b"}`,
+				"c": `{"id": "c"}`,
+			},
+			want: []string{"./c{magicNumber=321}", "./a{}"},
+		},
+		{
+			name: "override simple",
+			src:  `{"features": {"./a": {}}, "overrideFeatureInstallOrder": ["./c"]}`,
+			features: map[string]string{
+				"a": `{"id": "a", "dependsOn": {"./b": {}, "./c": {}, "./d": {}}}`,
+				"b": `{"id": "b"}`,
+				"c": `{"id": "c"}`,
+				"d": `{"id": "d"}`,
+			},
+			want: []string{"./c{}", "./b{}", "./d{}", "./a{}"},
+		},
+		{
+			// The override reverses c and d relative to their natural round order (./c < ./d), so it must
+			// take effect for the ordering to hold: d before c, even though both are eligible in the same
+			// round and sit mid-graph (a depends on b->c and on d, and installsAfter c).
+			name: "override intermediate",
+			src:  `{"features": {"./a": {}}, "overrideFeatureInstallOrder": ["./d", "./c"]}`,
+			features: map[string]string{
+				"a": `{"id": "a", "dependsOn": {"./b": {}, "./d": {}}, "installsAfter": ["./c"]}`,
+				"b": `{"id": "b", "dependsOn": {"./c": {}}}`,
+				"c": `{"id": "c"}`,
+				"d": `{"id": "d"}`,
+			},
+			want: []string{"./d{}", "./c{}", "./b{}", "./a{}"},
+		},
+		{
+			// roundPriority beats an independent, otherwise eligible Feature: c is installable in the
+			// first round but a (higher priority) and then b (which depends on a) install before it.
+			name: "override round priority",
+			src:  `{"features": {"./b": {}, "./c": {}}, "overrideFeatureInstallOrder": ["./a", "./b", "./c"]}`,
+			features: map[string]string{
+				"a": `{"id": "a"}`,
+				"b": `{"id": "b", "dependsOn": {"./a": {}}}`,
+				"c": `{"id": "c"}`,
+			},
+			want: []string{"./a{}", "./b{}", "./c{}"},
+		},
 	}
-	root, err := hujson.Parse([]byte(src))
-	if err != nil {
-		t.Fatalf("parse devcontainer.json: %v", err)
-	}
-	ordered, err := installSequence(t.Context(), NewFetcher(), openRoot(t, dir), ".", &root)
-	if err != nil {
-		t.Fatalf("installSequence: %v", err)
-	}
-	return ordered
-}
-
-// itemKey identifies a contributor in an ordering assertion by its reference, OCI digest (when set),
-// and string options, matching the (userFeatureId, canonicalId, options) tuples the CLI asserts.
-func itemKey(c *contributor) string {
-	key := c.ref
-	if c.digest != "" {
-		key += "@" + c.digest
-	}
-	var opts []string
-	for k, v := range c.options.obj {
-		if v.kind == kindString {
-			opts = append(opts, k+"="+v.str)
-		}
-	}
-	slices.Sort(opts)
-	return key + "{" + strings.Join(opts, ",") + "}"
-}
-
-func assertOrder(t *testing.T, got []*contributor, want []string) {
-	t.Helper()
-	keys := make([]string, len(got))
-	for i, c := range got {
-		keys[i] = itemKey(c)
-	}
-	if diff := cmp.Diff(want, keys); diff != "" {
-		t.Errorf("install order mismatch (-want +got):\n%s", diff)
-	}
-}
-
-func TestInstallOrderInstallsAfterLocal(t *testing.T) {
-	t.Parallel()
-
-	got := resolveOrder(t,
-		`{"features": {"./a": {}, "./c": {"magicNumber": "321"}}}`,
-		map[string]string{
-			"a": `{"id": "a", "installsAfter": ["./b", "./c"]}`,
-			"b": `{"id": "b"}`,
-			"c": `{"id": "c"}`,
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			got := resolveOrder(t, tt.src, tt.features)
+			assertOrder(t, got, tt.want)
 		})
-	assertOrder(t, got, []string{"./c{magicNumber=321}", "./a{}"})
-}
-
-func TestInstallOrderDependsOnLocal(t *testing.T) {
-	t.Parallel()
-
-	got := resolveOrder(t,
-		`{"features": {"./a": {}}}`,
-		map[string]string{
-			"a": `{"id": "a", "dependsOn": {"./b": {"magicNumber": "50"}}}`,
-			"b": `{"id": "b"}`,
-		})
-	assertOrder(t, got, []string{"./b{magicNumber=50}", "./a{}"})
-}
-
-// TestInstallOrderDependsOnLocalWithOptions covers round sorting by options: the same Feature
-// requested with different options is a distinct contributor, and a round of them is ordered by the
-// specification's options comparison.
-func TestInstallOrderDependsOnLocalWithOptions(t *testing.T) {
-	t.Parallel()
-
-	got := resolveOrder(t,
-		`{"features": {"./a": {"optA": "a", "optB": "b"}, "./b": {"optA": "a", "optB": "b"}}}`,
-		map[string]string{
-			"a": `{"id": "a", "dependsOn": {"./b": {"optA": "a", "optB": "a"}, "./c": {}}}`,
-			"b": `{"id": "b"}`,
-			"c": `{"id": "c", "dependsOn": {"./b": {"optA": "b", "optB": "a"}, "./d": {}, "./e": {}}}`,
-			"d": `{"id": "d", "dependsOn": {"./b": {"optA": "b", "optB": "b"}}}`,
-			"e": `{"id": "e", "dependsOn": {"./b": {}}}`,
-		})
-	assertOrder(t, got, []string{
-		"./b{}",
-		"./b{optA=a,optB=a}",
-		"./b{optA=a,optB=b}",
-		"./b{optA=b,optB=a}",
-		"./b{optA=b,optB=b}",
-		"./d{}",
-		"./e{}",
-		"./c{}",
-		"./a{optA=a,optB=b}",
-	})
-}
-
-func TestInstallOrderDependsOnAndInstallsAfterLocal(t *testing.T) {
-	t.Parallel()
-
-	got := resolveOrder(t,
-		`{"features": {"./a": {}}}`,
-		map[string]string{
-			"a": `{"id": "a", "installsAfter": ["./b"], "dependsOn": {"./c": {"magicNumber": "321"}}}`,
-			"b": `{"id": "b"}`,
-			"c": `{"id": "c"}`,
-		})
-	assertOrder(t, got, []string{"./c{magicNumber=321}", "./a{}"})
-}
-
-func TestInstallOrderOverrideLocalSimple(t *testing.T) {
-	t.Parallel()
-
-	got := resolveOrder(t,
-		`{"features": {"./a": {}}, "overrideFeatureInstallOrder": ["./c"]}`,
-		map[string]string{
-			"a": `{"id": "a", "dependsOn": {"./b": {}, "./c": {}, "./d": {}}}`,
-			"b": `{"id": "b"}`,
-			"c": `{"id": "c"}`,
-			"d": `{"id": "d"}`,
-		})
-	assertOrder(t, got, []string{"./c{}", "./b{}", "./d{}", "./a{}"})
-}
-
-func TestInstallOrderOverrideLocalIntermediate(t *testing.T) {
-	t.Parallel()
-
-	got := resolveOrder(t,
-		`{"features": {"./a": {}}, "overrideFeatureInstallOrder": ["./c", "./d"]}`,
-		map[string]string{
-			"a": `{"id": "a", "dependsOn": {"./b": {}, "./d": {}}, "installsAfter": ["./c"]}`,
-			"b": `{"id": "b", "dependsOn": {"./c": {}}}`,
-			"c": `{"id": "c"}`,
-			"d": `{"id": "d"}`,
-		})
-	assertOrder(t, got, []string{"./c{}", "./d{}", "./b{}", "./a{}"})
-}
-
-// TestInstallOrderOverrideLocalRoundPriority covers roundPriority beating an independent, otherwise
-// eligible Feature: c is installable in the first round but a (higher priority) and then b (which
-// depends on a) install before it.
-func TestInstallOrderOverrideLocalRoundPriority(t *testing.T) {
-	t.Parallel()
-
-	got := resolveOrder(t,
-		`{"features": {"./b": {}, "./c": {}}, "overrideFeatureInstallOrder": ["./a", "./b", "./c"]}`,
-		map[string]string{
-			"a": `{"id": "a"}`,
-			"b": `{"id": "b", "dependsOn": {"./a": {}}}`,
-			"c": `{"id": "c"}`,
-		})
-	assertOrder(t, got, []string{"./a{}", "./b{}", "./c{}"})
-}
-
-func TestInstallOrderInstallsAfterCycle(t *testing.T) {
-	t.Parallel()
-
-	_, err := installSequenceOf(t,
-		`{"features": {"./a": {}, "./b": {}, "./c": {}}}`,
-		map[string]string{
-			"a": `{"id": "a", "installsAfter": ["./b"]}`,
-			"b": `{"id": "b", "installsAfter": ["./c"]}`,
-			"c": `{"id": "c", "installsAfter": ["./a"]}`,
-		})
-	if err == nil {
-		t.Fatal("installSequence with an installsAfter cycle: got nil error")
 	}
 }
 
-func TestInstallOrderDependsOnCycle(t *testing.T) {
+// TestInstallOrderCycle covers detecting a dependency cycle among local Features: installSequence
+// must fail rather than return an order for both an installsAfter cycle and a dependsOn cycle.
+func TestInstallOrderCycle(t *testing.T) {
 	t.Parallel()
 
-	_, err := installSequenceOf(t,
-		`{"features": {"./a": {}}}`,
-		map[string]string{
-			"a": `{"id": "a", "dependsOn": {"./b": {}}}`,
-			"b": `{"id": "b", "dependsOn": {"./c": {"magicNumber": "50"}}}`,
-			"c": `{"id": "c", "dependsOn": {"./a": {"magicNumber": "50"}}}`,
+	tests := []struct {
+		name     string
+		src      string
+		features map[string]string
+	}{
+		{
+			name: "installs after",
+			src:  `{"features": {"./a": {}, "./b": {}, "./c": {}}}`,
+			features: map[string]string{
+				"a": `{"id": "a", "installsAfter": ["./b"]}`,
+				"b": `{"id": "b", "installsAfter": ["./c"]}`,
+				"c": `{"id": "c", "installsAfter": ["./a"]}`,
+			},
+		},
+		{
+			name: "depends on",
+			src:  `{"features": {"./a": {}}}`,
+			features: map[string]string{
+				"a": `{"id": "a", "dependsOn": {"./b": {}}}`,
+				"b": `{"id": "b", "dependsOn": {"./c": {"magicNumber": "50"}}}`,
+				"c": `{"id": "c", "dependsOn": {"./a": {"magicNumber": "50"}}}`,
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			if _, err := installSequenceOf(t, tt.src, tt.features); err == nil {
+				t.Fatal("installSequence with a dependency cycle: got nil error")
+			}
 		})
-	if err == nil {
-		t.Fatal("installSequence with a dependsOn cycle: got nil error")
 	}
 }
 
@@ -515,6 +469,53 @@ func TestDisplayID(t *testing.T) {
 	noMetadata := &contributor{ref: "ghcr.io/ns/a"}
 	if got := noMetadata.displayID(); got != "ghcr.io/ns/a" {
 		t.Errorf("displayID without metadata = %q, want %q", got, "ghcr.io/ns/a")
+	}
+}
+
+// resolveOrder writes each named Feature under a temp directory (referenced as "./<name>"), resolves
+// the devcontainer.json in src, and returns the contributors in installation order.
+func resolveOrder(t *testing.T, src string, features map[string]string) []*contributor {
+	t.Helper()
+	dir := t.TempDir()
+	for name, content := range features {
+		writeLocalFeature(t, dir, name, content)
+	}
+	root, err := hujson.Parse([]byte(src))
+	if err != nil {
+		t.Fatalf("parse devcontainer.json: %v", err)
+	}
+	ordered, err := installSequence(t.Context(), NewFetcher(), openRoot(t, dir), ".", &root)
+	if err != nil {
+		t.Fatalf("installSequence: %v", err)
+	}
+	return ordered
+}
+
+// itemKey identifies a contributor in an ordering assertion by its reference, OCI digest (when set),
+// and string options, matching the (userFeatureId, canonicalId, options) tuples the CLI asserts.
+func itemKey(c *contributor) string {
+	key := c.ref
+	if c.digest != "" {
+		key += "@" + c.digest
+	}
+	var opts []string
+	for k, v := range c.options.obj {
+		if v.kind == kindString {
+			opts = append(opts, k+"="+v.str)
+		}
+	}
+	slices.Sort(opts)
+	return key + "{" + strings.Join(opts, ",") + "}"
+}
+
+func assertOrder(t *testing.T, got []*contributor, want []string) {
+	t.Helper()
+	keys := make([]string, len(got))
+	for i, c := range got {
+		keys[i] = itemKey(c)
+	}
+	if diff := cmp.Diff(want, keys); diff != "" {
+		t.Errorf("install order mismatch (-want +got):\n%s", diff)
 	}
 }
 

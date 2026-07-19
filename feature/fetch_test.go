@@ -153,7 +153,7 @@ func TestFetchMetadataParse(t *testing.T) {
 	}
 	// The options each dependency is requested with are captured, distinguishing otherwise identical
 	// dependencies for install ordering.
-	if got, want := md.DependsOn[1].Options, (optionValue{kind: 'o', obj: map[string]optScalar{"opt": {kind: 'b', b: true}}}); !reflect.DeepEqual(got, want) {
+	if got, want := md.DependsOn[1].Options, (optionValue{kind: kindObject, obj: map[string]optScalar{"opt": {kind: kindBool, b: true}}}); !reflect.DeepEqual(got, want) {
 		t.Errorf("DependsOn[1].Options = %+v, want %+v", got, want)
 	}
 	if got, want := strings.Join(md.InstallsAfter, ","), "ghcr.io/devcontainers/features/common-utils"; got != want {

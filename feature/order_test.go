@@ -45,7 +45,7 @@ func itemKey(c *contributor) string {
 	}
 	var opts []string
 	for k, v := range c.options.obj {
-		if v.kind == 's' {
+		if v.kind == kindString {
 			opts = append(opts, k+"="+v.str)
 		}
 	}
@@ -280,9 +280,9 @@ func ociContrib(userID, repoID, digest string, opts map[string]string) *contribu
 func optionsOf(m map[string]string) optionValue {
 	obj := map[string]optScalar{}
 	for k, v := range m {
-		obj[k] = optScalar{kind: 's', str: v}
+		obj[k] = optScalar{kind: kindString, str: v}
 	}
-	return optionValue{kind: 'o', obj: obj}
+	return optionValue{kind: kindObject, obj: obj}
 }
 
 // TestCompareTo covers each branch of the specification's ordering comparison, including the
@@ -357,12 +357,12 @@ func TestCompareTo(t *testing.T) {
 func TestOptionsCompareTo(t *testing.T) {
 	t.Parallel()
 
-	str := func(s string) optionValue { return optionValue{kind: 's', str: s} }
-	boolean := func(b bool) optionValue { return optionValue{kind: 'b', b: b} }
-	obj := func(m map[string]optScalar) optionValue { return optionValue{kind: 'o', obj: m} }
-	sScalar := func(s string) optScalar { return optScalar{kind: 's', str: s} }
-	bScalar := func(b bool) optScalar { return optScalar{kind: 'b', b: b} }
-	undef := optScalar{kind: 'u'}
+	str := func(s string) optionValue { return optionValue{kind: kindString, str: s} }
+	boolean := func(b bool) optionValue { return optionValue{kind: kindBool, b: b} }
+	obj := func(m map[string]optScalar) optionValue { return optionValue{kind: kindObject, obj: m} }
+	sScalar := func(s string) optScalar { return optScalar{kind: kindString, str: s} }
+	bScalar := func(b bool) optScalar { return optScalar{kind: kindBool, b: b} }
+	undef := optScalar{kind: kindUndefined}
 
 	tests := []struct {
 		name string
@@ -412,27 +412,27 @@ func TestParseOptions(t *testing.T) {
 		return parseOptions(v)
 	}
 
-	if got := parse(`"x"`); got.kind != 's' || got.str != "x" {
+	if got := parse(`"x"`); got.kind != kindString || got.str != "x" {
 		t.Errorf(`parseOptions("x") = %+v, want string "x"`, got)
 	}
-	if got := parse(`true`); got.kind != 'b' || !got.b {
+	if got := parse(`true`); got.kind != kindBool || !got.b {
 		t.Errorf("parseOptions(true) = %+v, want boolean true", got)
 	}
 	// A non-scalar, non-object value (a bare number) is treated as the empty option set.
-	if got := parse(`42`); got.kind != 'o' || len(got.obj) != 0 {
+	if got := parse(`42`); got.kind != kindObject || len(got.obj) != 0 {
 		t.Errorf("parseOptions(42) = %+v, want empty object", got)
 	}
 
 	obj := parse(`{"s": "v", "b": false, "n": [1], "z": null}`)
-	if obj.kind != 'o' {
-		t.Fatalf("parseOptions(object) kind = %c, want o", obj.kind)
+	if obj.kind != kindObject {
+		t.Fatalf("parseOptions(object) kind = %d, want kindObject", obj.kind)
 	}
 	want := map[string]optScalar{
-		"s": {kind: 's', str: "v"},
-		"b": {kind: 'b', b: false},
+		"s": {kind: kindString, str: "v"},
+		"b": {kind: kindBool, b: false},
 		// A non-scalar member value normalizes to undefined.
-		"n": {kind: 'u'},
-		"z": {kind: 'u'},
+		"n": {kind: kindUndefined},
+		"z": {kind: kindUndefined},
 	}
 	if diff := cmp.Diff(want, obj.obj, cmp.AllowUnexported(optScalar{})); diff != "" {
 		t.Errorf("parseOptions(object) mismatch (-want +got):\n%s", diff)

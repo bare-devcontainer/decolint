@@ -35,5 +35,14 @@
   https://containers.dev\/implementors/json_reference/
 - Features specification:
   https://containers.dev/implementors/features/
+- Features distribution (OCI packaging) specification:
+  https://containers.dev/implementors/features-distribution/
+- Merge logic (image metadata) reference:
+  https://containers.dev/implementors/spec/
 - Templates specification:
   https://containers.dev/implementors/templates/
+- Where the spec prose and the reference implementation
+  ([`devcontainers/cli`](https://github.com/devcontainers/cli)) disagree, the
+  implementation wins: decolint tracks the real tooling's behavior. Specific
+  conflicts are documented as inline comments at the relevant code (see the
+  install-order sort in `feature/order.go`).

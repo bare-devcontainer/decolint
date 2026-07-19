@@ -18,8 +18,9 @@ type contributor struct {
 	// deduplicate Features.
 	kind RefKind
 	// options is the option set ref was requested with (the "features" value or a "dependsOn"
-	// entry), normalized for comparison. Two requests for the same Feature with different options are
-	// distinct contributors, as the specification's install-order algorithm treats them.
+	// entry), reduced to its optionValue form for comparison. Two requests for the same Feature with
+	// different options are distinct contributors, as the specification's install-order algorithm
+	// treats them.
 	options optionValue
 
 	// resolvedPath is the local Feature directory, set for KindLocal.
@@ -59,13 +60,28 @@ func (c *contributor) displayID() string {
 	return c.ref
 }
 
-// optionValue is a Feature's option set, normalized for the install-order comparison. It mirrors the
-// reference implementation's shape: a string, a boolean, or an object mapping option names to scalar
-// values.
+// valueKind classifies an optionValue or optScalar. kindObject is first so it is the zero value: a
+// contributor built without options is left as optionValue{}, which then reads as the default empty
+// object. Such nodes (soft-dependency and override entries) are matched by Feature identity rather
+// than by their options, so their option value is never actually compared.
+type valueKind int
+
+const (
+	kindObject valueKind = iota // objects only, i.e. optionValue
+	kindString
+	kindBool
+	kindUndefined // undefined scalars only, i.e. optScalar
+)
+
+// optionValue is a Feature's option set reduced to the canonical form the install-order comparison
+// (optionsCompareTo) distinguishes: a string, a boolean, or an object mapping option names to
+// optScalar values. This mirrors the reference implementation's shape. Everything the comparison
+// does not look at — JSON formatting, comments, and object key order — is dropped, and any value
+// that is not a string, boolean, or object collapses to the empty object. See parseOptions for the
+// exact mapping.
 type optionValue struct {
-	// kind is 's' for a string, 'b' for a boolean, or 'o' for an object (the default, including the
-	// empty option set "{}").
-	kind byte
+	// kind is kindString, kindBool, or kindObject (the default, including the empty option set "{}").
+	kind valueKind
 	str  string
 	b    bool
 	obj  map[string]optScalar
@@ -74,22 +90,23 @@ type optionValue struct {
 // optScalar is a single option value inside an object: a string, a boolean, or undefined (a null or
 // non-scalar value).
 type optScalar struct {
-	// kind is 's' for a string, 'b' for a boolean, or 'u' for undefined.
-	kind byte
+	// kind is kindString, kindBool, or kindUndefined.
+	kind valueKind
 	str  string
 	b    bool
 }
 
-// parseOptions normalizes a "features" value or a "dependsOn" entry into an optionValue. A value that
-// is neither a string nor a boolean (including "{}") is treated as an object.
+// parseOptions reduces a raw "features" value or "dependsOn" entry to an optionValue: a string or
+// boolean literal keeps its kind; an object maps each member value through parseScalar; any other
+// value (a number, null, or array) collapses to the empty object, as "{}" also does.
 func parseOptions(v hujson.Value) optionValue {
 	switch t := v.Value.(type) {
 	case hujson.Literal:
 		switch t.Kind() {
 		case '"':
-			return optionValue{kind: 's', str: t.String()}
+			return optionValue{kind: kindString, str: t.String()}
 		case 't', 'f':
-			return optionValue{kind: 'b', b: t.Bool()}
+			return optionValue{kind: kindBool, b: t.Bool()}
 		}
 	case *hujson.Object:
 		obj := map[string]optScalar{}
@@ -98,22 +115,23 @@ func parseOptions(v hujson.Value) optionValue {
 				obj[name.String()] = parseScalar(m.Value)
 			}
 		}
-		return optionValue{kind: 'o', obj: obj}
+		return optionValue{kind: kindObject, obj: obj}
 	}
-	return optionValue{kind: 'o', obj: map[string]optScalar{}}
+	return optionValue{kind: kindObject, obj: map[string]optScalar{}}
 }
 
-// parseScalar normalizes an option value inside an object.
+// parseScalar reduces an object member value to an optScalar: a string or boolean literal keeps its
+// kind; any other value (a number, null, array, or nested object) becomes undefined.
 func parseScalar(v hujson.Value) optScalar {
 	if lit, ok := v.Value.(hujson.Literal); ok {
 		switch lit.Kind() {
 		case '"':
-			return optScalar{kind: 's', str: lit.String()}
+			return optScalar{kind: kindString, str: lit.String()}
 		case 't', 'f':
-			return optScalar{kind: 'b', b: lit.Bool()}
+			return optScalar{kind: kindBool, b: lit.Bool()}
 		}
 	}
-	return optScalar{kind: 'u'}
+	return optScalar{kind: kindUndefined}
 }
 
 // optionsCompareTo orders two option sets: strings and booleans compare directly, objects compare by
@@ -121,12 +139,15 @@ func parseScalar(v hujson.Value) optScalar {
 // implementation's optionsCompareTo.
 func optionsCompareTo(a, b optionValue) int {
 	switch {
-	case a.kind == 's' && b.kind == 's':
+	case a.kind == kindString && b.kind == kindString:
 		return strings.Compare(a.str, b.str)
-	case a.kind == 'b' && b.kind == 'b':
+	case a.kind == kindBool && b.kind == kindBool:
 		return boolCompare(a.b, b.b)
-	case a.kind == 'o' && b.kind == 'o':
+	case a.kind == kindObject && b.kind == kindObject:
 		if len(a.obj) != len(b.obj) {
+			// The spec prose orders the "greatest number of user-defined options" first, but the
+			// reference implementation (optionsCompareTo) sorts fewest first; we follow the
+			// implementation.
 			return len(a.obj) - len(b.obj)
 		}
 		aKeys := sortedKeys(a.obj)
@@ -141,21 +162,24 @@ func optionsCompareTo(a, b optionValue) int {
 		}
 		return 0
 	}
+	// The spec prose is silent on comparing options of different kinds; the reference implementation
+	// (optionsCompareTo) falls back to comparing the JavaScript `typeof` names, so we compare the
+	// equivalent type names ("boolean" < "object" < "string").
 	return strings.Compare(optionTypeName(a.kind), optionTypeName(b.kind))
 }
 
 // scalarCompare orders two object option values. An undefined value sorts after a defined one.
 func scalarCompare(a, b optScalar) int {
 	switch {
-	case a.kind == 's' && b.kind == 's':
+	case a.kind == kindString && b.kind == kindString:
 		return strings.Compare(a.str, b.str)
-	case a.kind == 'b' && b.kind == 'b':
+	case a.kind == kindBool && b.kind == kindBool:
 		return boolCompare(a.b, b.b)
-	case a.kind == 'u' || b.kind == 'u':
+	case a.kind == kindUndefined || b.kind == kindUndefined:
 		if a.kind == b.kind {
 			return 0
 		}
-		if a.kind == 'u' {
+		if a.kind == kindUndefined {
 			return 1
 		}
 		return -1
@@ -174,11 +198,11 @@ func boolCompare(a, b bool) int {
 	}
 }
 
-func optionTypeName(kind byte) string {
+func optionTypeName(kind valueKind) string {
 	switch kind {
-	case 's':
+	case kindString:
 		return "string"
-	case 'b':
+	case kindBool:
 		return "boolean"
 	default:
 		return "object"
@@ -200,6 +224,9 @@ func sortedKeys(m map[string]optScalar) []string {
 // comparison; the two agree on the lowercase, digit, and digest identifiers Features use.
 func compareTo(a, b *contributor) int {
 	if a.kind != b.kind {
+		// The spec prose only orders Features within a single source type; it is silent on comparing
+		// across types. The reference implementation (compareTo) falls back to comparing the requested
+		// reference strings (userFeatureId); we follow the implementation.
 		return strings.Compare(a.ref, b.ref)
 	}
 	switch a.kind {
@@ -211,6 +238,9 @@ func compareTo(a, b *contributor) int {
 		if v := ociResourceCompareTo(a, b); v != 0 {
 			return v
 		}
+		// The spec prose orders tags "oldest to newest" with `latest` newest, but the reference
+		// implementation compares them lexicographically (no semver, no `latest` special case); we
+		// follow the implementation.
 		if aTag, bTag := ociTag(a.ociRef), ociTag(b.ociRef); aTag != "" && bTag != "" && aTag != bTag {
 			return strings.Compare(aTag, bTag)
 		}
@@ -219,11 +249,16 @@ func compareTo(a, b *contributor) int {
 		}
 		return strings.Compare(a.digest, b.digest)
 	case KindTarball:
+		// The spec prose keys tarball identity on the tgz content hash, but the reference
+		// implementation keys on the tarball URI string; we follow the implementation.
 		if v := strings.Compare(a.tarballURI, b.tarballURI); v != 0 {
 			return v
 		}
 		return optionsCompareTo(a.options, b.options)
 	default: // KindLocal
+		// The spec prose says each local Feature is "unique and not equal to any other", but the
+		// reference implementation treats same path + same options as equal (deduplicated); we
+		// follow the implementation, so identical path and options return 0 here.
 		if v := strings.Compare(a.resolvedPath, b.resolvedPath); v != 0 {
 			return v
 		}

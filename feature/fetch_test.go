@@ -85,6 +85,23 @@ func TestFetchLocalMissing(t *testing.T) {
 	}
 }
 
+func TestFetchLocalTooLarge(t *testing.T) {
+	t.Parallel()
+
+	// A metadata file just over the size cap must be rejected on its declared size, before it is
+	// read into memory or parsed.
+	dir := t.TempDir()
+	writeLocalFeature(t, dir, "big", "{"+strings.Repeat(" ", maxMetadataBytes)+"}")
+
+	_, err := NewFetcher().Fetch(t.Context(), "./big", openRoot(t, dir), ".")
+	if err == nil {
+		t.Fatal("Fetch of an oversized local feature: got nil error")
+	}
+	if !strings.Contains(err.Error(), "exceeds") {
+		t.Errorf("error = %v, want it to mention exceeding the size limit", err)
+	}
+}
+
 func TestFetchCachesResults(t *testing.T) {
 	t.Parallel()
 
@@ -213,6 +230,45 @@ func TestFetchTarballNotFound(t *testing.T) {
 	f.client = srv.Client()
 	if _, err := f.Fetch(t.Context(), srv.URL+"/feature.tgz", nil, ""); err == nil {
 		t.Error("Fetch of a missing tarball: got nil error")
+	}
+}
+
+func TestFetchInvalidReference(t *testing.T) {
+	t.Parallel()
+
+	// A reference that is neither a local path nor an HTTPS URI is parsed as an OCI reference; a
+	// malformed one is rejected before any fetch is attempted.
+	if _, err := NewFetcher().Fetch(t.Context(), "not a valid reference", nil, ""); err == nil {
+		t.Error("Fetch of an invalid feature reference: got nil error")
+	}
+}
+
+func TestFetchTarballFollowsSecureRedirect(t *testing.T) {
+	t.Parallel()
+
+	// A redirect that keeps the request on HTTPS preserves the transport guarantee, so it is
+	// followed (unlike the downgrade rejected by TestFetchTarballRefusesInsecureRedirect).
+	archive := archiveWithMetadata(t, `{"id": "redirected"}`, true)
+	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/real.tgz" {
+			_, _ = w.Write(archive)
+			return
+		}
+		http.Redirect(w, r, "/real.tgz", http.StatusFound)
+	}))
+	defer srv.Close()
+
+	f := NewFetcher()
+	client := srv.Client()
+	client.CheckRedirect = refuseInsecureRedirect
+	f.client = client
+
+	md, err := f.Fetch(t.Context(), srv.URL+"/feature.tgz", nil, "")
+	if err != nil {
+		t.Fatalf("Fetch: %v", err)
+	}
+	if md.ID != "redirected" {
+		t.Errorf("ID = %q, want redirected", md.ID)
 	}
 }
 

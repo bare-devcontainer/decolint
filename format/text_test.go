@@ -1,11 +1,20 @@
 package format
 
 import (
+	"errors"
 	"strings"
 	"testing"
 
 	"github.com/bare-devcontainer/decolint/linter"
 )
+
+// errWriter is an io.Writer that always fails, used to exercise the write-error paths of the
+// formatters.
+type errWriter struct{}
+
+var errWrite = errors.New("write failed")
+
+func (errWriter) Write([]byte) (int, error) { return 0, errWrite }
 
 func testIssues() []linter.Issue {
 	return []linter.Issue{
@@ -42,5 +51,27 @@ Found 1 error and 1 warning.
 `
 	if sb.String() != want {
 		t.Errorf("WriteIssues text = %q, want %q", sb.String(), want)
+	}
+}
+
+func TestTextWriteIssuesWriteError(t *testing.T) {
+	t.Parallel()
+
+	// A non-empty issue list fails on the per-issue write; an empty list writes no issues and
+	// reaches the summary write, so both write points are covered.
+	tests := []struct {
+		name   string
+		issues []linter.Issue
+	}{
+		{"per-issue write", testIssues()},
+		{"summary write", nil},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			if err := (TextFormat{}).WriteIssues(errWriter{}, tt.issues); !errors.Is(err, errWrite) {
+				t.Errorf("WriteIssues error = %v, want %v", err, errWrite)
+			}
+		})
 	}
 }

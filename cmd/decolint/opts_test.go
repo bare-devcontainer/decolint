@@ -28,6 +28,8 @@ func TestParseOptionsPlatform(t *testing.T) {
 			false,
 		},
 		{"mixed case", []string{"-platform=VSCode"}, []linter.Platform{linter.PlatformVSCode}, false},
+		// Empty entries from stray commas or surrounding whitespace are skipped, not rejected.
+		{"empty entries skipped", []string{"-platform=vscode, ,,codespaces"}, []linter.Platform{linter.PlatformVSCode, linter.PlatformCodespaces}, false},
 		{"unknown platform", []string{"-platform=bogus"}, nil, true},
 		{
 			"combined with other flags and paths",

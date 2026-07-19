@@ -336,6 +336,174 @@ func TestCompareTo(t *testing.T) {
 	}
 }
 
+// TestOptionsCompareTo covers the option-set comparison branches the install-order and compareTo
+// tests do not reach on their own: boolean options, object options with undefined and boolean
+// scalars, and the cross-kind fallback that orders differing kinds lexicographically by their type
+// name, i.e. "boolean" < "object" < "string".
+func TestOptionsCompareTo(t *testing.T) {
+	t.Parallel()
+
+	str := func(s string) optionValue { return optionValue{kind: 's', str: s} }
+	boolean := func(b bool) optionValue { return optionValue{kind: 'b', b: b} }
+	obj := func(m map[string]optScalar) optionValue { return optionValue{kind: 'o', obj: m} }
+	sScalar := func(s string) optScalar { return optScalar{kind: 's', str: s} }
+	bScalar := func(b bool) optScalar { return optScalar{kind: 'b', b: b} }
+	undef := optScalar{kind: 'u'}
+
+	tests := []struct {
+		name string
+		a, b optionValue
+		want int // expected sign
+	}{
+		{"string less", str("a"), str("b"), -1},
+		{"string equal", str("a"), str("a"), 0},
+		{"bool false before true", boolean(false), boolean(true), -1},
+		{"bool equal", boolean(true), boolean(true), 0},
+		{"object by size", obj(map[string]optScalar{"x": sScalar("1")}), obj(map[string]optScalar{}), 1},
+		{"object by key", obj(map[string]optScalar{"a": sScalar("1")}), obj(map[string]optScalar{"b": sScalar("1")}), -1},
+		{"object by string scalar", obj(map[string]optScalar{"a": sScalar("1")}), obj(map[string]optScalar{"a": sScalar("2")}), -1},
+		{"object by bool scalar", obj(map[string]optScalar{"a": bScalar(false)}), obj(map[string]optScalar{"a": bScalar(true)}), -1},
+		{"object equal", obj(map[string]optScalar{"a": sScalar("1")}), obj(map[string]optScalar{"a": sScalar("1")}), 0},
+		{"undefined scalar sorts after defined", obj(map[string]optScalar{"a": undef}), obj(map[string]optScalar{"a": sScalar("1")}), 1},
+		{"undefined scalars equal", obj(map[string]optScalar{"a": undef}), obj(map[string]optScalar{"a": undef}), 0},
+		{"mismatched defined scalar kinds compare equal", obj(map[string]optScalar{"a": sScalar("1")}), obj(map[string]optScalar{"a": bScalar(true)}), 0},
+		{"cross kind object before string", obj(map[string]optScalar{}), str("a"), -1},
+		{"cross kind boolean before object", boolean(true), obj(map[string]optScalar{}), -1},
+		{"cross kind boolean before string", boolean(true), str("a"), -1},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			if got := sign(optionsCompareTo(tt.a, tt.b)); got != tt.want {
+				t.Errorf("optionsCompareTo(%s) sign = %d, want %d", tt.name, got, tt.want)
+			}
+			if got := sign(optionsCompareTo(tt.b, tt.a)); got != -tt.want {
+				t.Errorf("optionsCompareTo reversed(%s) sign = %d, want %d", tt.name, got, -tt.want)
+			}
+		})
+	}
+}
+
+// TestParseOptions covers normalizing a "features"/"dependsOn" value into an optionValue: the string
+// and boolean literal forms, an object with each scalar variant (string, boolean, and an undefined
+// value from a non-scalar member), and a bare non-scalar value that falls back to the empty object.
+func TestParseOptions(t *testing.T) {
+	t.Parallel()
+
+	parse := func(src string) optionValue {
+		v, err := hujson.Parse([]byte(src))
+		if err != nil {
+			t.Fatalf("hujson.Parse(%q): %v", src, err)
+		}
+		return parseOptions(v)
+	}
+
+	if got := parse(`"x"`); got.kind != 's' || got.str != "x" {
+		t.Errorf(`parseOptions("x") = %+v, want string "x"`, got)
+	}
+	if got := parse(`true`); got.kind != 'b' || !got.b {
+		t.Errorf("parseOptions(true) = %+v, want boolean true", got)
+	}
+	// A non-scalar, non-object value (a bare number) is treated as the empty option set.
+	if got := parse(`42`); got.kind != 'o' || len(got.obj) != 0 {
+		t.Errorf("parseOptions(42) = %+v, want empty object", got)
+	}
+
+	obj := parse(`{"s": "v", "b": false, "n": [1], "z": null}`)
+	if obj.kind != 'o' {
+		t.Fatalf("parseOptions(object) kind = %c, want o", obj.kind)
+	}
+	want := map[string]optScalar{
+		"s": {kind: 's', str: "v"},
+		"b": {kind: 'b', b: false},
+		// A non-scalar member value normalizes to undefined.
+		"n": {kind: 'u'},
+		"z": {kind: 'u'},
+	}
+	if diff := cmp.Diff(want, obj.obj, cmp.AllowUnexported(optScalar{})); diff != "" {
+		t.Errorf("parseOptions(object) mismatch (-want +got):\n%s", diff)
+	}
+}
+
+// TestOCIRefHelpers covers the repository/tag decomposition edge cases: a bare repository with no
+// namespace separator, and a reference pinned by digest (which yields no tag).
+func TestOCIRefHelpers(t *testing.T) {
+	t.Parallel()
+
+	if got := ociNamespace("a"); got != "" {
+		t.Errorf(`ociNamespace("a") = %q, want ""`, got)
+	}
+	if got := ociID("a"); got != "a" {
+		t.Errorf(`ociID("a") = %q, want "a"`, got)
+	}
+	if got := ociTag(registry.Reference{Reference: "sha256:abc"}); got != "" {
+		t.Errorf(`ociTag(digest) = %q, want ""`, got)
+	}
+	if got := ociTag(registry.Reference{Reference: "1.2.3"}); got != "1.2.3" {
+		t.Errorf(`ociTag(tag) = %q, want "1.2.3"`, got)
+	}
+}
+
+// TestSatisfiesSoftDependency covers the per-source-type matching used to drop and gate soft
+// dependencies: a tarball and a local Feature match on their URI/path, and an OCI Feature matches
+// either its exact resource or a legacy alias of the requested (renamed) Feature.
+func TestSatisfiesSoftDependency(t *testing.T) {
+	t.Parallel()
+
+	tarball := func(uri string) *contributor {
+		return &contributor{kind: KindTarball, tarballURI: uri}
+	}
+	local := func(path string) *contributor {
+		return &contributor{kind: KindLocal, resolvedPath: path}
+	}
+	oci := func(repo string, aliases []string) *contributor {
+		return &contributor{
+			kind:    KindOCI,
+			ociRef:  registry.Reference{Registry: "ghcr.io", Repository: repo},
+			aliases: aliases,
+		}
+	}
+
+	tests := []struct {
+		name       string
+		node, soft *contributor
+		want       bool
+	}{
+		{"different kinds never match", tarball("https://ex/a.tgz"), local("./a"), false},
+		{"tarball match", tarball("https://ex/a.tgz"), tarball("https://ex/a.tgz"), true},
+		{"tarball mismatch", tarball("https://ex/a.tgz"), tarball("https://ex/b.tgz"), false},
+		{"local match", local("./a"), local("./a"), true},
+		{"local mismatch", local("./a"), local("./b"), false},
+		{"oci exact resource", oci("ns/a", nil), oci("ns/a", nil), true},
+		{"oci legacy alias", oci("ns/old", nil), oci("ns/new", []string{"old"}), true},
+		{"oci no match", oci("ns/a", nil), oci("ns/b", []string{"c"}), false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			if got := satisfiesSoftDependency(tt.node, tt.soft); got != tt.want {
+				t.Errorf("satisfiesSoftDependency(%s) = %v, want %v", tt.name, got, tt.want)
+			}
+		})
+	}
+}
+
+// TestDisplayID covers both branches of displayID: the metadata id when present, and the fallback to
+// the request reference when the Feature carries no metadata id.
+func TestDisplayID(t *testing.T) {
+	t.Parallel()
+
+	withID := &contributor{ref: "ghcr.io/ns/a", md: &Metadata{ID: "a"}}
+	if got := withID.displayID(); got != "a" {
+		t.Errorf("displayID with metadata id = %q, want %q", got, "a")
+	}
+
+	noMetadata := &contributor{ref: "ghcr.io/ns/a"}
+	if got := noMetadata.displayID(); got != "ghcr.io/ns/a" {
+		t.Errorf("displayID without metadata = %q, want %q", got, "ghcr.io/ns/a")
+	}
+}
+
 func sign(n int) int {
 	switch {
 	case n < 0:

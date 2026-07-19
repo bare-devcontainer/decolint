@@ -223,6 +223,7 @@ func TestPlatformString(t *testing.T) {
 	}{
 		{linter.PlatformVSCode, "vscode"},
 		{linter.PlatformCodespaces, "codespaces"},
+		{linter.Platform(99), "unknown"}, // an out-of-range platform maps to "unknown"
 	}
 	for _, tt := range tests {
 		if got := tt.platform.String(); got != tt.want {

@@ -1,6 +1,7 @@
 package format
 
 import (
+	"errors"
 	"strings"
 	"testing"
 )
@@ -29,5 +30,13 @@ func TestJSONWriteIssuesEmpty(t *testing.T) {
 
 	if sb.String() != "[]\n" {
 		t.Errorf("WriteIssues json (empty) = %q, want %q", sb.String(), "[]\n")
+	}
+}
+
+func TestJSONWriteIssuesWriteError(t *testing.T) {
+	t.Parallel()
+
+	if err := (JSONFormat{}).WriteIssues(errWriter{}, testIssues()); !errors.Is(err, errWrite) {
+		t.Errorf("WriteIssues error = %v, want %v", err, errWrite)
 	}
 }

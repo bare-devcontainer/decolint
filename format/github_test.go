@@ -1,6 +1,7 @@
 package format
 
 import (
+	"errors"
 	"strings"
 	"testing"
 )
@@ -18,6 +19,14 @@ func TestGitHubWriteIssues(t *testing.T) {
 `
 	if sb.String() != want {
 		t.Errorf("WriteIssues github = %q, want %q", sb.String(), want)
+	}
+}
+
+func TestGitHubWriteIssuesWriteError(t *testing.T) {
+	t.Parallel()
+
+	if err := (GitHubFormat{}).WriteIssues(errWriter{}, testIssues()); !errors.Is(err, errWrite) {
+		t.Errorf("WriteIssues error = %v, want %v", err, errWrite)
 	}
 }
 

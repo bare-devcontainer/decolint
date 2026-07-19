@@ -70,20 +70,3 @@ func TestParseRef(t *testing.T) {
 		})
 	}
 }
-
-func TestRefWithoutVersion(t *testing.T) {
-	t.Parallel()
-
-	tests := []struct{ ref, want string }{
-		{"ghcr.io/devcontainers/features/node:1", "ghcr.io/devcontainers/features/node"},
-		{"ghcr.io/devcontainers/features/node", "ghcr.io/devcontainers/features/node"},
-		{"ghcr.io/devcontainers/features/node@sha256:abc", "ghcr.io/devcontainers/features/node"},
-		{"localhost:5000/features/go:2", "localhost:5000/features/go"},
-		{"localhost:5000/features/go", "localhost:5000/features/go"},
-	}
-	for _, tt := range tests {
-		if got := refWithoutVersion(tt.ref); got != tt.want {
-			t.Errorf("refWithoutVersion(%q) = %q, want %q", tt.ref, got, tt.want)
-		}
-	}
-}

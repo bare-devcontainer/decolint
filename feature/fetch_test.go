@@ -11,6 +11,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -126,8 +127,17 @@ func TestFetchMetadataParse(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Fetch: %v", err)
 	}
-	if got, want := strings.Join(md.DependsOn, ","), "./dep1,./dep2"; got != want {
+	var deps []string
+	for _, d := range md.DependsOn {
+		deps = append(deps, d.Ref)
+	}
+	if got, want := strings.Join(deps, ","), "./dep1,./dep2"; got != want {
 		t.Errorf("DependsOn = %q, want %q", got, want)
+	}
+	// The options each dependency is requested with are captured, distinguishing otherwise identical
+	// dependencies for install ordering.
+	if got, want := md.DependsOn[1].Options, (optionValue{kind: 'o', obj: map[string]optScalar{"opt": {kind: 'b', b: true}}}); !reflect.DeepEqual(got, want) {
+		t.Errorf("DependsOn[1].Options = %+v, want %+v", got, want)
 	}
 	if got, want := strings.Join(md.InstallsAfter, ","), "ghcr.io/devcontainers/features/common-utils"; got != want {
 		t.Errorf("InstallsAfter = %q, want %q", got, want)

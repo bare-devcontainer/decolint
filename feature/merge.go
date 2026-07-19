@@ -2,11 +2,9 @@ package feature
 
 import (
 	"context"
-	"fmt"
-	"math"
 	"os"
+	"path/filepath"
 	"slices"
-	"strings"
 
 	"github.com/tailscale/hujson"
 )
@@ -22,31 +20,15 @@ import (
 //
 // Every node Merge adds to the tree carries the byte offset of the referencing Feature key in the
 // original file, so findings on merged-in properties point at the Feature reference. Any fetch or
-// parse failure is returned as an error.
+// parse failure, or a dependency cycle, is returned as an error.
 func Merge(ctx context.Context, f *Fetcher, fsRoot *os.Root, configDir string, root *hujson.Value) error {
-	features := root.Find("/features")
-	if features == nil {
-		return nil
-	}
-	obj, ok := features.Value.(*hujson.Object)
-	if !ok {
-		return nil
-	}
-
-	var declared []*contributor
-	for _, m := range obj.Members {
-		name, ok := m.Name.Value.(hujson.Literal)
-		if !ok || name.Kind() != '"' {
-			continue
-		}
-		declared = append(declared, &contributor{ref: name.String(), anchor: m.Name.StartOffset})
-	}
-
-	contribs, err := resolveAll(ctx, f, fsRoot, configDir, declared)
+	ordered, err := installSequence(ctx, f, fsRoot, configDir, root)
 	if err != nil {
 		return err
 	}
-	ordered := installOrder(root, contribs)
+	if len(ordered) == 0 {
+		return nil
+	}
 
 	state := newMergeState(root.Value.(*hujson.Object))
 	for _, c := range ordered {
@@ -56,180 +38,168 @@ func Merge(ctx context.Context, f *Fetcher, fsRoot *os.Root, configDir string, r
 	return nil
 }
 
-// contributor is one resolved Feature that contributes properties to the effective configuration.
-type contributor struct {
-	// ref is the reference the Feature was fetched by.
-	ref string
-	// anchor is the byte offset, in the original file, of the "features" key that (directly or via
-	// dependencies) pulled this Feature in.
-	anchor int
-	// declIdx is the declaration index of that key, used as an ordering tiebreak.
-	declIdx int
-	// deps are the refs of the Features named by this Feature's dependsOn.
-	deps []string
-	md   *Metadata
-}
-
-// id returns the identifier the Feature is matched by in "installsAfter" and
-// "overrideFeatureInstallOrder": its reference without a version. The declared metadata ID is
-// accepted as well.
-func (c *contributor) matches(id string) bool {
-	return id == refWithoutVersion(c.ref) || (c.md != nil && id == c.md.ID)
-}
-
-// displayID returns the identifier used for members synthesized on behalf of this Feature.
-func (c *contributor) displayID() string {
-	if c.md != nil && c.md.ID != "" {
-		return c.md.ID
+// installSequence resolves the Features referenced under "/features" of root, applies
+// "overrideFeatureInstallOrder", and returns the resolved contributors in installation order. It
+// returns an empty result when root declares no Features.
+func installSequence(ctx context.Context, f *Fetcher, fsRoot *os.Root, configDir string, root *hujson.Value) ([]*contributor, error) {
+	features := root.Find("/features")
+	if features == nil {
+		return nil, nil
 	}
-	return c.ref
-}
-
-// refWithoutVersion strips the ":tag" and "@digest" suffixes off an OCI reference.
-func refWithoutVersion(ref string) string {
-	if at := strings.LastIndex(ref, "@"); at >= 0 {
-		ref = ref[:at]
-	}
-	if colon := strings.LastIndex(ref, ":"); colon > strings.LastIndex(ref, "/") {
-		ref = ref[:colon]
-	}
-	return ref
-}
-
-// resolveAll fetches every declared Feature and, recursively, the Features they depend on. The
-// result is in discovery order (dependencies before their dependents), deduplicated by reference.
-func resolveAll(ctx context.Context, f *Fetcher, fsRoot *os.Root, configDir string, declared []*contributor) ([]*contributor, error) {
-	seen := map[string]*contributor{}
-	var out []*contributor
-
-	// A Feature that is both declared directly and pulled in as a dependency anchors to its own
-	// declaration, so findings and inline suppressions land on its own "features" entry rather than
-	// on a dependent's.
-	declaredByRef := map[string]*contributor{}
-	for i, c := range declared {
-		c.declIdx = i
-		declaredByRef[c.ref] = c
+	obj, ok := features.Value.(*hujson.Object)
+	if !ok {
+		return nil, nil
 	}
 
-	var visit func(c *contributor, stack []string) error
-	visit = func(c *contributor, stack []string) error {
-		if slices.Contains(stack, c.ref) {
-			return fmt.Errorf("feature dependency cycle: %s", strings.Join(append(stack, c.ref), " -> "))
+	var declared []*contributor
+	for _, m := range obj.Members {
+		name, ok := m.Name.Value.(hujson.Literal)
+		if !ok || name.Kind() != '"' {
+			continue
 		}
-		if _, ok := seen[c.ref]; ok {
-			return nil
-		}
-		md, err := f.Fetch(ctx, c.ref, fsRoot, configDir)
+		node, err := newNode(name.String(), parseOptions(m.Value), m.Name.StartOffset, configDir)
 		if err != nil {
-			return err
+			return nil, err
 		}
-		c.md = md
-		seen[c.ref] = c
-		stack = append(stack, c.ref)
+		declared = append(declared, node)
+	}
+
+	contribs, err := resolveAll(ctx, f, fsRoot, configDir, declared)
+	if err != nil {
+		return nil, err
+	}
+	if err := applyOverride(ctx, f, fsRoot, configDir, root, contribs); err != nil {
+		return nil, err
+	}
+	return installOrder(contribs)
+}
+
+// newNode builds an unresolved contributor for a Feature reference requested with the given options,
+// anchored at anchor. Its source-type-specific fields that do not require fetching (the local path,
+// the OCI reference, the tarball URI) are filled in; the digest and aliases are set once fetched.
+func newNode(ref string, options optionValue, anchor int, configDir string) (*contributor, error) {
+	parsed, err := ParseRef(ref)
+	if err != nil {
+		return nil, err
+	}
+	c := &contributor{ref: ref, kind: parsed.Kind, options: options, anchor: anchor}
+	switch parsed.Kind {
+	case KindLocal:
+		c.resolvedPath = filepath.Join(configDir, ref)
+	case KindOCI:
+		c.ociRef = parsed.OCI
+	case KindTarball:
+		c.tarballURI = ref
+	}
+	return c, nil
+}
+
+// resolveAll fetches every declared Feature and, recursively, the Features named by their
+// "dependsOn". The result is the deduplicated set of contributors: two requests for the same Feature
+// with different options are kept as distinct contributors, mirroring the specification's dependency
+// graph. Soft dependencies ("installsAfter") are resolved for matching but are not pulled in.
+//
+// A Feature that is both declared directly and pulled in as a dependency anchors to its own
+// declaration, so findings and inline suppressions land on its own "features" entry rather than on a
+// dependent's.
+//
+// Dependency cycles are not rejected here; a duplicate is skipped without recursing, and a cycle
+// surfaces later as an install-order error.
+func resolveAll(ctx context.Context, f *Fetcher, fsRoot *os.Root, configDir string, declared []*contributor) ([]*contributor, error) {
+	declaredAnchor := map[string]int{}
+	for _, c := range declared {
+		if _, ok := declaredAnchor[c.ref]; !ok {
+			declaredAnchor[c.ref] = c.anchor
+		}
+	}
+
+	var acc []*contributor
+	worklist := slices.Clone(declared)
+	for len(worklist) > 0 {
+		current := worklist[0]
+		worklist = worklist[1:]
+
+		md, err := f.Fetch(ctx, current.ref, fsRoot, configDir)
+		if err != nil {
+			return nil, err
+		}
+		current.md = md
+		current.digest = md.Digest
+		current.aliases = md.Aliases
+
+		if slices.ContainsFunc(acc, func(n *contributor) bool { return equals(n, current) }) {
+			continue
+		}
+
 		for _, dep := range md.DependsOn {
-			c.deps = append(c.deps, dep)
-			next := declaredByRef[dep]
-			if next == nil {
-				next = &contributor{ref: dep, anchor: c.anchor, declIdx: c.declIdx}
+			anchor := current.anchor
+			if a, ok := declaredAnchor[dep.Ref]; ok {
+				anchor = a
 			}
-			if err := visit(next, stack); err != nil {
-				return err
+			node, err := newNode(dep.Ref, dep.Options, anchor, configDir)
+			if err != nil {
+				return nil, err
 			}
+			current.dependsOn = append(current.dependsOn, node)
+			worklist = append(worklist, node)
 		}
-		out = append(out, c)
+		for _, softRef := range md.InstallsAfter {
+			node, err := newNode(softRef, optionValue{}, current.anchor, configDir)
+			if err != nil {
+				return nil, err
+			}
+			// Soft dependencies are not pulled into the merge, but their source information is still
+			// needed to match them against the Features that are.
+			softMD, err := f.Fetch(ctx, softRef, fsRoot, configDir)
+			if err != nil {
+				return nil, err
+			}
+			node.digest = softMD.Digest
+			node.aliases = softMD.Aliases
+			current.installsAfter = append(current.installsAfter, node)
+		}
+		acc = append(acc, current)
+	}
+	return acc, nil
+}
+
+// applyOverride raises the roundPriority of the contributors named by "overrideFeatureInstallOrder"
+// so they install in an earlier round. The first listed Feature gets the highest priority; a Feature
+// absent from the merge is a no-op.
+func applyOverride(ctx context.Context, f *Fetcher, fsRoot *os.Root, configDir string, root *hujson.Value, contribs []*contributor) error {
+	v := root.Find("/overrideFeatureInstallOrder")
+	if v == nil {
+		return nil
+	}
+	arr, ok := v.Value.(*hujson.Array)
+	if !ok {
 		return nil
 	}
 
-	for _, c := range declared {
-		if err := visit(c, nil); err != nil {
-			return nil, err
+	var entries []string
+	for _, e := range arr.Elements {
+		if lit, ok := e.Value.(hujson.Literal); ok && lit.Kind() == '"' {
+			entries = append(entries, lit.String())
 		}
-	}
-	return out, nil
-}
-
-// installOrder sorts contribs into the order the Features would be installed in: dependencies
-// always precede their dependents, "overrideFeatureInstallOrder" entries come first in the listed
-// order, "installsAfter" preferences are honored when possible, and declaration order breaks the
-// remaining ties. Later Features win merge conflicts, mirroring how a later installation
-// overrides an earlier one.
-func installOrder(root *hujson.Value, contribs []*contributor) []*contributor {
-	override := map[string]int{}
-	if v := root.Find("/overrideFeatureInstallOrder"); v != nil {
-		if arr, ok := v.Value.(*hujson.Array); ok {
-			for i, e := range arr.Elements {
-				if lit, ok := e.Value.(hujson.Literal); ok && lit.Kind() == '"' {
-					override[lit.String()] = i
-				}
-			}
-		}
-	}
-	overrideIdx := func(c *contributor) int {
-		for id, i := range override {
-			if c.matches(id) {
-				return i
-			}
-		}
-		return math.MaxInt
 	}
 
-	emitted := map[string]bool{}
-	byRef := map[string]*contributor{}
-	for _, c := range contribs {
-		byRef[c.ref] = c
-	}
-	// ready reports whether every dependency of c is already emitted.
-	ready := func(c *contributor) bool {
-		for _, dep := range c.deps {
-			if !emitted[dep] {
-				return false
-			}
+	for i, ref := range entries {
+		priority := len(entries) - i
+		overrideNode, err := newNode(ref, optionValue{}, 0, configDir)
+		if err != nil {
+			return err
 		}
-		return true
-	}
-	// softSatisfied reports whether every Feature named by c's installsAfter that is part of this
-	// merge is already emitted.
-	softSatisfied := func(c *contributor) bool {
-		for _, id := range c.md.InstallsAfter {
-			for _, other := range contribs {
-				if other != c && other.matches(id) && !emitted[other.ref] {
-					return false
-				}
-			}
+		md, err := f.Fetch(ctx, ref, fsRoot, configDir)
+		if err != nil {
+			return err
 		}
-		return true
-	}
-
-	out := make([]*contributor, 0, len(contribs))
-	for len(out) < len(contribs) {
-		var best *contributor
-		bestSoft := false
+		overrideNode.digest = md.Digest
+		overrideNode.aliases = md.Aliases
 		for _, c := range contribs {
-			if emitted[c.ref] || !ready(c) {
-				continue
-			}
-			soft := softSatisfied(c)
-			if best == nil || (soft && !bestSoft) {
-				best, bestSoft = c, soft
-				continue
-			}
-			if soft != bestSoft {
-				continue
-			}
-			if oi, boi := overrideIdx(c), overrideIdx(best); oi != boi {
-				if oi < boi {
-					best = c
-				}
-				continue
-			}
-			if c.declIdx < best.declIdx {
-				best = c
+			if satisfiesSoftDependency(c, overrideNode) {
+				c.roundPriority = max(c.roundPriority, priority)
 			}
 		}
-		// resolveAll rejects dependency cycles, so a ready contributor always exists (installsAfter
-		// is only a preference and never blocks).
-		emitted[best.ref] = true
-		out = append(out, best)
 	}
-	return out
+	return nil
 }

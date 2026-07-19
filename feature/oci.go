@@ -46,7 +46,11 @@ func (f *Fetcher) fetchOCI(ctx context.Context, feat Ref) (*Metadata, error) {
 		return nil, fmt.Errorf("resolve %s: %w", target, err)
 	}
 
-	layer, err := featureLayer(ctx, repo, desc)
+	man, manifestDigest, err := imageManifest(ctx, repo, desc)
+	if err != nil {
+		return nil, err
+	}
+	layer, err := featureLayer(man, manifestDigest)
 	if err != nil {
 		return nil, err
 	}
@@ -69,17 +73,18 @@ func (f *Fetcher) fetchOCI(ctx context.Context, feat Ref) (*Metadata, error) {
 	if err != nil {
 		return nil, fmt.Errorf("read layer %s: %w", layer.Digest, err)
 	}
-	return parseMetadata(src)
+	md, err := parseMetadata(src)
+	if err != nil {
+		return nil, err
+	}
+	md.Digest = manifestDigest
+	return md, nil
 }
 
-// featureLayer resolves desc to an image manifest and returns the descriptor of the layer carrying
-// the Feature archive: the layer with the Features distribution media type, or the sole layer if
-// none declares it.
-func featureLayer(ctx context.Context, repo *remote.Repository, desc ocispec.Descriptor) (ocispec.Descriptor, error) {
-	man, err := imageManifest(ctx, repo, desc)
-	if err != nil {
-		return ocispec.Descriptor{}, err
-	}
+// featureLayer returns the descriptor of the layer carrying the Feature archive: the layer with the
+// Features distribution media type, or the sole layer if none declares it. manifestDigest names the
+// manifest for diagnostics.
+func featureLayer(man ocispec.Manifest, manifestDigest string) (ocispec.Descriptor, error) {
 	for _, layer := range man.Layers {
 		if layer.MediaType == featureLayerMediaType {
 			return layer, nil
@@ -88,36 +93,37 @@ func featureLayer(ctx context.Context, repo *remote.Repository, desc ocispec.Des
 	if len(man.Layers) == 1 {
 		return man.Layers[0], nil
 	}
-	return ocispec.Descriptor{}, fmt.Errorf("manifest %s has no %s layer", desc.Digest, featureLayerMediaType)
+	return ocispec.Descriptor{}, fmt.Errorf("manifest %s has no %s layer", manifestDigest, featureLayerMediaType)
 }
 
-// imageManifest fetches and parses the image manifest for desc. When desc is an image index (Features
-// are single-platform), it follows the first entry.
-func imageManifest(ctx context.Context, repo *remote.Repository, desc ocispec.Descriptor) (ocispec.Manifest, error) {
+// imageManifest fetches and parses the image manifest for desc and returns it with its digest. When
+// desc is an image index (Features are single-platform), it follows the first entry, and the
+// returned digest is that of the followed manifest.
+func imageManifest(ctx context.Context, repo *remote.Repository, desc ocispec.Descriptor) (ocispec.Manifest, string, error) {
 	if desc.MediaType == ocispec.MediaTypeImageIndex || desc.MediaType == dockerManifestListMediaType {
 		raw, err := content.FetchAll(ctx, repo, desc)
 		if err != nil {
-			return ocispec.Manifest{}, fmt.Errorf("fetch index %s: %w", desc.Digest, err)
+			return ocispec.Manifest{}, "", fmt.Errorf("fetch index %s: %w", desc.Digest, err)
 		}
 		var index ocispec.Index
 		if err := json.Unmarshal(raw, &index); err != nil {
-			return ocispec.Manifest{}, fmt.Errorf("decode index %s: %w", desc.Digest, err)
+			return ocispec.Manifest{}, "", fmt.Errorf("decode index %s: %w", desc.Digest, err)
 		}
 		if len(index.Manifests) == 0 {
-			return ocispec.Manifest{}, fmt.Errorf("index %s has no manifests", desc.Digest)
+			return ocispec.Manifest{}, "", fmt.Errorf("index %s has no manifests", desc.Digest)
 		}
 		desc = index.Manifests[0]
 	}
 
 	raw, err := content.FetchAll(ctx, repo, desc)
 	if err != nil {
-		return ocispec.Manifest{}, fmt.Errorf("fetch manifest %s: %w", desc.Digest, err)
+		return ocispec.Manifest{}, "", fmt.Errorf("fetch manifest %s: %w", desc.Digest, err)
 	}
 	var man ocispec.Manifest
 	if err := json.Unmarshal(raw, &man); err != nil {
-		return ocispec.Manifest{}, fmt.Errorf("decode manifest %s: %w", desc.Digest, err)
+		return ocispec.Manifest{}, "", fmt.Errorf("decode manifest %s: %w", desc.Digest, err)
 	}
-	return man, nil
+	return man, desc.Digest.String(), nil
 }
 
 // isLoopback reports whether host (optionally with a port) names the local machine, in which case

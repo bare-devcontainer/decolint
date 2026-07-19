@@ -274,12 +274,12 @@ func TestMergeInstallsAfter(t *testing.T) {
 	t.Parallel()
 
 	// b declares installsAfter a, so a installs first and b wins the conflict even though b is
-	// declared first.
+	// declared first. A local Feature is matched by its path, per the specification.
 	root := mergeSrc(t,
 		`{"features": {"./b": {}, "./a": {}}}`,
 		map[string]string{
 			"a": `{"id": "a", "containerEnv": {"SHARED": "a"}}`,
-			"b": `{"id": "b", "installsAfter": ["a"], "containerEnv": {"SHARED": "b"}}`,
+			"b": `{"id": "b", "installsAfter": ["./a"], "containerEnv": {"SHARED": "b"}}`,
 		})
 	assertJSON(t, root, `{
 	  "features": {"./b": {}, "./a": {}},
@@ -293,7 +293,7 @@ func TestMergeOverrideFeatureInstallOrder(t *testing.T) {
 	// The override moves b to the front, so a installs later and wins the conflict.
 	root := mergeSrc(t,
 		`{
-		  "overrideFeatureInstallOrder": ["b"],
+		  "overrideFeatureInstallOrder": ["./b"],
 		  "features": {"./a": {}, "./b": {}}
 		}`,
 		map[string]string{
@@ -301,7 +301,7 @@ func TestMergeOverrideFeatureInstallOrder(t *testing.T) {
 			"b": `{"id": "b", "containerEnv": {"SHARED": "b"}}`,
 		})
 	assertJSON(t, root, `{
-	  "overrideFeatureInstallOrder": ["b"],
+	  "overrideFeatureInstallOrder": ["./b"],
 	  "features": {"./a": {}, "./b": {}},
 	  "containerEnv": {"SHARED": "a"}
 	}`)

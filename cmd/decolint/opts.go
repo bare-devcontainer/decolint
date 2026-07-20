@@ -15,8 +15,14 @@ type Options struct {
 	// Paths are the directories to lint.
 	Paths []string
 	// DenyWarnings, when set, lowers the fail threshold to linter.Warn so that warnings also cause
-	// exit code 1.
+	// exit code 1. The config file's "denyWarnings" member sets it as well, but -deny-warnings takes
+	// precedence over it, in either direction, when explicitly given (see denyWarningsSet and
+	// mergeConfig).
 	DenyWarnings bool
+	// denyWarningsSet records whether -deny-warnings was explicitly passed, distinguishing that from
+	// its default false value so mergeConfig can tell "not given" (defer to the config file) apart
+	// from "explicitly given as false" (override the config file's "denyWarnings": true).
+	denyWarningsSet bool
 	// ConfigPath is the raw -config flag value (empty if not given), resolved into a Config by
 	// loadConfig.
 	ConfigPath string
@@ -33,8 +39,10 @@ type Options struct {
 	// from its default false value so mergeConfig can tell "not given" (defer to the config file)
 	// apart from "explicitly given as false" (override the config file's "merge": true).
 	mergeSet bool
-	// Format selects how lint issues are written to stdout.
-	Format Format
+	// Format is the raw -format flag value ("" if not given), naming how lint issues are written to
+	// stdout: "text", "json", or "github". A non-empty value replaces the config file's "format"
+	// member; it is resolved into a Format by parseFormat in runLint.
+	Format string
 	// Version, when set, causes the program to print its version and exit.
 	Version bool
 	// ListRules, when set, causes the program to print the built-in rules and exit.
@@ -52,10 +60,10 @@ func parseOptions(args []string, output io.Writer) (Options, error) {
 
 	fs := flag.NewFlagSet(progName, flag.ContinueOnError)
 	fs.SetOutput(output)
-	fs.BoolVar(&opts.DenyWarnings, "deny-warnings", false, "treat warnings as failures (exit code 1)")
+	fs.BoolVar(&opts.DenyWarnings, "deny-warnings", false, "treat warnings as failures (exit code 1); overrides the config file's \"denyWarnings\" member")
 	fs.StringVar(&opts.ConfigPath, "config", "", "path to a config file (default: auto-discover .decolint.jsonc or .decolint.json in the current directory)")
 	fs.StringVar(&platformFlag, "platform", "", "comma-separated target platforms to include in addition to \"all\" (vscode, codespaces); overrides the config file's \"platforms\" member")
-	fs.StringVar(&formatFlag, "format", "text", "output format: text, json, or github")
+	fs.StringVar(&formatFlag, "format", "", "output format: text (default), json, or github; overrides the config file's \"format\" member")
 	fs.BoolVar(&opts.Merge, "merge", false, "fetch the Features referenced in \"features\" and lint the merged (effective) configuration; overrides the config file's \"merge\" member")
 	fs.BoolVar(&opts.Version, "version", false, "print version information and exit")
 	fs.BoolVar(&opts.ListRules, "rules", false, "print the built-in rules as a Markdown table (category, target platforms, current severity), then exit")
@@ -65,8 +73,11 @@ func parseOptions(args []string, output io.Writer) (Options, error) {
 		return Options{}, fmt.Errorf("parse flags: %w", err)
 	}
 	fs.Visit(func(f *flag.Flag) {
-		if f.Name == "merge" {
+		switch f.Name {
+		case "merge":
 			opts.mergeSet = true
+		case "deny-warnings":
+			opts.denyWarningsSet = true
 		}
 	})
 
@@ -76,11 +87,9 @@ func parseOptions(args []string, output io.Writer) (Options, error) {
 	}
 	opts.Platforms = platforms
 
-	format, err := parseFormat(formatFlag)
-	if err != nil {
-		return Options{}, err
-	}
-	opts.Format = format
+	// The raw name is validated and resolved into a Format by parseFormat in runLint, after the
+	// config file's "format" member is merged in, so both sources go through one validation path.
+	opts.Format = formatFlag
 
 	opts.Paths = fs.Args()
 	if len(opts.Paths) == 0 {

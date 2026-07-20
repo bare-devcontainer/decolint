@@ -5,7 +5,6 @@ import (
 	"io"
 	"testing"
 
-	"github.com/bare-devcontainer/decolint/format"
 	"github.com/bare-devcontainer/decolint/linter"
 	"github.com/google/go-cmp/cmp"
 )
@@ -58,31 +57,29 @@ func TestParseOptions_Platform(t *testing.T) {
 func TestParseOptions_Format(t *testing.T) {
 	t.Parallel()
 
+	// parseOptions captures the raw -format value verbatim; validation and resolution into a Format
+	// happen later, in runLint, so both the flag and the config file's "format" member go through
+	// one path (an invalid value is rejected there, see TestRun_Flags/"invalid -format value").
 	tests := []struct {
-		name    string
-		args    []string
-		want    Format
-		wantErr bool
+		name string
+		args []string
+		want string
 	}{
-		{"no flag", nil, format.TextFormat{}, false},
-		{"text", []string{"-format=text"}, format.TextFormat{}, false},
-		{"json", []string{"-format=json"}, format.JSONFormat{}, false},
-		{"github", []string{"-format=github"}, format.GitHubFormat{}, false},
-		{"mixed case", []string{"-format=JSON"}, format.JSONFormat{}, false},
-		{"unknown format", []string{"-format=bogus"}, nil, true},
+		{"no flag", nil, ""},
+		{"text", []string{"-format=text"}, "text"},
+		{"json", []string{"-format=json"}, "json"},
+		{"github", []string{"-format=github"}, "github"},
+		{"unrecognized value captured verbatim", []string{"-format=bogus"}, "bogus"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			opts, err := parseOptions(tt.args, io.Discard)
-			if (err != nil) != tt.wantErr {
-				t.Fatalf("parseOptions(%v) error = %v, wantErr %v", tt.args, err, tt.wantErr)
-			}
 			if err != nil {
-				return
+				t.Fatalf("parseOptions(%v): %v", tt.args, err)
 			}
 			if opts.Format != tt.want {
-				t.Errorf("Format = %v, want %v", opts.Format, tt.want)
+				t.Errorf("Format = %q, want %q", opts.Format, tt.want)
 			}
 		})
 	}
@@ -104,6 +101,7 @@ func TestParseOptions_BoolFlags(t *testing.T) {
 		{"rules", func(o Options) bool { return o.ListRules }},
 		{"init", func(o Options) bool { return o.Init }},
 		{"merge", func(o Options) bool { return o.Merge }},
+		{"deny-warnings", func(o Options) bool { return o.DenyWarnings }},
 	}
 	for _, tt := range tests {
 		t.Run(tt.flag, func(t *testing.T) {
@@ -163,6 +161,36 @@ func TestParseOptions_MergeSet(t *testing.T) {
 			}
 			if opts.mergeSet != tt.want {
 				t.Errorf("mergeSet = %v, want %v", opts.mergeSet, tt.want)
+			}
+		})
+	}
+}
+
+func TestParseOptions_DenyWarningsSet(t *testing.T) {
+	t.Parallel()
+
+	// The value of DenyWarnings itself is covered by TestParseOptions_BoolFlags; this exercises
+	// denyWarningsSet, the bookkeeping that lets an explicit -deny-warnings=false override the config
+	// file's "denyWarnings": true (see its doc comment in opts.go).
+	tests := []struct {
+		name string
+		args []string
+		want bool
+	}{
+		{"no flag", nil, false},
+		{"bare flag", []string{"-deny-warnings"}, true},
+		{"explicit true", []string{"-deny-warnings=true"}, true},
+		{"explicit false", []string{"-deny-warnings=false"}, true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			opts, err := parseOptions(tt.args, io.Discard)
+			if err != nil {
+				t.Fatalf("parseOptions(%v): %v", tt.args, err)
+			}
+			if opts.denyWarningsSet != tt.want {
+				t.Errorf("denyWarningsSet = %v, want %v", opts.denyWarningsSet, tt.want)
 			}
 		})
 	}

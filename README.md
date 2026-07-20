@@ -63,18 +63,37 @@ layout, and the configuration files it contains are linted:
 
 With no arguments, the current directory is linted.
 
-decolint supports the following flags; run `decolint -help` for the full
-list.
+### Configuration
 
-| Flag | Description |
+Every linting setting can be declared in the [config file](#config-file).
+The four scalar settings additionally have a command-line flag, which
+overrides the config file when given:
+
+| Setting | Config member | Flag |
+| --- | --- | --- |
+| [Target platforms](#target-platforms) | `platforms` | `-platform` |
+| [Merge features](#merging) | `merge` | `-merge` |
+| [Deny warnings](#exit-codes) | `denyWarnings` | `-deny-warnings` |
+| [Output format](#output-formats) | `format` | `-format` |
+| [Category severities](#rule-categories) | `categories` | — |
+| [Rule severities](#rules) | `rules` | — |
+
+Command-line flags override the corresponding config-file setting.
+`-merge` and `-deny-warnings` override in either direction when given
+explicitly — e.g. `-merge=false` disables merging even if the config
+file sets `"merge": true`. Category and rule severities are config-file
+only.
+
+The remaining flags perform a one-off action and exit; run
+`decolint -help` for the full list:
+
+| Flag | Action |
 | --- | --- |
-| `-platform` | comma-separated list of platforms to also lint against (see [Target platforms](#target-platforms)) |
-| `-format` | output format: `text` (default), `json`, or `github` (see [Output formats](#output-formats)) |
-| `-deny-warnings` | also exit non-zero on `warn`-severity findings (see [Exit codes](#exit-codes)) |
-| `-config` | path to a config file overriding rule and category severities (see [Config file](#config-file)) |
-| `-merge` | fetch the Features referenced in `features` and lint the merged configuration (see [Merging](#merging)) |
-| `-rules` | print the available rules |
-| `-init` | write a new `.decolint.jsonc` listing every rule at its default severity (see [Config file](#config-file)) |
+| `-config <path>` | use the config file at `<path>` instead of [auto-discovery](#config-file) |
+| `-init` | write a new `.decolint.jsonc` listing every rule at its default severity |
+| `-rules` | print the built-in rules as a Markdown table |
+| `-version` | print version information |
+| `-help` | print usage |
 
 ### Target platforms
 
@@ -88,9 +107,6 @@ rules scoped to specific platforms:
 decolint -platform=vscode,codespaces
 ```
 
-Target platforms can also be declared in the [config
-file](#config-file) with the `platforms` member.
-
 ### Merging
 
 The [Features](https://containers.dev/implementors/features/) a
@@ -102,11 +118,10 @@ default decolint lints only the raw file, so an issue introduced by a
 Feature (say, one that sets `privileged: true` or bind-mounts the
 Docker socket) goes unnoticed.
 
-Pass `-merge` (or set `"merge": true` in the [config
-file](#config-file)) to lint the merged configuration instead:
+Enable merging to lint the merged configuration instead:
 
 ```console
-decolint -merge -config .decolint.jsonc
+decolint -merge
 ```
 
 This fetches every referenced Feature to read its contributed
@@ -123,7 +138,7 @@ severity (`error` or `warn`):
 .devcontainer/devcontainer.json:4:12: warn: image "ubuntu:latest" uses the "latest" tag; pin a specific version (no-image-latest)
 ```
 
-Pass `-format` to select a different output format:
+Select a different output format to change this:
 
 - `text` (default) — the one-line-per-finding format shown above.
 - `json` — a JSON array of finding objects, for scripting:
@@ -145,15 +160,16 @@ Pass `-format` to select a different output format:
 - `1` — at least one `error`-severity finding was reported
 - `2` — an error occurred (e.g. a file could not be parsed)
 
-Pass `-deny-warnings` to also fail (exit code 1) on `warn`-severity
-findings. Exit codes are unaffected by `-format`.
+Enable deny-warnings (the `-deny-warnings` flag or `"denyWarnings":
+true`) to also fail (exit code 1) on `warn`-severity findings. Exit
+codes are unaffected by the output format.
 
 ### Config file
 
-Rule and category severities, as well as target platforms, can be set
-per project with a JSON/JSONC config file. Run `decolint -init` to
-generate a starting `.decolint.jsonc` in the current directory, ready
-to edit:
+Every setting from the [Configuration](#configuration) table can be
+declared per project in a JSON/JSONC config file. Run `decolint -init`
+to generate a starting `.decolint.jsonc` in the current directory,
+ready to edit:
 
 ```jsonc
 // .decolint.jsonc
@@ -172,15 +188,10 @@ to edit:
 
 `categories` sets the severity (`error`, `warn`, or `off`) of every
 rule in a [category](#rule-categories) at once; `rules` sets an
-individual rule's severity and takes precedence over its category.
-`platforms` lists the [target platforms](#target-platforms) whose
-rules run in addition to platform-agnostic ones. `merge` set
-to `true` enables [merging](#merging), same as the `-merge` flag.
-
-A non-empty `-platform` replaces the config file's `platforms`.
-`-merge`, when given explicitly, takes precedence over the config
-file's `merge` in either direction — e.g. `-merge=false` disables
-merging even if the config file sets `"merge": true`.
+individual rule's severity and takes precedence over its category. The
+remaining members mirror their flags: `platforms`, `merge`,
+`denyWarnings`, and `format` (see the [Configuration](#configuration)
+table).
 
 For the strictest configuration, enable every category:
 

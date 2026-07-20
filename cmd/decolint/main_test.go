@@ -13,7 +13,6 @@ import (
 	"testing"
 
 	"github.com/bare-devcontainer/decolint/discovery"
-	"github.com/bare-devcontainer/decolint/format"
 	"github.com/bare-devcontainer/decolint/linter"
 	"github.com/bare-devcontainer/decolint/ocitest"
 	"github.com/bare-devcontainer/decolint/rules"
@@ -86,6 +85,36 @@ func TestRun(t *testing.T) {
 				{violationsFile, "require-non-root", linter.SeverityWarn},
 			},
 			wantExitCode: 1, // warnings now cross the fail threshold
+		},
+		{
+			// deny-warnings.jsonc sets "denyWarnings": true in the config file, so the same security
+			// warnings cross the fail threshold with no -deny-warnings flag.
+			name: "deny-warnings from config",
+			args: []string{"-config=testdata/e2e/deny-warnings.jsonc", "testdata/e2e/violations"},
+			want: []firing{
+				{violationsFile, "no-docker-socket-mount", linter.SeverityWarn},
+				{violationsFile, "no-privileged-container", linter.SeverityWarn},
+				{violationsFile, "no-seccomp-override", linter.SeverityWarn},
+				{violationsFile, "require-cap-drop-all", linter.SeverityWarn},
+				{violationsFile, "require-no-new-privileges", linter.SeverityWarn},
+				{violationsFile, "require-non-root", linter.SeverityWarn},
+			},
+			wantExitCode: 1,
+		},
+		{
+			// -deny-warnings=false, given explicitly, overrides deny-warnings.jsonc's
+			// "denyWarnings": true, so the warnings no longer fail the run.
+			name: "deny-warnings disabled by CLI flag overrides config",
+			args: []string{"-deny-warnings=false", "-config=testdata/e2e/deny-warnings.jsonc", "testdata/e2e/violations"},
+			want: []firing{
+				{violationsFile, "no-docker-socket-mount", linter.SeverityWarn},
+				{violationsFile, "no-privileged-container", linter.SeverityWarn},
+				{violationsFile, "no-seccomp-override", linter.SeverityWarn},
+				{violationsFile, "require-cap-drop-all", linter.SeverityWarn},
+				{violationsFile, "require-no-new-privileges", linter.SeverityWarn},
+				{violationsFile, "require-non-root", linter.SeverityWarn},
+			},
+			wantExitCode: 0, // warnings are reported but no longer cross the fail threshold
 		},
 		{
 			// override.jsonc exercises every kind of severity override: promoting no-image-latest to
@@ -517,6 +546,35 @@ func TestRun_OutputFormat(t *testing.T) {
 			}
 		}
 	})
+
+	t.Run("format selected by config file", func(t *testing.T) {
+		t.Parallel()
+
+		// format.jsonc sets "format": "json", so output is a JSON array with no -format flag.
+		var stdout, stderr bytes.Buffer
+		exitCode := run(t.Context(), []string{"-config=testdata/e2e/format.jsonc", violationsDir}, &stdout, &stderr)
+		if exitCode != 1 {
+			t.Fatalf("exit code = %d, want 1; stderr: %s", exitCode, stderr.String())
+		}
+		var issues []linter.Issue
+		if err := json.Unmarshal(stdout.Bytes(), &issues); err != nil {
+			t.Fatalf("config-selected json format did not produce a JSON array: %v\noutput: %s", err, stdout.String())
+		}
+	})
+
+	t.Run("format flag overrides config file", func(t *testing.T) {
+		t.Parallel()
+
+		// -format=text wins over format.jsonc's "format": "json", so output is the text format.
+		var stdout, stderr bytes.Buffer
+		exitCode := run(t.Context(), []string{"-format=text", "-config=testdata/e2e/format.jsonc", violationsDir}, &stdout, &stderr)
+		if exitCode != 1 {
+			t.Fatalf("exit code = %d, want 1; stderr: %s", exitCode, stderr.String())
+		}
+		if !strings.Contains(stdout.String(), "Found 2 errors and 0 warnings.") {
+			t.Errorf("want text output; got:\n%s", stdout.String())
+		}
+	})
 }
 
 func TestRun_BrokenConfig(t *testing.T) {
@@ -688,7 +746,7 @@ func TestRunLint(t *testing.T) {
 		dir := writeDevcontainer(t, `{"image": "ubuntu:latest"}`)
 
 		var stdout bytes.Buffer
-		hasIssue, runErr := runLint(t.Context(), &stdout, io.Discard, Options{Paths: []string{dir}, Format: format.TextFormat{}}, Config{})
+		hasIssue, runErr := runLint(t.Context(), &stdout, io.Discard, Options{Paths: []string{dir}}, Config{})
 		if runErr != nil || hasIssue {
 			t.Errorf("hasIssue = %v, err = %v, want false, nil; stdout: %s", hasIssue, runErr, stdout.String())
 		}
@@ -699,10 +757,7 @@ func TestRunLint(t *testing.T) {
 		dir := writeDevcontainer(t, `{"image": "ubuntu:latest"}`)
 
 		var stdout bytes.Buffer
-		opts := Options{
-			Paths:  []string{dir},
-			Format: format.TextFormat{},
-		}
+		opts := Options{Paths: []string{dir}}
 		cfg := Config{Rules: map[string]linter.Severity{"no-image-latest": linter.SeverityError}}
 		hasIssue, runErr := runLint(t.Context(), &stdout, io.Discard, opts, cfg)
 		if runErr != nil || !hasIssue {
@@ -715,10 +770,7 @@ func TestRunLint(t *testing.T) {
 		dir := writeDevcontainer(t, `{}`) // triggers missing-container-def (error by default)
 
 		var stdout bytes.Buffer
-		opts := Options{
-			Paths:  []string{dir},
-			Format: format.TextFormat{},
-		}
+		opts := Options{Paths: []string{dir}}
 		cfg := Config{Rules: map[string]linter.Severity{"missing-container-def": linter.SeverityOff}}
 		hasIssue, runErr := runLint(t.Context(), &stdout, io.Discard, opts, cfg)
 		if runErr != nil || hasIssue {
@@ -730,9 +782,7 @@ func TestRunLint(t *testing.T) {
 		t.Parallel()
 
 		var stdout bytes.Buffer
-		opts := Options{
-			Format: format.TextFormat{},
-		}
+		opts := Options{}
 		cfg := Config{Rules: map[string]linter.Severity{"no-image-latst": linter.SeverityError}}
 		hasIssue, runErr := runLint(t.Context(), &stdout, io.Discard, opts, cfg)
 		if runErr == nil || hasIssue {
@@ -748,10 +798,7 @@ func TestRunLint(t *testing.T) {
 		dir := writeDevcontainer(t, `{"image": "ubuntu:latest"}`) // no-image-latest is in reproducibility
 
 		var stdout bytes.Buffer
-		opts := Options{
-			Paths:  []string{dir},
-			Format: format.TextFormat{},
-		}
+		opts := Options{Paths: []string{dir}}
 		cfg := Config{Categories: map[string]linter.Severity{"reproducibility": linter.SeverityError}}
 		hasIssue, runErr := runLint(t.Context(), &stdout, io.Discard, opts, cfg)
 		if runErr != nil || !hasIssue {
@@ -763,9 +810,7 @@ func TestRunLint(t *testing.T) {
 		t.Parallel()
 
 		var stdout bytes.Buffer
-		opts := Options{
-			Format: format.TextFormat{},
-		}
+		opts := Options{}
 		cfg := Config{Categories: map[string]linter.Severity{"secure": linter.SeverityError}}
 		hasIssue, runErr := runLint(t.Context(), &stdout, io.Discard, opts, cfg)
 		if runErr == nil || hasIssue {
@@ -782,7 +827,7 @@ func TestRunLint(t *testing.T) {
 		file := filepath.Join(dir, ".devcontainer", "devcontainer.json")
 
 		var stdout bytes.Buffer
-		hasIssue, runErr := runLint(t.Context(), &stdout, io.Discard, Options{Paths: []string{file}, Format: format.TextFormat{}}, Config{})
+		hasIssue, runErr := runLint(t.Context(), &stdout, io.Discard, Options{Paths: []string{file}}, Config{})
 		if runErr == nil || hasIssue {
 			t.Errorf("hasIssue = %v, err = %v, want false, 'not a directory'", hasIssue, runErr)
 		}
@@ -793,10 +838,7 @@ func TestRunLint(t *testing.T) {
 		dir := writeDevcontainer(t, `{"image": "ubuntu:latest"}`)
 
 		var stdout bytes.Buffer
-		opts := Options{
-			Paths:  []string{dir},
-			Format: format.TextFormat{},
-		}
+		opts := Options{Paths: []string{dir}}
 		cfg := Config{Rules: map[string]linter.Severity{"no-bind-mount": linter.SeverityError}}
 		hasIssue, runErr := runLint(t.Context(), &stdout, io.Discard, opts, cfg)
 		if runErr != nil || hasIssue {

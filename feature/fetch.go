@@ -22,6 +22,10 @@ const (
 	maxMetadataBytes = 4 << 20 // 4 MB
 	// maxImageConfigBytes caps a container image's config blob, read for its labels.
 	maxImageConfigBytes = 4 << 20 // 4 MB
+	// maxManifestBytes caps an image manifest or index, whose declared size is attacker-controlled
+	// and cannot be verified until the whole body is buffered. The OCI distribution specification
+	// requires registries to accept manifests up to 4 MB.
+	maxManifestBytes = 4 << 20 // 4 MB
 )
 
 // metadataFileName is the file declaring a Feature, located at the root of the Feature's directory

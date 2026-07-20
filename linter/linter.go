@@ -47,6 +47,12 @@ func (l *Linter) RegisterRule(r *Rule, severity Severity) {
 	}
 }
 
+// HasRules reports whether any registered rule applies to files of type t. Callers can use it to
+// skip per-file preparation work (e.g. Feature fetches) for files no rule will inspect.
+func (l *Linter) HasRules(t FileType) bool {
+	return len(l.patterns[t]) > 0
+}
+
 // LintDocument applies the linter's rules to doc, a configuration file of the given type, and
 // returns the findings sorted by position. path is used only for reporting. It reads the document
 // as given; any mutation of its tree (see Document.Tree) must happen before calling it.

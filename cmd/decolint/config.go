@@ -17,6 +17,9 @@ type Config struct {
 	// Platforms lists target platforms whose rules are linted in addition to platform-agnostic
 	// ones. The -platform flag, when given, takes precedence.
 	Platforms []linter.Platform `json:"platforms"`
+	// Merge, when true, fetches the Features referenced in each devcontainer.json and
+	// lints the merged (effective) configuration. The -merge flag can enable it as well.
+	Merge bool `json:"merge"`
 	// Categories maps a category name to the severity every rule in that category should be
 	// overridden to. Per-rule entries in Rules take precedence.
 	Categories map[string]linter.Severity `json:"categories"`
@@ -26,8 +29,9 @@ type Config struct {
 
 // MarshalJSONTo encodes cfg with its categories and rules written in sorted key order, for use
 // with encoding/json/v2. Map iteration order is otherwise unspecified, so without this, marshaling
-// the same Config twice could produce differently ordered output. The "platforms" and "categories"
-// members are omitted when empty, so generated configs (see initConfigFile) stay minimal.
+// the same Config twice could produce differently ordered output. The "platforms", "merge",
+// and "categories" members are omitted when empty or false, so generated configs (see
+// initConfigFile) stay minimal.
 func (cfg Config) MarshalJSONTo(enc *jsontext.Encoder) error {
 	if err := enc.WriteToken(jsontext.BeginObject); err != nil {
 		return fmt.Errorf("encode config: %w", err)
@@ -37,6 +41,14 @@ func (cfg Config) MarshalJSONTo(enc *jsontext.Encoder) error {
 			return fmt.Errorf("encode config: %w", err)
 		}
 		if err := json.MarshalEncode(enc, cfg.Platforms); err != nil {
+			return fmt.Errorf("encode config: %w", err)
+		}
+	}
+	if cfg.Merge {
+		if err := enc.WriteToken(jsontext.String("merge")); err != nil {
+			return fmt.Errorf("encode config: %w", err)
+		}
+		if err := enc.WriteToken(jsontext.Bool(true)); err != nil {
 			return fmt.Errorf("encode config: %w", err)
 		}
 	}
@@ -79,11 +91,17 @@ func writeSeverityMap(enc *jsontext.Encoder, m map[string]linter.Severity) error
 	return nil
 }
 
-// mergeConfig returns cfg with any CLI-provided opts fields applied as overrides. Only Platforms
-// has a CLI equivalent (-platform); Categories and Rules are config-file only.
+// mergeConfig returns cfg with any CLI-provided opts fields applied as overrides. A non-empty
+// -platform replaces the config file's Platforms (an empty -platform defers to the config file
+// rather than clearing it). -merge, when explicitly given, overrides Merge in
+// either direction (e.g. "-merge=false" disables merging even if the config file sets
+// "merge": true). Categories and Rules are config-file only.
 func mergeConfig(opts Options, cfg Config) Config {
 	if len(opts.Platforms) > 0 {
 		cfg.Platforms = opts.Platforms
+	}
+	if opts.mergeSet {
+		cfg.Merge = opts.Merge
 	}
 	return cfg
 }

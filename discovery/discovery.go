@@ -5,6 +5,8 @@
 package discovery
 
 import (
+	"errors"
+	"fmt"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -70,7 +72,10 @@ func visitDevcontainerConfigs(root *os.Root, fn func(ConfigFile) error) error {
 	}
 	sub, err := root.OpenRoot(devcontainerDir)
 	if err != nil {
-		return nil
+		if errors.Is(err, fs.ErrNotExist) {
+			return nil
+		}
+		return fmt.Errorf("open %s: %w", devcontainerDir, err)
 	}
 	// The root is only read from, so a close error is inconsequential.
 	defer func() { _ = sub.Close() }()
@@ -81,7 +86,10 @@ func visitDevcontainerConfigs(root *os.Root, fn func(ConfigFile) error) error {
 	}
 	entries, err := fs.ReadDir(sub.FS(), ".")
 	if err != nil {
-		return nil
+		if errors.Is(err, fs.ErrNotExist) {
+			return nil
+		}
+		return fmt.Errorf("read %s: %w", devcontainerDir, err)
 	}
 	for _, e := range entries {
 		if !e.IsDir() {

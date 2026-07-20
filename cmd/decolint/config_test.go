@@ -10,22 +10,18 @@ import (
 	"github.com/google/go-cmp/cmp"
 )
 
-func TestConfigMarshalJSONToSortsRulesByID(t *testing.T) {
+func TestConfigMarshalJSONTo(t *testing.T) {
 	t.Parallel()
 
-	cfg := Config{Rules: map[string]linter.Severity{
-		"require-non-root":       linter.SeverityOff,
-		"no-image-latest":        linter.SeverityError,
-		"pin-image-digest":       linter.SeverityWarn,
-		"id-dir-mismatch":        linter.SeverityError,
-		"missing-required-props": linter.SeverityError,
-	}}
-
-	want := `{"rules":{"id-dir-mismatch":"error","missing-required-props":"error","no-image-latest":"error","pin-image-digest":"warn","require-non-root":"off"}}`
-
-	// Marshal repeatedly: map iteration order is randomized per run, so this would be flaky if
-	// MarshalJSONTo didn't force a deterministic, ID-sorted order.
-	for range 5 {
+	t.Run("all fields present", func(t *testing.T) {
+		t.Parallel()
+		cfg := Config{
+			Platforms:     []linter.Platform{linter.PlatformVSCode, linter.PlatformCodespaces},
+			Merge: true,
+			Categories:    map[string]linter.Severity{"security": linter.SeverityError},
+			Rules:         map[string]linter.Severity{"no-image-latest": linter.SeverityError},
+		}
+		want := `{"platforms":["vscode","codespaces"],"merge":true,"categories":{"security":"error"},"rules":{"no-image-latest":"error"}}`
 		got, err := json.Marshal(cfg)
 		if err != nil {
 			t.Fatalf("json.Marshal: %v", err)
@@ -33,50 +29,49 @@ func TestConfigMarshalJSONToSortsRulesByID(t *testing.T) {
 		if string(got) != want {
 			t.Errorf("json.Marshal(cfg) = %s, want %s", got, want)
 		}
-	}
-}
+	})
 
-func TestConfigMarshalJSONToWithCategories(t *testing.T) {
-	t.Parallel()
-
-	cfg := Config{
-		Categories: map[string]linter.Severity{
-			"security":        linter.SeverityError,
-			"reproducibility": linter.SeverityWarn,
-		},
-		Rules: map[string]linter.Severity{"no-image-latest": linter.SeverityOff},
-	}
-
-	want := `{"categories":{"reproducibility":"warn","security":"error"},"rules":{"no-image-latest":"off"}}`
-
-	for range 5 {
-		got, err := json.Marshal(cfg)
+	t.Run("all optional fields absent", func(t *testing.T) {
+		t.Parallel()
+		// Platforms, merge, and categories are omitted when empty; rules is always written.
+		want := `{"rules":{}}`
+		got, err := json.Marshal(Config{})
 		if err != nil {
 			t.Fatalf("json.Marshal: %v", err)
 		}
 		if string(got) != want {
 			t.Errorf("json.Marshal(cfg) = %s, want %s", got, want)
 		}
-	}
-}
+	})
 
-func TestConfigMarshalJSONToWithPlatforms(t *testing.T) {
-	t.Parallel()
-
-	cfg := Config{
-		Platforms: []linter.Platform{linter.PlatformVSCode, linter.PlatformCodespaces},
-		Rules:     map[string]linter.Severity{"no-image-latest": linter.SeverityError},
-	}
-
-	want := `{"platforms":["vscode","codespaces"],"rules":{"no-image-latest":"error"}}`
-
-	got, err := json.Marshal(cfg)
-	if err != nil {
-		t.Fatalf("json.Marshal: %v", err)
-	}
-	if string(got) != want {
-		t.Errorf("json.Marshal(cfg) = %s, want %s", got, want)
-	}
+	t.Run("sorts categories and rules by key", func(t *testing.T) {
+		t.Parallel()
+		cfg := Config{
+			Categories: map[string]linter.Severity{
+				"security":        linter.SeverityError,
+				"reproducibility": linter.SeverityWarn,
+			},
+			Rules: map[string]linter.Severity{
+				"require-non-root":       linter.SeverityOff,
+				"no-image-latest":        linter.SeverityError,
+				"pin-image-digest":       linter.SeverityWarn,
+				"id-dir-mismatch":        linter.SeverityError,
+				"missing-required-props": linter.SeverityError,
+			},
+		}
+		want := `{"categories":{"reproducibility":"warn","security":"error"},"rules":{"id-dir-mismatch":"error","missing-required-props":"error","no-image-latest":"error","pin-image-digest":"warn","require-non-root":"off"}}`
+		// Marshal repeatedly: map iteration order is randomized per run, so this would be
+		// flaky if MarshalJSONTo didn't force a deterministic, key-sorted order.
+		for range 5 {
+			got, err := json.Marshal(cfg)
+			if err != nil {
+				t.Fatalf("json.Marshal: %v", err)
+			}
+			if string(got) != want {
+				t.Errorf("json.Marshal(cfg) = %s, want %s", got, want)
+			}
+		}
+	})
 }
 
 func TestParseConfig(t *testing.T) {
@@ -134,6 +129,12 @@ func TestParseConfig(t *testing.T) {
 				Platforms: []linter.Platform{linter.PlatformCodespaces},
 				Rules:     map[string]linter.Severity{"no-image-latest": linter.SeverityError},
 			},
+			false,
+		},
+		{
+			"merge",
+			`{"merge": true}`,
+			Config{Merge: true},
 			false,
 		},
 		{"invalid severity", `{"rules": {"no-image-latest": "critical"}}`, Config{}, true},
@@ -251,6 +252,24 @@ func TestMergeConfig(t *testing.T) {
 			Options{},
 			Config{Platforms: []linter.Platform{linter.PlatformCodespaces}},
 			Config{Platforms: []linter.Platform{linter.PlatformCodespaces}},
+		},
+		{
+			"CLI merge flag enables it",
+			Options{Merge: true, mergeSet: true},
+			Config{},
+			Config{Merge: true},
+		},
+		{
+			"CLI merge flag not given falls back to config file merge",
+			Options{},
+			Config{Merge: true},
+			Config{Merge: true},
+		},
+		{
+			"CLI merge=false overrides config file merge: true",
+			Options{Merge: false, mergeSet: true},
+			Config{Merge: true},
+			Config{Merge: false},
 		},
 	}
 	for _, tt := range tests {

@@ -234,17 +234,97 @@ func TestVisitConfigs(t *testing.T) {
 func TestVisitConfigsStopsOnError(t *testing.T) {
 	t.Parallel()
 
+	// Each directory reaches VisitConfigs's fn call through a different code path (feature, template,
+	// root-level .devcontainer.json, sub-root devcontainer.json, and a one-level-deep subfolder), so
+	// the error returned by the first call must propagate in every case and prevent a second call.
+	tests := []struct {
+		name string
+		dir  string
+	}{
+		{"feature", "testdata/feature"},
+		{"template", "testdata/template"},
+		{"root file", "testdata/rootfile"},
+		{"devcontainer subfolder", "testdata/project"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			wantErr := errors.New("stop")
+			calls := 0
+			err := VisitConfigs(openRoot(t, tt.dir), func(ConfigFile) error {
+				calls++
+				return wantErr
+			})
+			if !errors.Is(err, wantErr) {
+				t.Errorf("VisitConfigs returned %v, want %v", err, wantErr)
+			}
+			if calls != 1 {
+				t.Errorf("fn called %d times, want 1", calls)
+			}
+		})
+	}
+}
+
+// TestVisitConfigsSubfolderErrorPropagates covers the one-level-deep subfolder branch specifically:
+// with no .devcontainer.json and no .devcontainer/devcontainer.json, the first (and only) fn call is
+// for the subfolder config, so its error must surface.
+func TestVisitConfigsSubfolderErrorPropagates(t *testing.T) {
+	t.Parallel()
+
+	proj := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(proj, ".devcontainer", "go"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(proj, ".devcontainer", "go", "devcontainer.json"), []byte(`{}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
 	wantErr := errors.New("stop")
-	calls := 0
-	// testdata/project contains two configs, so a first-call error must prevent a second call.
-	err := VisitConfigs(openRoot(t, "testdata/project"), func(ConfigFile) error {
-		calls++
-		return wantErr
-	})
+	err := VisitConfigs(openRoot(t, proj), func(ConfigFile) error { return wantErr })
 	if !errors.Is(err, wantErr) {
 		t.Errorf("VisitConfigs returned %v, want %v", err, wantErr)
 	}
-	if calls != 1 {
-		t.Errorf("fn called %d times, want 1", calls)
+}
+
+// TestVisitConfigsSkipsSubfolderWithoutConfig covers the loop skipping a .devcontainer subdirectory
+// that holds no devcontainer.json: it is passed over rather than reported or erroring.
+func TestVisitConfigsSkipsSubfolderWithoutConfig(t *testing.T) {
+	t.Parallel()
+
+	proj := t.TempDir()
+	// A subdirectory with no devcontainer.json, alongside a valid one.
+	if err := os.MkdirAll(filepath.Join(proj, ".devcontainer", "empty"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(proj, ".devcontainer", "go"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(proj, ".devcontainer", "go", "devcontainer.json"), []byte(`{}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	count := 0
+	err := VisitConfigs(openRoot(t, proj), func(ConfigFile) error { count++; return nil })
+	if err != nil {
+		t.Fatalf("VisitConfigs: %v", err)
+	}
+	if count != 1 {
+		t.Errorf("visited %d configs, want 1 (the empty subfolder is skipped)", count)
+	}
+}
+
+// TestVisitConfigsDevcontainerNotADirectory covers the open error surfaced when .devcontainer exists
+// but is not a directory, which must not be silently treated as absent.
+func TestVisitConfigsDevcontainerNotADirectory(t *testing.T) {
+	t.Parallel()
+
+	proj := t.TempDir()
+	if err := os.WriteFile(filepath.Join(proj, devcontainerDir), []byte("not a directory"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	err := VisitConfigs(openRoot(t, proj), func(ConfigFile) error { return nil })
+	if err == nil {
+		t.Fatal("VisitConfigs with .devcontainer as a file: got nil error")
 	}
 }

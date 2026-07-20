@@ -2,6 +2,7 @@ package linter
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 	"testing"
 
@@ -112,6 +113,140 @@ func TestDocumentTreeMutation(t *testing.T) {
 	}
 	if issues[0].Line != 2 || issues[0].Col != 3 {
 		t.Errorf("position = %d:%d, want 2:3", issues[0].Line, issues[0].Col)
+	}
+}
+
+// messagesOf returns the Message of every issue, in order, so tests can assert the sort produced by
+// LintDocument without depending on exact line/column numbers.
+func messagesOf(issues []Issue) []string {
+	msgs := make([]string, len(issues))
+	for i, iss := range issues {
+		msgs[i] = iss.Message
+	}
+	return msgs
+}
+
+func TestLintDocumentSortsByPosition(t *testing.T) {
+	t.Parallel()
+
+	// "aa" and "bb" sit on the same line at different columns; "cc" is on a later line.
+	src := "{\n  \"x\": \"aa bb\",\n  \"y\": \"cc\"\n}"
+	offAA := strings.Index(src, "aa")
+	offBB := strings.Index(src, "bb")
+	offCC := strings.Index(src, "cc")
+
+	// Emit the findings in reverse position order so the assertion fails unless LintDocument sorts.
+	rule := &Rule{
+		ID:        "pos-rule",
+		FileTypes: []FileType{Devcontainer},
+		Paths:     []string{""},
+		Check: func(*Context, *Node) []Finding {
+			return []Finding{
+				{Message: "cc", Offset: offCC},
+				{Message: "bb", Offset: offBB},
+				{Message: "aa", Offset: offAA},
+			}
+		},
+	}
+	l := New()
+	l.RegisterRule(rule, SeverityWarn)
+
+	got := messagesOf(lintSource(t, l, "devcontainer.json", Devcontainer, src))
+	want := []string{"aa", "bb", "cc"}
+	if !slices.Equal(got, want) {
+		t.Errorf("issue order = %v, want %v (sorted by line then column)", got, want)
+	}
+}
+
+func TestLintDocumentSortsByRuleIDAtSamePosition(t *testing.T) {
+	t.Parallel()
+
+	// Both rules flag the document root, so their findings share a line and column and must be
+	// ordered by RuleID. "zzz-rule" is registered first to prove registration order does not decide.
+	src := `{}`
+	newRootRule := func(id string) *Rule {
+		return &Rule{
+			ID:        id,
+			FileTypes: []FileType{Devcontainer},
+			Paths:     []string{""},
+			Check: func(_ *Context, node *Node) []Finding {
+				return []Finding{{Message: id, Offset: node.Value.StartOffset}}
+			},
+		}
+	}
+	l := New()
+	l.RegisterRule(newRootRule("zzz-rule"), SeverityWarn)
+	l.RegisterRule(newRootRule("aaa-rule"), SeverityWarn)
+
+	got := messagesOf(lintSource(t, l, "devcontainer.json", Devcontainer, src))
+	want := []string{"aaa-rule", "zzz-rule"}
+	if !slices.Equal(got, want) {
+		t.Errorf("issue order = %v, want %v (sorted by RuleID)", got, want)
+	}
+}
+
+func TestIssueString(t *testing.T) {
+	t.Parallel()
+
+	issue := Issue{
+		Path:     ".devcontainer/devcontainer.json",
+		Line:     3,
+		Col:      12,
+		RuleID:   "no-image-latest",
+		Message:  "image has no explicit tag",
+		Severity: SeverityWarn,
+	}
+	want := ".devcontainer/devcontainer.json:3:12: warn: image has no explicit tag (no-image-latest)"
+	if got := issue.String(); got != want {
+		t.Errorf("Issue.String() = %q, want %q", got, want)
+	}
+}
+
+func TestHasRules(t *testing.T) {
+	t.Parallel()
+
+	l := New()
+	if l.HasRules(Devcontainer) {
+		t.Error("HasRules on an empty linter = true, want false")
+	}
+	l.RegisterRule(noImageLatestRule, SeverityWarn)
+	if !l.HasRules(Devcontainer) {
+		t.Error("HasRules after registering a devcontainer rule = false, want true")
+	}
+	// The rule applies only to devcontainer files, so other file types remain ruleless.
+	if l.HasRules(Feature) {
+		t.Error("HasRules(Feature) = true, want false")
+	}
+}
+
+// TestRegisterRuleOffIsNotApplied covers a rule registered at SeverityOff: it contributes no
+// patterns, so HasRules stays false and the rule never runs.
+func TestRegisterRuleOffIsNotApplied(t *testing.T) {
+	t.Parallel()
+
+	l := New()
+	l.RegisterRule(noImageLatestRule, SeverityOff)
+	if l.HasRules(Devcontainer) {
+		t.Error("HasRules after registering an off rule = true, want false")
+	}
+	if got := lintSource(t, l, "devcontainer.json", Devcontainer, `{"image": "ubuntu:latest"}`); len(got) != 0 {
+		t.Errorf("got %d issues from an off rule, want 0", len(got))
+	}
+}
+
+// TestLintDocumentIgnoreSuppresses covers the ignore-directive path of LintDocument: a finding on a
+// line covered by a decolint-ignore directive is dropped.
+func TestLintDocumentIgnoreSuppresses(t *testing.T) {
+	t.Parallel()
+
+	src := `{
+  // decolint-ignore-next-line no-image-latest
+  "image": "ubuntu:latest"
+}`
+	l := New()
+	l.RegisterRule(noImageLatestRule, SeverityWarn)
+	if got := lintSource(t, l, "devcontainer.json", Devcontainer, src); len(got) != 0 {
+		t.Errorf("got %d issues, want 0 (finding suppressed by ignore directive): %v", len(got), got)
 	}
 }
 

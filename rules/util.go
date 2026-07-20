@@ -96,7 +96,7 @@ func runArgsFindFlagValue(arr *hujson.Array, flag string, match func(string) boo
 
 // parseMountString extracts the "type" and "source" fields from s, a "key=value,..." mount entry.
 func parseMountString(s string) (mountType, source string) {
-	for _, part := range strings.Split(s, ",") {
+	for part := range strings.SplitSeq(s, ",") {
 		key, value, ok := strings.Cut(part, "=")
 		if !ok {
 			continue

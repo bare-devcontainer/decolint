@@ -72,6 +72,7 @@ list.
 | `-format` | output format: `text` (default), `json`, or `github` (see [Output formats](#output-formats)) |
 | `-deny-warnings` | also exit non-zero on `warn`-severity findings (see [Exit codes](#exit-codes)) |
 | `-config` | path to a config file overriding rule and category severities (see [Config file](#config-file)) |
+| `-merge` | fetch the Features referenced in `features` and lint the merged configuration (see [Merging](#merging)) |
 | `-rules` | print the available rules |
 | `-init` | write a new `.decolint.jsonc` listing every rule at its default severity (see [Config file](#config-file)) |
 
@@ -88,8 +89,30 @@ decolint -platform=vscode,codespaces
 ```
 
 Target platforms can also be declared in the [config
-file](#config-file) with the `platforms` member; the `-platform` flag,
-when given, takes precedence.
+file](#config-file) with the `platforms` member.
+
+### Merging
+
+The [Features](https://containers.dev/implementors/features/) a
+`devcontainer.json` references contribute configuration of their own,
+which the Dev Container tooling merges into the effective
+configuration following the specification's [merge
+logic](https://containers.dev/implementors/spec/#merge-logic). By
+default decolint lints only the raw file, so an issue introduced by a
+Feature (say, one that sets `privileged: true` or bind-mounts the
+Docker socket) goes unnoticed.
+
+Pass `-merge` (or set `"merge": true` in the [config
+file](#config-file)) to lint the merged configuration instead:
+
+```console
+decolint -merge -config .decolint.jsonc
+```
+
+This fetches every referenced Feature to read its contributed
+configuration: OCI references are pulled from their registry, HTTP(S)
+URLs are downloaded, and local paths are read from disk. A Feature
+that cannot be fetched is an error (exit code 2).
 
 ### Output formats
 
@@ -151,8 +174,13 @@ to edit:
 rule in a [category](#rule-categories) at once; `rules` sets an
 individual rule's severity and takes precedence over its category.
 `platforms` lists the [target platforms](#target-platforms) whose
-rules run in addition to platform-agnostic ones; the `-platform` flag,
-when given, takes precedence over it.
+rules run in addition to platform-agnostic ones. `merge` set
+to `true` enables [merging](#merging), same as the `-merge` flag.
+
+A non-empty `-platform` replaces the config file's `platforms`.
+`-merge`, when given explicitly, takes precedence over the config
+file's `merge` in either direction — e.g. `-merge=false` disables
+merging even if the config file sets `"merge": true`.
 
 For the strictest configuration, enable every category:
 

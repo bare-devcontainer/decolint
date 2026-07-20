@@ -1,0 +1,9 @@
+// Same as merge.jsonc, but enables Feature merging via the config file instead of the
+// -merge flag.
+{
+	"merge": true,
+	"rules": {
+		"no-privileged-container": "error",
+		"no-docker-socket-mount": "error"
+	}
+}

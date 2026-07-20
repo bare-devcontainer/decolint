@@ -17,6 +17,15 @@
 - Use `make` to run workflows locally. Run `make help` to see the full list of available targets.
 - Run `make lint` after making changes to ensure code quality.
 
+## Testing
+
+- Name a test after the function under test: `TestTarget` or `TestTarget_XXX`
+  (e.g. `TestInstallOrder`, `TestInstallOrder_OCIOrder`). Name it for the
+  function it calls.
+- Collapse same-shaped cases into table-driven subtests; keep tests with different targets separate.
+- Use the reserved `.invalid` TLD for placeholder hosts in test data.
+- Measure test coverage with `make coverage` after making changes. Ensure coverage does not decrease.
+
 ## GitHub Actions
 
 - Pin every action to a full commit SHA with a `# vX.Y.Z` comment,
@@ -35,5 +44,14 @@
   https://containers.dev\/implementors/json_reference/
 - Features specification:
   https://containers.dev/implementors/features/
+- Features distribution (OCI packaging) specification:
+  https://containers.dev/implementors/features-distribution/
+- Merge logic (image metadata) reference:
+  https://containers.dev/implementors/spec/
 - Templates specification:
   https://containers.dev/implementors/templates/
+- Where the spec prose and the reference implementation
+  ([`devcontainers/cli`](https://github.com/devcontainers/cli)) disagree, the
+  implementation wins: decolint tracks the real tooling's behavior. Specific
+  conflicts are documented as inline comments at the relevant code (see the
+  install-order sort in `feature/order.go`).

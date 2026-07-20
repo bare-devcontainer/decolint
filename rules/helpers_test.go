@@ -9,8 +9,8 @@ import (
 )
 
 // lintSource parses src and applies l's registered rules to it as a file at the given path and of
-// the given type, failing the test on any parse error. It is the in-memory entry the rule tests use
-// in place of a real directory.
+// the given type, failing the test on any error. It is the in-memory entry the rule tests use in
+// place of a real directory.
 func lintSource(t *testing.T, l *linter.Linter, path string, fileType linter.FileType, src string) []linter.Issue {
 	t.Helper()
 	doc, err := linter.ParseDocument([]byte(src))

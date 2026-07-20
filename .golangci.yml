@@ -12,5 +12,6 @@ linters:
     - unused
     - bidichk
     - misspell
+    - modernize
     - revive
     - wrapcheck

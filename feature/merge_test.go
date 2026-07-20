@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/bare-devcontainer/decolint/ocitest"
 	"github.com/google/go-cmp/cmp"
 	"github.com/tailscale/hujson"
 )
@@ -373,15 +374,15 @@ func TestMerge_OverrideFeatureInstallOrder(t *testing.T) {
 func TestMerge_OverrideFeatureInstallOrderOCILegacyAlias(t *testing.T) {
 	t.Parallel()
 
-	host := startOCIRegistry(t)
+	host := ocitest.Registry(t)
 	// The renamed Feature declares its legacy id and is published under both paths, so a reference by
 	// either the current id ("renamed", used in the override) or the legacy id ("legacy", used in
 	// "features") resolves to the same identity.
-	renamed := archiveWithMetadata(t, `{"id": "renamed", "legacyIds": ["legacy"], "containerEnv": {"SHARED": "renamed"}}`, false)
-	pushOCIFeature(t, host, "features/renamed", "1", renamed, false)
-	pushOCIFeature(t, host, "features/legacy", "1", renamed, false)
-	pushOCIFeature(t, host, "features/aaa", "1",
-		archiveWithMetadata(t, `{"id": "aaa", "containerEnv": {"SHARED": "aaa"}}`, false), false)
+	renamed := ocitest.FeatureArchive(t, `{"id": "renamed", "legacyIds": ["legacy"], "containerEnv": {"SHARED": "renamed"}}`, false)
+	ocitest.PushFeature(t, host, "features/renamed", "1", renamed, false)
+	ocitest.PushFeature(t, host, "features/legacy", "1", renamed, false)
+	ocitest.PushFeature(t, host, "features/aaa", "1",
+		ocitest.FeatureArchive(t, `{"id": "aaa", "containerEnv": {"SHARED": "aaa"}}`, false), false)
 
 	features := `"` + host + `/features/legacy:1": {}, "` + host + `/features/aaa:1": {}`
 	merge := func(t *testing.T, src string) *hujson.Value {

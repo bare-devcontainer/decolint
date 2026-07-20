@@ -1,0 +1,5 @@
+{
+	// A Template's bundled dev container configuration is discovered and linted alongside the
+	// Template metadata. This one defines no container source, so missing-container-def fires here.
+	"name": "e2e-template"
+}

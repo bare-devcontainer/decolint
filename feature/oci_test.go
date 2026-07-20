@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/bare-devcontainer/decolint/ocitest"
 	"github.com/opencontainers/go-digest"
 	specs "github.com/opencontainers/image-spec/specs-go"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
@@ -48,7 +49,7 @@ func TestFeatureLayer(t *testing.T) {
 func TestFetchOCI_EmptyIndex(t *testing.T) {
 	t.Parallel()
 
-	host := startOCIRegistry(t)
+	host := ocitest.Registry(t)
 	ctx := t.Context()
 	repo, err := remote.NewRepository(host + "/devcontainers/features/empty")
 	if err != nil {
@@ -84,7 +85,7 @@ func TestFetchOCI_EmptyIndex(t *testing.T) {
 func TestFetchOCI_RejectsNonFeatureConfig(t *testing.T) {
 	t.Parallel()
 
-	host := startOCIRegistry(t)
+	host := ocitest.Registry(t)
 	ctx := t.Context()
 	repo, err := remote.NewRepository(host + "/devcontainers/features/notafeature")
 	if err != nil {
@@ -102,7 +103,7 @@ func TestFetchOCI_RejectsNonFeatureConfig(t *testing.T) {
 
 	// A generic OCI image config rather than the Feature config media type.
 	configDesc := push("application/vnd.oci.image.config.v1+json", []byte("{}"))
-	layerDesc := push(featureLayerMediaType, archiveWithMetadata(t, `{"id": "notafeature"}`, false))
+	layerDesc := push(featureLayerMediaType, ocitest.FeatureArchive(t, `{"id": "notafeature"}`, false))
 
 	manBytes := mustMarshal(t, ocispec.Manifest{
 		Versioned: specs.Versioned{SchemaVersion: 2},
@@ -131,7 +132,7 @@ func TestFetchOCI_RejectsNonFeatureConfig(t *testing.T) {
 func TestFetchOCI_RejectsOversizedLayer(t *testing.T) {
 	t.Parallel()
 
-	host := startOCIRegistry(t)
+	host := ocitest.Registry(t)
 	ctx := t.Context()
 	repo, err := remote.NewRepository(host + "/devcontainers/features/big")
 	if err != nil {
@@ -148,7 +149,7 @@ func TestFetchOCI_RejectsOversizedLayer(t *testing.T) {
 	}
 
 	configDesc := push("application/vnd.devcontainers", []byte("{}"))
-	layerDesc := push(featureLayerMediaType, archiveWithMetadata(t, `{"id": "big"}`, false))
+	layerDesc := push(featureLayerMediaType, ocitest.FeatureArchive(t, `{"id": "big"}`, false))
 	// Declare a layer larger than the cap while the stored blob is unchanged: the OCI path cannot
 	// stream (it must hash the whole blob to verify the digest), so the declared size is the only
 	// bound and must be enforced before the blob is fetched.

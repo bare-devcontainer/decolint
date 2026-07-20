@@ -1,0 +1,7 @@
+{
+	// id does not match the containing directory ("template"), so id-dir-mismatch fires on the
+	// Template metadata itself, while the bundled .devcontainer/devcontainer.json is linted separately.
+	"id": "wrong-template",
+	"version": "1.0.0",
+	"name": "Example Template"
+}

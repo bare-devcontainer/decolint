@@ -1,0 +1,6 @@
+{
+	// id does not match the containing directory ("feature"), version is not semver, and the
+	// required "name" property is missing, so all three Feature correctness rules fire.
+	"id": "wrong-id",
+	"version": "not-semver"
+}

@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json/v2"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -13,6 +14,7 @@ import (
 	"github.com/bare-devcontainer/decolint/discovery"
 	"github.com/bare-devcontainer/decolint/format"
 	"github.com/bare-devcontainer/decolint/linter"
+	"github.com/bare-devcontainer/decolint/ocitest"
 	"github.com/bare-devcontainer/decolint/rules"
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
@@ -32,6 +34,12 @@ func TestRun(t *testing.T) {
 	const violationsFile = "testdata/e2e/violations/.devcontainer/devcontainer.json"
 	// mergeFile is where every firing in the merge fixture is reported.
 	const mergeFile = "testdata/e2e/merge/.devcontainer/devcontainer.json"
+	// featureFile is the Feature metadata in the feature fixture.
+	const featureFile = "testdata/e2e/feature/devcontainer-feature.json"
+	// templateFile is the Template metadata in the template fixture; templateBundledFile is the dev
+	// container configuration bundled alongside it.
+	const templateFile = "testdata/e2e/template/devcontainer-template.json"
+	const templateBundledFile = "testdata/e2e/template/.devcontainer/devcontainer.json"
 
 	tests := []struct {
 		name         string
@@ -150,6 +158,40 @@ func TestRun(t *testing.T) {
 			args:         []string{"-platform=vscode,codespaces", "testdata/e2e/clean"},
 			want:         nil,
 			wantExitCode: 0,
+		},
+		{
+			// A Feature directory is detected by its devcontainer-feature.json and linted with the
+			// Feature-scoped correctness rules, all enabled by default.
+			name: "feature directory",
+			args: []string{"testdata/e2e/feature"},
+			want: []firing{
+				{featureFile, "id-dir-mismatch", linter.SeverityError},
+				{featureFile, "invalid-semver", linter.SeverityError},
+				{featureFile, "missing-required-props", linter.SeverityError},
+			},
+			wantExitCode: 1,
+		},
+		{
+			// A Template directory is linted both for its devcontainer-template.json and for the dev
+			// container configuration it bundles, so findings appear at both files.
+			name: "template directory",
+			args: []string{"testdata/e2e/template"},
+			want: []firing{
+				{templateFile, "id-dir-mismatch", linter.SeverityError},
+				{templateBundledFile, "missing-container-def", linter.SeverityError},
+			},
+			wantExitCode: 1,
+		},
+		{
+			// Multiple directories are linted in one run and their issues aggregated; the clean
+			// directory contributes nothing while the violations directory drives the exit code.
+			name: "multiple directories aggregate issues",
+			args: []string{"-platform=vscode,codespaces", "testdata/e2e/clean", "testdata/e2e/violations"},
+			want: []firing{
+				{violationsFile, "no-bind-mount", linter.SeverityError},
+				{violationsFile, "no-host-port-format", linter.SeverityError},
+			},
+			wantExitCode: 1,
 		},
 		{
 			// With -merge, the local Feature's contributions (privileged mode and a Docker
@@ -392,6 +434,199 @@ func TestRun_Flags(t *testing.T) {
 			t.Errorf("stderr = %q, want it to mention the missing path", stderr.String())
 		}
 	})
+
+	t.Run("invalid -format value", func(t *testing.T) {
+		t.Parallel()
+
+		var stdout, stderr bytes.Buffer
+		exitCode := run(t.Context(), []string{"-format=bogus", "testdata/e2e/clean"}, &stdout, &stderr)
+		if exitCode != 2 {
+			t.Errorf("exit code = %d, want 2", exitCode)
+		}
+		if stdout.String() != "" {
+			t.Errorf("stdout = %q, want empty", stdout.String())
+		}
+		if !strings.Contains(stderr.String(), "bogus") {
+			t.Errorf("stderr = %q, want it to mention the invalid format", stderr.String())
+		}
+	})
+
+	t.Run("invalid -platform value", func(t *testing.T) {
+		t.Parallel()
+
+		var stdout, stderr bytes.Buffer
+		exitCode := run(t.Context(), []string{"-platform=bogus", "testdata/e2e/clean"}, &stdout, &stderr)
+		if exitCode != 2 {
+			t.Errorf("exit code = %d, want 2", exitCode)
+		}
+		if stdout.String() != "" {
+			t.Errorf("stdout = %q, want empty", stdout.String())
+		}
+		if !strings.Contains(stderr.String(), "bogus") {
+			t.Errorf("stderr = %q, want it to mention the invalid platform", stderr.String())
+		}
+	})
+}
+
+func TestRun_OutputFormat(t *testing.T) {
+	t.Parallel()
+
+	// The violations fixture, with both platforms selected, fires exactly two error-severity rules:
+	// no-bind-mount and no-host-port-format.
+	const violationsDir = "testdata/e2e/violations"
+	const violationsFile = "testdata/e2e/violations/.devcontainer/devcontainer.json"
+
+	t.Run("text is the default format", func(t *testing.T) {
+		t.Parallel()
+
+		var stdout, stderr bytes.Buffer
+		exitCode := run(t.Context(), []string{"-platform=vscode,codespaces", violationsDir}, &stdout, &stderr)
+		if exitCode != 1 {
+			t.Fatalf("exit code = %d, want 1; stderr: %s", exitCode, stderr.String())
+		}
+		out := stdout.String()
+		for _, want := range []string{
+			violationsFile + ":",
+			"(no-bind-mount)",
+			"(no-host-port-format)",
+			"Found 2 errors and 0 warnings.",
+		} {
+			if !strings.Contains(out, want) {
+				t.Errorf("text output missing %q; got:\n%s", want, out)
+			}
+		}
+	})
+
+	t.Run("github workflow commands", func(t *testing.T) {
+		t.Parallel()
+
+		var stdout, stderr bytes.Buffer
+		exitCode := run(t.Context(), []string{"-format=github", "-platform=vscode,codespaces", violationsDir}, &stdout, &stderr)
+		if exitCode != 1 {
+			t.Fatalf("exit code = %d, want 1; stderr: %s", exitCode, stderr.String())
+		}
+		out := stdout.String()
+		for _, want := range []string{
+			"::error file=" + violationsFile,
+			"title=no-bind-mount",
+			"title=no-host-port-format",
+		} {
+			if !strings.Contains(out, want) {
+				t.Errorf("github output missing %q; got:\n%s", want, out)
+			}
+		}
+	})
+}
+
+func TestRun_BrokenConfig(t *testing.T) {
+	t.Parallel()
+
+	// A devcontainer.json that does not parse: the run reports the parse failure as exit code 2
+	// with a message naming the broken file, and emits no issues for the directory.
+	dir := writeDevcontainer(t, `{`)
+
+	var stdout, stderr bytes.Buffer
+	exitCode := run(t.Context(), []string{"-format=json", dir}, &stdout, &stderr)
+	if exitCode != 2 {
+		t.Errorf("exit code = %d, want 2", exitCode)
+	}
+	if !strings.Contains(stderr.String(), "devcontainer.json") {
+		t.Errorf("stderr = %q, want it to name the broken file", stderr.String())
+	}
+
+	// A parse failure anywhere in a directory discards that directory's issues, so the JSON output
+	// is a well-formed empty array rather than a partial or truncated result.
+	var issues []linter.Issue
+	if err := json.Unmarshal(stdout.Bytes(), &issues); err != nil {
+		t.Fatalf("output is not a JSON issue array: %v\noutput: %s", err, stdout.String())
+	}
+	if len(issues) != 0 {
+		t.Errorf("issues = %v, want none", issues)
+	}
+}
+
+func TestRun_DefaultDirectory(t *testing.T) {
+	// Uses t.Chdir, which cannot be combined with t.Parallel.
+	dir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(dir, ".devcontainer"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, ".devcontainer", "devcontainer.json"), []byte(`{}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	t.Chdir(dir)
+
+	// No path argument: the current directory is linted. The config trips missing-container-def.
+	var stdout, stderr bytes.Buffer
+	exitCode := run(t.Context(), []string{"-format=json"}, &stdout, &stderr)
+	if exitCode != 1 {
+		t.Fatalf("exit code = %d, want 1; stderr: %s", exitCode, stderr.String())
+	}
+	var issues []linter.Issue
+	if err := json.Unmarshal(stdout.Bytes(), &issues); err != nil {
+		t.Fatalf("output is not a JSON issue array: %v\noutput: %s", err, stdout.String())
+	}
+	if len(issues) == 0 || issues[0].RuleID != "missing-container-def" {
+		t.Errorf("issues = %v, want missing-container-def from the current directory", issues)
+	}
+}
+
+func TestRun_ConfigDiscovery(t *testing.T) {
+	// Uses t.Chdir, which cannot be combined with t.Parallel.
+
+	// devcontainerBody uses image:latest, which trips no-image-latest (off by default, in the
+	// reproducibility category) once a discovered config turns it on.
+	const devcontainerBody = `{"image": "ubuntu:latest"}`
+
+	writeProject := func(t *testing.T) string {
+		t.Helper()
+		dir := t.TempDir()
+		if err := os.MkdirAll(filepath.Join(dir, ".devcontainer"), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(dir, ".devcontainer", "devcontainer.json"), []byte(devcontainerBody), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		return dir
+	}
+
+	t.Run("discovers .decolint.jsonc without -config", func(t *testing.T) {
+		project := writeProject(t)
+		t.Chdir(t.TempDir())
+		if err := os.WriteFile(".decolint.jsonc", []byte(`{"rules": {"no-image-latest": "error"}}`), 0o644); err != nil {
+			t.Fatal(err)
+		}
+
+		var stdout, stderr bytes.Buffer
+		exitCode := run(t.Context(), []string{"-format=json", project}, &stdout, &stderr)
+		if exitCode != 1 {
+			t.Fatalf("exit code = %d, want 1; stderr: %s", exitCode, stderr.String())
+		}
+		if !hasRule(t, stdout.Bytes(), "no-image-latest") {
+			t.Errorf("want no-image-latest enabled by the discovered config; output: %s", stdout.String())
+		}
+	})
+
+	t.Run(".jsonc takes precedence over .json", func(t *testing.T) {
+		project := writeProject(t)
+		t.Chdir(t.TempDir())
+		// The .jsonc enables the rule; the .json would disable it. The .jsonc must win.
+		if err := os.WriteFile(".decolint.jsonc", []byte(`{"rules": {"no-image-latest": "error"}}`), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(".decolint.json", []byte(`{"rules": {"no-image-latest": "off"}}`), 0o644); err != nil {
+			t.Fatal(err)
+		}
+
+		var stdout, stderr bytes.Buffer
+		exitCode := run(t.Context(), []string{"-format=json", project}, &stdout, &stderr)
+		if exitCode != 1 {
+			t.Fatalf("exit code = %d, want 1; stderr: %s", exitCode, stderr.String())
+		}
+		if !hasRule(t, stdout.Bytes(), "no-image-latest") {
+			t.Errorf("want the .jsonc config to win; output: %s", stdout.String())
+		}
+	})
 }
 
 func TestRun_Init(t *testing.T) {
@@ -595,6 +830,80 @@ func TestRun_Merge(t *testing.T) {
 		}
 	})
 
+	t.Run("merges a Feature fetched from an OCI registry", func(t *testing.T) {
+		t.Parallel()
+
+		host := ocitest.Registry(t)
+		ocitest.PushFeature(t, host, "features/privileged", "1", ocitest.FeatureArchive(t, `{
+			"id": "privileged",
+			"version": "1.0.0",
+			"name": "Privileged",
+			"privileged": true,
+			"mounts": ["source=/var/run/docker.sock,target=/var/run/docker.sock,type=bind"]
+		}`, false), false)
+
+		// The devcontainer references the just-published Feature by its registry address, so the body
+		// is generated here rather than kept as a static fixture.
+		body := fmt.Sprintf(`{"image": "ubuntu:24.04", "features": {%q: {}}}`, host+"/features/privileged:1")
+		dir := writeDevcontainer(t, body)
+
+		var stdout, stderr bytes.Buffer
+		args := []string{"-format=json", "-merge", "-config=testdata/e2e/merge.jsonc", dir}
+		exitCode := run(t.Context(), args, &stdout, &stderr)
+		if exitCode != 1 {
+			t.Fatalf("exit code = %d, want 1; stderr: %s", exitCode, stderr.String())
+		}
+		for _, ruleID := range []string{"no-privileged-container", "no-docker-socket-mount"} {
+			if !hasRule(t, stdout.Bytes(), ruleID) {
+				t.Errorf("want %s to fire on the merged OCI Feature; output: %s", ruleID, stdout.String())
+			}
+		}
+	})
+
+	t.Run("a Feature fetch failure is a runtime error", func(t *testing.T) {
+		t.Parallel()
+		// The reserved .invalid TLD never resolves, so fetching the tarball fails and the failure
+		// must surface as exit code 2 rather than a lint result.
+		dir := writeDevcontainer(t, `{"image": "ubuntu:24.04", "features": {"https://features.invalid/f.tgz": {}}}`)
+
+		var stdout, stderr bytes.Buffer
+		exitCode := run(t.Context(), []string{"-merge", dir}, &stdout, &stderr)
+		if exitCode != 2 {
+			t.Errorf("exit code = %d, want 2; stdout: %s", exitCode, stdout.String())
+		}
+		if !strings.Contains(stderr.String(), "features.invalid") {
+			t.Errorf("stderr = %q, want it to mention the unreachable Feature", stderr.String())
+		}
+	})
+
+	t.Run("a Feature dependency cycle is a runtime error", func(t *testing.T) {
+		t.Parallel()
+		// Two local Features depend on each other, forming a cycle the install-order resolution
+		// rejects. Local dependsOn references resolve relative to the config directory, so the
+		// Features are siblings under .devcontainer.
+		dir := writeDevcontainer(t, `{"image": "ubuntu:24.04", "features": {"./a": {}}}`)
+		devcontainer := filepath.Join(dir, ".devcontainer")
+		for name, dep := range map[string]string{"a": "./b", "b": "./a"} {
+			featureDir := filepath.Join(devcontainer, name)
+			if err := os.MkdirAll(featureDir, 0o755); err != nil {
+				t.Fatal(err)
+			}
+			body := fmt.Sprintf(`{"id": %q, "version": "1.0.0", "name": %q, "dependsOn": {%q: {}}}`, name, name, dep)
+			if err := os.WriteFile(filepath.Join(featureDir, "devcontainer-feature.json"), []byte(body), 0o644); err != nil {
+				t.Fatal(err)
+			}
+		}
+
+		var stdout, stderr bytes.Buffer
+		exitCode := run(t.Context(), []string{"-merge", dir}, &stdout, &stderr)
+		if exitCode != 2 {
+			t.Errorf("exit code = %d, want 2; stdout: %s", exitCode, stdout.String())
+		}
+		if !strings.Contains(stderr.String(), "cycle") {
+			t.Errorf("stderr = %q, want it to mention the dependency cycle", stderr.String())
+		}
+	})
+
 	t.Run("unresolvable feature is a runtime error", func(t *testing.T) {
 		t.Parallel()
 		dir := writeDevcontainer(t, `{"image": "ubuntu:24.04", "features": {"./missing": {}}}`)
@@ -774,6 +1083,21 @@ func TestLintPath(t *testing.T) {
 			t.Error("merge ran on a Feature configuration")
 		}
 	})
+}
+
+// hasRule reports whether the JSON issue array in data contains an issue for ruleID.
+func hasRule(t *testing.T, data []byte, ruleID string) bool {
+	t.Helper()
+	var issues []linter.Issue
+	if err := json.Unmarshal(data, &issues); err != nil {
+		t.Fatalf("output is not a JSON issue array: %v\noutput: %s", err, data)
+	}
+	for _, issue := range issues {
+		if issue.RuleID == ruleID {
+			return true
+		}
+	}
+	return false
 }
 
 // mdTableRow finds the row of a Markdown table in out whose first cell, after trimming the padding

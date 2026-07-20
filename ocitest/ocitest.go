@@ -86,6 +86,28 @@ func FeatureArchive(t *testing.T, metadata string, compress bool) []byte {
 // resolves to an image index that points at the manifest, exercising the index-following path.
 func PushFeature(t *testing.T, host, repo, tag string, archive []byte, asIndex bool) {
 	t.Helper()
+	pushArtifact(t, host, repo, tag,
+		featureConfigMediaType, []byte("{}"),
+		featureLayerMediaType, archive, asIndex)
+}
+
+// PushImage publishes a minimal container image at host/repo:tag whose config carries the given
+// labels, for exercising the base-image metadata path. When asIndex is true the tag resolves to an
+// image index that points at the manifest, exercising the index-following path.
+func PushImage(t *testing.T, host, repo, tag string, labels map[string]string, asIndex bool) {
+	t.Helper()
+	pushArtifact(t, host, repo, tag,
+		ocispec.MediaTypeImageConfig, marshal(t, ocispec.Image{Config: ocispec.ImageConfig{Labels: labels}}),
+		ocispec.MediaTypeImageLayer, []byte("layer"), asIndex)
+}
+
+// pushArtifact publishes a single-layer manifest built from the given config and layer blobs at
+// host/repo:tag. When asIndex is true the tag resolves to an image index that points at the
+// manifest, exercising the index-following path.
+func pushArtifact(t *testing.T, host, repo, tag string,
+	configMediaType string, config []byte,
+	layerMediaType string, layer []byte, asIndex bool) {
+	t.Helper()
 	ctx := t.Context()
 	repository, err := remote.NewRepository(host + "/" + repo)
 	if err != nil {
@@ -105,8 +127,8 @@ func PushFeature(t *testing.T, host, repo, tag string, archive []byte, asIndex b
 		return desc
 	}
 
-	configDesc := push(featureConfigMediaType, []byte("{}"))
-	layerDesc := push(featureLayerMediaType, archive)
+	configDesc := push(configMediaType, config)
+	layerDesc := push(layerMediaType, layer)
 
 	manBytes := marshal(t, ocispec.Manifest{
 		Versioned: specs.Versioned{SchemaVersion: 2},

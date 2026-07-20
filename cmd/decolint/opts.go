@@ -64,7 +64,7 @@ func parseOptions(args []string, output io.Writer) (Options, error) {
 	fs.StringVar(&opts.ConfigPath, "config", "", "path to a config file (default: auto-discover .decolint.jsonc or .decolint.json in the current directory)")
 	fs.StringVar(&platformFlag, "platform", "", "comma-separated target platforms to include in addition to \"all\" (vscode, codespaces); overrides the config file's \"platforms\" member")
 	fs.StringVar(&formatFlag, "format", "", "output format: text (default), json, or github; overrides the config file's \"format\" member")
-	fs.BoolVar(&opts.Merge, "merge", false, "fetch the Features referenced in \"features\" and lint the merged (effective) configuration; overrides the config file's \"merge\" member")
+	fs.BoolVar(&opts.Merge, "merge", false, "lint the merged (effective) configuration, including referenced Features and base image metadata; overrides the config file's \"merge\" member")
 	fs.BoolVar(&opts.Version, "version", false, "print version information and exit")
 	fs.BoolVar(&opts.ListRules, "rules", false, "print the built-in rules as a Markdown table (category, target platforms, current severity), then exit")
 	fs.BoolVar(&opts.Init, "init", false, "write a new .decolint.jsonc config file listing every rule at its default severity, then exit")

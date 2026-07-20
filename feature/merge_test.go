@@ -2,6 +2,7 @@ package feature
 
 import (
 	"encoding/json/v2"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -13,9 +14,118 @@ import (
 func TestMerge_NoFeatures(t *testing.T) {
 	t.Parallel()
 
-	src := `{"image": "ubuntu:24.04"}`
+	src := `{"name": "app"}`
 	root := mergeSrc(t, src, nil)
 	assertJSON(t, root, src)
+}
+
+func TestMerge_ImageMetadata(t *testing.T) {
+	t.Parallel()
+
+	host := ocitest.Registry(t)
+	ocitest.PushImage(t, host, "base", "1", map[string]string{
+		imageMetadataLabel: `[{"privileged": true, "remoteUser": "vscode", "containerEnv": {"FROM_IMAGE": "1"}}]`,
+	}, false)
+
+	src := fmt.Sprintf(`{"image": %q}`, host+"/base:1")
+	root := mergeSrc(t, src, nil)
+	assertJSON(t, root, fmt.Sprintf(`{
+	  "image": %q,
+	  "privileged": true,
+	  "remoteUser": "vscode",
+	  "containerEnv": {"FROM_IMAGE": "1"}
+	}`, host+"/base:1"))
+}
+
+func TestMerge_ImageMetadataPrecedence(t *testing.T) {
+	t.Parallel()
+
+	host := ocitest.Registry(t)
+	// Two label entries: the later one wins the intra-image "E" and "remoteUser" conflicts.
+	ocitest.PushImage(t, host, "base", "1", map[string]string{
+		imageMetadataLabel: `[{"remoteUser": "first", "containerEnv": {"A": "image", "D": "image", "E": "e1"}}, {"remoteUser": "second", "containerEnv": {"E": "e2"}}]`,
+	}, false)
+
+	src := fmt.Sprintf(`{
+	  "image": %q,
+	  "containerEnv": {"D": "user"},
+	  "features": {"./f": {}}
+	}`, host+"/base:1")
+	root := mergeSrc(t, src, map[string]string{
+		"f": `{"id": "f", "containerEnv": {"A": "feat"}}`,
+	})
+	// A: the Feature applies after image metadata and wins. D: the user's own value beats both.
+	// E and remoteUser: the later image entry beats the earlier one.
+	assertJSON(t, root, fmt.Sprintf(`{
+	  "image": %q,
+	  "containerEnv": {"D": "user", "A": "feat", "E": "e2"},
+	  "features": {"./f": {}},
+	  "remoteUser": "second"
+	}`, host+"/base:1"))
+}
+
+func TestMerge_ImageMetadataUserScalarWins(t *testing.T) {
+	t.Parallel()
+
+	host := ocitest.Registry(t)
+	ocitest.PushImage(t, host, "base", "1", map[string]string{
+		imageMetadataLabel: `[{"remoteUser": "vscode"}]`,
+	}, false)
+
+	src := fmt.Sprintf(`{"image": %q, "remoteUser": "root"}`, host+"/base:1")
+	root := mergeSrc(t, src, nil)
+	assertJSON(t, root, fmt.Sprintf(`{"image": %q, "remoteUser": "root"}`, host+"/base:1"))
+}
+
+func TestMerge_ImageMetadataAnchor(t *testing.T) {
+	t.Parallel()
+
+	host := ocitest.Registry(t)
+	ocitest.PushImage(t, host, "base", "1", map[string]string{
+		imageMetadataLabel: `[{"privileged": true, "containerEnv": {"KEY": "value"}}]`,
+	}, false)
+
+	src := fmt.Sprintf("{\n  \"image\": %q\n}", host+"/base:1")
+	root := mergeSrc(t, src, nil)
+	anchor := strings.Index(src, `"image"`)
+	if anchor < 0 {
+		t.Fatal("anchor not found in source")
+	}
+	for _, ptr := range []string{"/privileged", "/containerEnv", "/containerEnv/KEY"} {
+		v := root.Find(ptr)
+		if v == nil {
+			t.Errorf("merged tree lacks %s", ptr)
+			continue
+		}
+		if v.StartOffset != anchor {
+			t.Errorf("%s StartOffset = %d, want %d (the image key)", ptr, v.StartOffset, anchor)
+		}
+	}
+}
+
+func TestMerge_ImageVariableSubstitutionSkipped(t *testing.T) {
+	t.Parallel()
+
+	// A variable substitution cannot be resolved at lint time, so the image is not fetched and the
+	// tree is left unchanged. An unreachable host would otherwise fail the merge.
+	src := `{"image": "registry.invalid/app:${localEnv:TAG}"}`
+	root := mergeSrc(t, src, nil)
+	assertJSON(t, root, src)
+}
+
+func TestMerge_ImageFetchError(t *testing.T) {
+	t.Parallel()
+
+	// The reserved .invalid TLD never resolves, so fetching the image fails and the failure must
+	// surface as an error rather than a silent skip.
+	src := `{"image": "registry.invalid/app:1"}`
+	root, err := hujson.Parse([]byte(src))
+	if err != nil {
+		t.Fatalf("parse devcontainer.json: %v", err)
+	}
+	if err := Merge(t.Context(), NewFetcher(), nil, "", &root); err == nil {
+		t.Fatal("Merge with an unreachable image: got nil error")
+	}
 }
 
 func TestMerge_BooleanOr(t *testing.T) {

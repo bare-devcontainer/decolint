@@ -20,26 +20,35 @@ const (
 	maxDecompressedBytes = 256 << 20 // 256 MB
 	// maxMetadataBytes caps a devcontainer-feature.json, whether read from disk or from an archive.
 	maxMetadataBytes = 4 << 20 // 4 MB
+	// maxImageConfigBytes caps a container image's config blob, read for its labels.
+	maxImageConfigBytes = 4 << 20 // 4 MB
 )
 
 // metadataFileName is the file declaring a Feature, located at the root of the Feature's directory
 // or archive.
 const metadataFileName = "devcontainer-feature.json"
 
-// Fetcher retrieves Feature metadata for the references found in devcontainer.json files. It
-// caches every result in memory for the lifetime of the Fetcher, including failures, so a
-// reference shared by several files is fetched at most once per run.
+// Fetcher retrieves Feature metadata for the references found in devcontainer.json files, and the
+// Dev Container metadata carried by container image labels. It caches every result in memory for
+// the lifetime of the Fetcher, including failures, so a reference shared by several files is
+// fetched at most once per run.
 type Fetcher struct {
 	client *http.Client
 	log    io.Writer
 
-	mu    sync.Mutex
-	cache map[string]fetchResult
+	mu         sync.Mutex
+	cache      map[string]fetchResult
+	imageCache map[string]imageResult
 }
 
 type fetchResult struct {
 	md  *Metadata
 	err error
+}
+
+type imageResult struct {
+	entries []*Metadata
+	err     error
 }
 
 // Option configures a Fetcher created by NewFetcher.
@@ -58,8 +67,9 @@ func NewFetcher(opts ...Option) *Fetcher {
 			Timeout:       30 * time.Second,
 			CheckRedirect: refuseInsecureRedirect,
 		},
-		log:   io.Discard,
-		cache: map[string]fetchResult{},
+		log:        io.Discard,
+		cache:      map[string]fetchResult{},
+		imageCache: map[string]imageResult{},
 	}
 	for _, opt := range opts {
 		opt(f)

@@ -5,37 +5,85 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 
 	"github.com/tailscale/hujson"
 )
 
 // Merge fetches the Features referenced under "/features" of root, a devcontainer.json parsed from
-// a file at configDir within fsRoot, and merges the properties they contribute into root in place,
-// following the merge logic of the Dev Container specification. Features named by "dependsOn" are
-// resolved recursively and contribute properties as well.
+// a file at configDir within fsRoot, along with the Dev Container metadata carried by the
+// "devcontainer.metadata" label of the image named by "/image", and merges the properties they
+// contribute into root in place, following the merge logic of the Dev Container specification.
+// Features named by "dependsOn" are resolved recursively and contribute properties as well. A base
+// image reachable only through "build" or "dockerComposeFile" is not resolved.
 //
 // fsRoot and configDir together locate the referencing devcontainer.json (fsRoot is
 // discovery.ConfigFile.Root and configDir is the directory of its Path): a local Feature reference
 // is resolved relative to configDir and read through fsRoot, so it cannot escape fsRoot's boundary.
 //
-// Every node Merge adds to the tree carries the byte offset of the referencing Feature key in the
-// original file, so findings on merged-in properties point at the Feature reference. Any fetch or
-// parse failure, or a dependency cycle, is returned as an error.
+// Every node Merge adds to the tree carries the byte offset of the key it was pulled in through
+// (the referencing Feature key, or the "image" key for image metadata) in the original file, so
+// findings on merged-in properties point at that reference. Any fetch or parse failure, or a
+// dependency cycle, is returned as an error.
 func Merge(ctx context.Context, f *Fetcher, fsRoot *os.Root, configDir string, root *hujson.Value) error {
+	imageContribs, err := imageContributors(ctx, f, root)
+	if err != nil {
+		return err
+	}
 	ordered, err := installSequence(ctx, f, fsRoot, configDir, root)
 	if err != nil {
 		return err
 	}
-	if len(ordered) == 0 {
+	if len(imageContribs) == 0 && len(ordered) == 0 {
 		return nil
 	}
 
 	state := newMergeState(root.Value.(*hujson.Object))
+	// Image metadata is the lowest-precedence input of the specification's merge logic, so it is
+	// applied before any Feature.
+	for _, c := range imageContribs {
+		state.apply(c)
+	}
 	for _, c := range ordered {
 		state.apply(c)
 	}
 	state.finish()
 	return nil
+}
+
+// imageContributors fetches the "devcontainer.metadata" label of the image named by "/image" of
+// root and returns one contributor per metadata entry, in label order, anchored at the "image"
+// key. There is nothing to contribute when root declares no image, when the image is not a plain
+// string, or when the image carries no label.
+func imageContributors(ctx context.Context, f *Fetcher, root *hujson.Value) ([]*contributor, error) {
+	obj, ok := root.Value.(*hujson.Object)
+	if !ok {
+		return nil, nil
+	}
+	i := findMember(obj, "image")
+	if i < 0 {
+		return nil, nil
+	}
+	lit, ok := obj.Members[i].Value.Value.(hujson.Literal)
+	if !ok || lit.Kind() != '"' {
+		return nil, nil
+	}
+	image := lit.String()
+	// Variable substitutions resolve at container creation time; linting cannot know their values,
+	// so such an image is skipped rather than rejected.
+	if strings.Contains(image, "${") {
+		return nil, nil
+	}
+	entries, err := f.FetchImageMetadata(ctx, image)
+	if err != nil {
+		return nil, err
+	}
+	anchor := obj.Members[i].Name.StartOffset
+	contribs := make([]*contributor, 0, len(entries))
+	for _, md := range entries {
+		contribs = append(contribs, &contributor{ref: image, anchor: anchor, md: md})
+	}
+	return contribs, nil
 }
 
 // installSequence resolves the Features referenced under "/features" of root, applies

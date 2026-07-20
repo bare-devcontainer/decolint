@@ -1,5 +1,6 @@
 {
   "platforms": ["vscode"],
+  "merge": true,
   "categories": {
     "correctness": "error",
     "reproducibility": "error",

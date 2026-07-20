@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -32,8 +33,6 @@ func TestRun(t *testing.T) {
 
 	// violationsFile is where every firing in the violations fixture is reported.
 	const violationsFile = "testdata/e2e/violations/.devcontainer/devcontainer.json"
-	// mergeFile is where every firing in the merge fixture is reported.
-	const mergeFile = "testdata/e2e/merge/.devcontainer/devcontainer.json"
 	// featureFile is the Feature metadata in the feature fixture.
 	const featureFile = "testdata/e2e/feature/devcontainer-feature.json"
 	// templateFile is the Template metadata in the template fixture; templateBundledFile is the dev
@@ -222,43 +221,6 @@ func TestRun(t *testing.T) {
 				{violationsFile, "no-host-port-format", linter.SeverityError},
 			},
 			wantExitCode: 1,
-		},
-		{
-			// With -merge, the local Feature's contributions (privileged mode and a Docker
-			// socket mount) become part of the effective configuration and trip the security rules
-			// merge.jsonc enables.
-			name: "merge features",
-			args: []string{"-merge", "-config=testdata/e2e/merge.jsonc", "testdata/e2e/merge"},
-			want: []firing{
-				{mergeFile, "no-docker-socket-mount", linter.SeverityError},
-				{mergeFile, "no-privileged-container", linter.SeverityError},
-			},
-			wantExitCode: 1,
-		},
-		{
-			// Without the flag only the raw file is linted, and the raw file is clean.
-			name:         "merge features disabled",
-			args:         []string{"-config=testdata/e2e/merge.jsonc", "testdata/e2e/merge"},
-			want:         nil,
-			wantExitCode: 0,
-		},
-		{
-			// merge-on.jsonc enables merging via the config file's "merge" member.
-			name: "merge features enabled by config",
-			args: []string{"-config=testdata/e2e/merge-on.jsonc", "testdata/e2e/merge"},
-			want: []firing{
-				{mergeFile, "no-docker-socket-mount", linter.SeverityError},
-				{mergeFile, "no-privileged-container", linter.SeverityError},
-			},
-			wantExitCode: 1,
-		},
-		{
-			// -merge=false, given explicitly, overrides merge-on.jsonc's "merge":
-			// true and disables merging.
-			name:         "merge features disabled by CLI flag overrides config",
-			args:         []string{"-merge=false", "-config=testdata/e2e/merge-on.jsonc", "testdata/e2e/merge"},
-			want:         nil,
-			wantExitCode: 0,
 		},
 	}
 	for _, tt := range tests {
@@ -853,8 +815,11 @@ func TestRun_Merge(t *testing.T) {
 	t.Run("findings point at the feature reference", func(t *testing.T) {
 		t.Parallel()
 
+		host := ocitest.Registry(t)
+		dir := copyFixture(t, "testdata/e2e/merge", map[string]string{"${BASE_IMAGE}": baseImageRef(t, host)})
+
 		var stdout, stderr bytes.Buffer
-		args := []string{"-format=json", "-merge", "-config=testdata/e2e/merge.jsonc", "testdata/e2e/merge"}
+		args := []string{"-format=json", "-merge", "-config=testdata/e2e/merge.jsonc", dir}
 		exitCode := run(t.Context(), args, &stdout, &stderr)
 		if exitCode != 1 {
 			t.Fatalf("exit code = %d, want 1; stderr: %s", exitCode, stderr.String())
@@ -864,12 +829,50 @@ func TestRun_Merge(t *testing.T) {
 		if err := json.Unmarshal(stdout.Bytes(), &issues); err != nil {
 			t.Fatalf("output is not a JSON issue array: %v\noutput: %s", err, stdout.String())
 		}
-		// The fixture references "./privileged-feature" on line 5; every merged-in property must be
-		// reported there.
+		// The config references "./privileged-feature" on line 4; every merged-in property must be
+		// reported there rather than at the base image on line 2.
 		for _, issue := range issues {
-			if issue.Line != 5 {
-				t.Errorf("issue %s reported at line %d, want 5 (the feature reference)", issue.RuleID, issue.Line)
+			if issue.Line != 4 {
+				t.Errorf("issue %s reported at line %d, want 4 (the feature reference)", issue.RuleID, issue.Line)
 			}
+		}
+	})
+
+	t.Run("merge on and off is controlled by flag and config", func(t *testing.T) {
+		t.Parallel()
+
+		// Each case pairs the same merged config with a different flag/config combination; the two
+		// security rules fire only when merging is on. merge.jsonc enables them via the -merge flag,
+		// merge-on.jsonc enables them and turns merging on through its own "merge" member.
+		tests := []struct {
+			name         string
+			args         []string
+			wantExitCode int
+			wantMerged   bool
+		}{
+			{"flag enables merge", []string{"-merge", "-config=testdata/e2e/merge.jsonc"}, 1, true},
+			{"no flag leaves merge off", []string{"-config=testdata/e2e/merge.jsonc"}, 0, false},
+			{"config enables merge", []string{"-config=testdata/e2e/merge-on.jsonc"}, 1, true},
+			{"flag overrides config merge", []string{"-merge=false", "-config=testdata/e2e/merge-on.jsonc"}, 0, false},
+		}
+		for _, tt := range tests {
+			t.Run(tt.name, func(t *testing.T) {
+				t.Parallel()
+
+				host := ocitest.Registry(t)
+				dir := copyFixture(t, "testdata/e2e/merge", map[string]string{"${BASE_IMAGE}": baseImageRef(t, host)})
+
+				var stdout, stderr bytes.Buffer
+				exitCode := run(t.Context(), append([]string{"-format=json"}, append(tt.args, dir)...), &stdout, &stderr)
+				if exitCode != tt.wantExitCode {
+					t.Errorf("exit code = %d, want %d; stdout: %s", exitCode, tt.wantExitCode, stdout.String())
+				}
+				for _, ruleID := range []string{"no-privileged-container", "no-docker-socket-mount"} {
+					if got := hasRule(t, stdout.Bytes(), ruleID); got != tt.wantMerged {
+						t.Errorf("hasRule(%s) = %v, want %v (merged=%v)", ruleID, got, tt.wantMerged, tt.wantMerged)
+					}
+				}
+			})
 		}
 	})
 
@@ -886,8 +889,9 @@ func TestRun_Merge(t *testing.T) {
 		}`, false), false)
 
 		// The devcontainer references the just-published Feature by its registry address, so the body
-		// is generated here rather than kept as a static fixture.
-		body := fmt.Sprintf(`{"image": "ubuntu:24.04", "features": {%q: {}}}`, host+"/features/privileged:1")
+		// is generated here rather than kept as a static fixture. The base image is a loopback
+		// reference to the same in-process registry, so resolving its metadata stays hermetic.
+		body := fmt.Sprintf(`{"image": %q, "features": {%q: {}}}`, baseImageRef(t, host), host+"/features/privileged:1")
 		dir := writeDevcontainer(t, body)
 
 		var stdout, stderr bytes.Buffer
@@ -906,8 +910,11 @@ func TestRun_Merge(t *testing.T) {
 	t.Run("a Feature fetch failure is a runtime error", func(t *testing.T) {
 		t.Parallel()
 		// The reserved .invalid TLD never resolves, so fetching the tarball fails and the failure
-		// must surface as exit code 2 rather than a lint result.
-		dir := writeDevcontainer(t, `{"image": "ubuntu:24.04", "features": {"https://features.invalid/f.tgz": {}}}`)
+		// must surface as exit code 2 rather than a lint result. The base image is a loopback
+		// reference so it is not what fails.
+		host := ocitest.Registry(t)
+		body := fmt.Sprintf(`{"image": %q, "features": {"https://features.invalid/f.tgz": {}}}`, baseImageRef(t, host))
+		dir := writeDevcontainer(t, body)
 
 		var stdout, stderr bytes.Buffer
 		exitCode := run(t.Context(), []string{"-merge", dir}, &stdout, &stderr)
@@ -924,7 +931,8 @@ func TestRun_Merge(t *testing.T) {
 		// Two local Features depend on each other, forming a cycle the install-order resolution
 		// rejects. Local dependsOn references resolve relative to the config directory, so the
 		// Features are siblings under .devcontainer.
-		dir := writeDevcontainer(t, `{"image": "ubuntu:24.04", "features": {"./a": {}}}`)
+		host := ocitest.Registry(t)
+		dir := writeDevcontainer(t, fmt.Sprintf(`{"image": %q, "features": {"./a": {}}}`, baseImageRef(t, host)))
 		devcontainer := filepath.Join(dir, ".devcontainer")
 		for name, dep := range map[string]string{"a": "./b", "b": "./a"} {
 			featureDir := filepath.Join(devcontainer, name)
@@ -949,7 +957,8 @@ func TestRun_Merge(t *testing.T) {
 
 	t.Run("unresolvable feature is a runtime error", func(t *testing.T) {
 		t.Parallel()
-		dir := writeDevcontainer(t, `{"image": "ubuntu:24.04", "features": {"./missing": {}}}`)
+		host := ocitest.Registry(t)
+		dir := writeDevcontainer(t, fmt.Sprintf(`{"image": %q, "features": {"./missing": {}}}`, baseImageRef(t, host)))
 
 		var stdout, stderr bytes.Buffer
 		exitCode := run(t.Context(), []string{"-merge", dir}, &stdout, &stderr)
@@ -963,7 +972,8 @@ func TestRun_Merge(t *testing.T) {
 
 	t.Run("local feature escaping .devcontainer is a runtime error", func(t *testing.T) {
 		t.Parallel()
-		dir := writeDevcontainer(t, `{"image": "ubuntu:24.04", "features": {"../sibling-feature": {}}}`)
+		host := ocitest.Registry(t)
+		dir := writeDevcontainer(t, fmt.Sprintf(`{"image": %q, "features": {"../sibling-feature": {}}}`, baseImageRef(t, host)))
 		// sibling-feature exists on disk, but as a project-root sibling of .devcontainer, not inside
 		// it, so it is outside the boundary local Feature references are confined to.
 		if err := os.MkdirAll(filepath.Join(dir, "sibling-feature"), 0o755); err != nil {
@@ -981,6 +991,63 @@ func TestRun_Merge(t *testing.T) {
 		}
 		if !strings.Contains(stderr.String(), "../sibling-feature") {
 			t.Errorf("stderr = %q, want it to mention the unresolvable feature", stderr.String())
+		}
+	})
+
+	t.Run("merges base image metadata from an OCI registry", func(t *testing.T) {
+		t.Parallel()
+
+		host := ocitest.Registry(t)
+		ocitest.PushImage(t, host, "base", "1", map[string]string{
+			"devcontainer.metadata": `[{"privileged": true, "mounts": ["source=/var/run/docker.sock,target=/var/run/docker.sock,type=bind"]}]`,
+		}, false)
+
+		body := fmt.Sprintf(`{"image": %q}`, host+"/base:1")
+		dir := writeDevcontainer(t, body)
+
+		var stdout, stderr bytes.Buffer
+		args := []string{"-format=json", "-merge", "-config=testdata/e2e/merge.jsonc", dir}
+		exitCode := run(t.Context(), args, &stdout, &stderr)
+		if exitCode != 1 {
+			t.Fatalf("exit code = %d, want 1; stderr: %s", exitCode, stderr.String())
+		}
+		for _, ruleID := range []string{"no-privileged-container", "no-docker-socket-mount"} {
+			if !hasRule(t, stdout.Bytes(), ruleID) {
+				t.Errorf("want %s to fire on the merged image metadata; output: %s", ruleID, stdout.String())
+			}
+		}
+		// The merged-in properties are reported at the "image" reference on line 1.
+		var issues []linter.Issue
+		if err := json.Unmarshal(stdout.Bytes(), &issues); err != nil {
+			t.Fatalf("output is not a JSON issue array: %v\noutput: %s", err, stdout.String())
+		}
+		for _, issue := range issues {
+			if issue.Line != 1 {
+				t.Errorf("issue %s reported at line %d, want 1 (the image reference)", issue.RuleID, issue.Line)
+			}
+		}
+	})
+
+	t.Run("an unreachable base image is a runtime error", func(t *testing.T) {
+		t.Parallel()
+		// The reserved .invalid TLD never resolves, so fetching the image fails and the failure must
+		// surface as exit code 2 rather than a lint result.
+		dir := writeDevcontainer(t, `{"image": "registry.invalid/base:1", "features": {"./f": {}}}`)
+		featureDir := filepath.Join(dir, ".devcontainer", "f")
+		if err := os.MkdirAll(featureDir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(featureDir, "devcontainer-feature.json"), []byte(`{"id": "f"}`), 0o644); err != nil {
+			t.Fatal(err)
+		}
+
+		var stdout, stderr bytes.Buffer
+		exitCode := run(t.Context(), []string{"-merge", dir}, &stdout, &stderr)
+		if exitCode != 2 {
+			t.Errorf("exit code = %d, want 2; stdout: %s", exitCode, stdout.String())
+		}
+		if !strings.Contains(stderr.String(), "registry.invalid") {
+			t.Errorf("stderr = %q, want it to mention the unreachable image", stderr.String())
 		}
 	})
 }
@@ -1178,4 +1245,51 @@ func writeDevcontainer(t *testing.T, body string) string {
 		t.Fatalf("WriteFile: %v", err)
 	}
 	return dir
+}
+
+// baseImageRef pushes a metadata-less base image to host and returns its reference. Using it as the
+// "image" property keeps a merge run hermetic: the reference resolves against the in-process
+// registry rather than a public one, so decolint fetches the image's (empty) metadata without
+// leaving the loopback interface. This is why merge test configs name a loopback image instead of a
+// real one like "ubuntu:24.04" — the base image must resolve, and it must resolve locally.
+func baseImageRef(t *testing.T, host string) string {
+	t.Helper()
+	ocitest.PushImage(t, host, "base", "1", nil, false)
+	return host + "/base:1"
+}
+
+// copyFixture materializes the fixture tree rooted at src into a fresh temp directory, replacing
+// every key of subst with its value in each file's contents, and returns that directory. It lets a
+// test keep a readable, checked-in devcontainer fixture while injecting values known only at run
+// time, such as a loopback registry reference: the fixture holds a "${BASE_IMAGE}" placeholder and
+// the substitution writes the real reference into the copy decolint reads.
+func copyFixture(t *testing.T, src string, subst map[string]string) string {
+	t.Helper()
+	dst := t.TempDir()
+	err := filepath.WalkDir(src, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		rel, err := filepath.Rel(src, path)
+		if err != nil {
+			return fmt.Errorf("relativize %s: %w", path, err)
+		}
+		target := filepath.Join(dst, rel)
+		if d.IsDir() {
+			return os.MkdirAll(target, 0o755)
+		}
+		data, err := os.ReadFile(path)
+		if err != nil {
+			return fmt.Errorf("read %s: %w", path, err)
+		}
+		content := string(data)
+		for old, replacement := range subst {
+			content = strings.ReplaceAll(content, old, replacement)
+		}
+		return os.WriteFile(target, []byte(content), 0o644)
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return dst
 }

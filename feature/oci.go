@@ -28,21 +28,31 @@ const featureConfigMediaType = "application/vnd.devcontainers"
 // serves Features behind either media type.
 const dockerManifestListMediaType = "application/vnd.docker.distribution.manifest.list.v2+json"
 
+// repository returns a client for the repository named repoName on the registry reg, using
+// anonymous pull access. A loopback registry (a local test registry) is reached over plain HTTP;
+// all others use HTTPS.
+func (f *Fetcher) repository(reg, repoName string) (*remote.Repository, error) {
+	repo, err := remote.NewRepository(reg + "/" + repoName)
+	if err != nil {
+		return nil, fmt.Errorf("new repository %s/%s: %w", reg, repoName, err)
+	}
+	repo.PlainHTTP = isLoopback(reg)
+	repo.Client = &auth.Client{
+		Client: f.client,
+		Cache:  auth.NewCache(),
+		Header: http.Header{"User-Agent": []string{"decolint"}},
+	}
+	return repo, nil
+}
+
 // fetchOCI retrieves a Feature distributed as an OCI artifact, using anonymous pull access. oras-go
 // handles the registry protocol (manifest resolution and the token handshake). Every manifest and
 // the layer blob are read through content.FetchAll, which verifies the bytes against the digest in
 // their descriptor; repo.Fetch on its own does not.
 func (f *Fetcher) fetchOCI(ctx context.Context, feat Ref) (*Metadata, error) {
-	repo, err := remote.NewRepository(feat.OCI.Registry + "/" + feat.OCI.Repository)
+	repo, err := f.repository(feat.OCI.Registry, feat.OCI.Repository)
 	if err != nil {
-		return nil, fmt.Errorf("new repository %s/%s: %w", feat.OCI.Registry, feat.OCI.Repository, err)
-	}
-	// Loopback registries (local test registries) are reached over plain HTTP; all others use HTTPS.
-	repo.PlainHTTP = isLoopback(feat.OCI.Registry)
-	repo.Client = &auth.Client{
-		Client: f.client,
-		Cache:  auth.NewCache(),
-		Header: http.Header{"User-Agent": []string{"decolint"}},
+		return nil, err
 	}
 
 	desc, err := repo.Resolve(ctx, feat.OCI.Reference)
@@ -104,8 +114,10 @@ func featureLayer(man ocispec.Manifest, manifestDigest string) (ocispec.Descript
 }
 
 // imageManifest fetches and parses the image manifest for desc and returns it with its digest. When
-// desc is an image index (Features are single-platform), it follows the first entry, and the
-// returned digest is that of the followed manifest.
+// desc is an image index, it follows the first entry, and the returned digest is that of the
+// followed manifest. Features are single-platform, and for a multi-platform container image any
+// entry serves: the "devcontainer.metadata" label is identical across platforms, and buildx places
+// attestation entries after the real platform manifests.
 func imageManifest(ctx context.Context, repo *remote.Repository, desc ocispec.Descriptor) (ocispec.Manifest, string, error) {
 	if desc.MediaType == ocispec.MediaTypeImageIndex || desc.MediaType == dockerManifestListMediaType {
 		raw, err := content.FetchAll(ctx, repo, desc)

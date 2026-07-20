@@ -92,11 +92,6 @@ func dockerfileContributors(ctx context.Context, f *Fetcher, fsRoot *os.Root, co
 	if !ok {
 		return nil, true, nil
 	}
-	// Without a filesystem boundary there is nothing to read the Dockerfile through; a caller that
-	// passes no root has no local files at all.
-	if fsRoot == nil {
-		return nil, true, nil
-	}
 	src, err := readDockerfile(fsRoot, filepath.Join(configDir, path))
 	if err != nil {
 		return nil, true, err

@@ -9,63 +9,7 @@ import (
 	"github.com/tailscale/hujson"
 )
 
-// mergeSrc parses src as a devcontainer.json, writes each named feature under a temporary
-// directory (referenced as "./<name>"), and merges. It returns the merged tree and the source, so
-// callers can locate anchors in it.
-func mergeSrc(t *testing.T, src string, features map[string]string) *hujson.Value {
-	t.Helper()
-	dir := t.TempDir()
-	for name, content := range features {
-		writeLocalFeature(t, dir, name, content)
-	}
-	root, err := hujson.Parse([]byte(src))
-	if err != nil {
-		t.Fatalf("parse devcontainer.json: %v", err)
-	}
-	if err := Merge(t.Context(), NewFetcher(), openRoot(t, dir), ".", &root); err != nil {
-		t.Fatalf("Merge: %v", err)
-	}
-	return &root
-}
-
-// assertJSON compares the merged tree, reduced to standard JSON, against want.
-func assertJSON(t *testing.T, root *hujson.Value, want string) {
-	t.Helper()
-	clone := root.Clone()
-	clone.Standardize()
-	var got, wantVal any
-	if err := json.Unmarshal(clone.Pack(), &got); err != nil {
-		t.Fatalf("unmarshal merged tree: %v", err)
-	}
-	if err := json.Unmarshal([]byte(want), &wantVal); err != nil {
-		t.Fatalf("unmarshal want: %v", err)
-	}
-	if diff := cmp.Diff(wantVal, got); diff != "" {
-		t.Errorf("merged configuration mismatch (-want +got):\n%s\n%s", diff, clone.Pack())
-	}
-}
-
-// resolveOrder writes each named Feature under a temp directory (referenced as "./<name>"), resolves
-// the devcontainer.json in src through installSequence, and returns the contributors in installation
-// order. It asserts on the resolved contributors directly, at a finer grain than the merged tree.
-func resolveOrder(t *testing.T, src string, features map[string]string) []*contributor {
-	t.Helper()
-	dir := t.TempDir()
-	for name, content := range features {
-		writeLocalFeature(t, dir, name, content)
-	}
-	root, err := hujson.Parse([]byte(src))
-	if err != nil {
-		t.Fatalf("parse devcontainer.json: %v", err)
-	}
-	ordered, err := installSequence(t.Context(), NewFetcher(), openRoot(t, dir), ".", &root)
-	if err != nil {
-		t.Fatalf("installSequence: %v", err)
-	}
-	return ordered
-}
-
-func TestMergeNoFeatures(t *testing.T) {
+func TestMerge_NoFeatures(t *testing.T) {
 	t.Parallel()
 
 	src := `{"image": "ubuntu:24.04"}`
@@ -73,7 +17,7 @@ func TestMergeNoFeatures(t *testing.T) {
 	assertJSON(t, root, src)
 }
 
-func TestMergeBooleanOr(t *testing.T) {
+func TestMerge_BooleanOr(t *testing.T) {
 	t.Parallel()
 
 	feature := `{"id": "f", "privileged": true, "init": true}`
@@ -98,7 +42,7 @@ func TestMergeBooleanOr(t *testing.T) {
 	})
 }
 
-func TestMergeUnionArrays(t *testing.T) {
+func TestMerge_UnionArrays(t *testing.T) {
 	t.Parallel()
 
 	root := mergeSrc(t,
@@ -114,7 +58,7 @@ func TestMergeUnionArrays(t *testing.T) {
 	}`)
 }
 
-func TestMergeContainerEnv(t *testing.T) {
+func TestMerge_ContainerEnv(t *testing.T) {
 	t.Parallel()
 
 	root := mergeSrc(t,
@@ -130,7 +74,7 @@ func TestMergeContainerEnv(t *testing.T) {
 	}`)
 }
 
-func TestMergeMounts(t *testing.T) {
+func TestMerge_Mounts(t *testing.T) {
 	t.Parallel()
 
 	root := mergeSrc(t,
@@ -156,7 +100,7 @@ func TestMergeMounts(t *testing.T) {
 	}`)
 }
 
-func TestMergeMountsUnparsableTargetPassthrough(t *testing.T) {
+func TestMerge_MountsUnparsableTargetPassthrough(t *testing.T) {
 	t.Parallel()
 
 	// A mount whose target cannot be determined (a string with no target key, or an object that
@@ -181,7 +125,7 @@ func TestMergeMountsUnparsableTargetPassthrough(t *testing.T) {
 	}`)
 }
 
-func TestMergeCustomizations(t *testing.T) {
+func TestMerge_Customizations(t *testing.T) {
 	t.Parallel()
 
 	root := mergeSrc(t,
@@ -205,7 +149,7 @@ func TestMergeCustomizations(t *testing.T) {
 	}`)
 }
 
-func TestMergeLifecycleHooks(t *testing.T) {
+func TestMerge_LifecycleHooks(t *testing.T) {
 	t.Parallel()
 
 	t.Run("user command in string form", func(t *testing.T) {
@@ -262,7 +206,7 @@ func TestMergeLifecycleHooks(t *testing.T) {
 	})
 }
 
-func TestMergeDependsOn(t *testing.T) {
+func TestMerge_DependsOn(t *testing.T) {
 	t.Parallel()
 
 	root := mergeSrc(t,
@@ -280,7 +224,7 @@ func TestMergeDependsOn(t *testing.T) {
 	}`)
 }
 
-func TestMergeAnchorsDeclaredDependencyAtOwnKey(t *testing.T) {
+func TestMerge_AnchorsDeclaredDependencyAtOwnKey(t *testing.T) {
 	t.Parallel()
 
 	// b is declared directly and is also a dependency of the earlier-declared a. Its contributions
@@ -308,7 +252,7 @@ func TestMergeAnchorsDeclaredDependencyAtOwnKey(t *testing.T) {
 	}
 }
 
-func TestMergeDependsOnCycle(t *testing.T) {
+func TestMerge_DependsOnCycle(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
@@ -323,19 +267,70 @@ func TestMergeDependsOnCycle(t *testing.T) {
 	}
 }
 
-func TestMergeFetchFailure(t *testing.T) {
+// TestMerge_ResolveErrors covers the resolution failures Merge surfaces before ordering: every point
+// at which installSequence, resolveAll, or applyOverride parses a reference or fetches a Feature. The
+// cases are same-shaped (Merge returns an error), only the failing reference differs.
+func TestMerge_ResolveErrors(t *testing.T) {
 	t.Parallel()
 
-	root, err := hujson.Parse([]byte(`{"features": {"./missing": {}}}`))
-	if err != nil {
-		t.Fatal(err)
+	tests := []struct {
+		name     string
+		src      string
+		features map[string]string
+	}{
+		{
+			name: "declared feature cannot be fetched",
+			src:  `{"features": {"./missing": {}}}`,
+		},
+		{
+			name: "declared reference is invalid",
+			src:  `{"features": {"no-slash": {}}}`,
+		},
+		{
+			name:     "dependsOn reference is invalid",
+			src:      `{"features": {"./a": {}}}`,
+			features: map[string]string{"a": `{"id": "a", "dependsOn": {"no-slash": {}}}`},
+		},
+		{
+			name:     "installsAfter reference is invalid",
+			src:      `{"features": {"./a": {}}}`,
+			features: map[string]string{"a": `{"id": "a", "installsAfter": ["no-slash"]}`},
+		},
+		{
+			name:     "installsAfter target cannot be fetched",
+			src:      `{"features": {"./a": {}}}`,
+			features: map[string]string{"a": `{"id": "a", "installsAfter": ["./missing"]}`},
+		},
+		{
+			name:     "override reference is invalid",
+			src:      `{"overrideFeatureInstallOrder": ["no-slash"], "features": {"./a": {}}}`,
+			features: map[string]string{"a": `{"id": "a"}`},
+		},
+		{
+			name:     "override target cannot be fetched",
+			src:      `{"overrideFeatureInstallOrder": ["./missing"], "features": {"./a": {}}}`,
+			features: map[string]string{"a": `{"id": "a"}`},
+		},
 	}
-	if err := Merge(t.Context(), NewFetcher(), openRoot(t, t.TempDir()), ".", &root); err == nil {
-		t.Error("Merge with an unresolvable feature: got nil error")
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			dir := t.TempDir()
+			for name, content := range tt.features {
+				writeLocalFeature(t, dir, name, content)
+			}
+			root, err := hujson.Parse([]byte(tt.src))
+			if err != nil {
+				t.Fatalf("parse devcontainer.json: %v", err)
+			}
+			if err := Merge(t.Context(), NewFetcher(), openRoot(t, dir), ".", &root); err == nil {
+				t.Error("Merge: got nil error, want a resolution error")
+			}
+		})
 	}
 }
 
-func TestMergeInstallsAfter(t *testing.T) {
+func TestMerge_InstallsAfter(t *testing.T) {
 	t.Parallel()
 
 	// b declares installsAfter a, so a installs first and b wins the conflict even though b is
@@ -352,7 +347,7 @@ func TestMergeInstallsAfter(t *testing.T) {
 	}`)
 }
 
-func TestMergeOverrideFeatureInstallOrder(t *testing.T) {
+func TestMerge_OverrideFeatureInstallOrder(t *testing.T) {
 	t.Parallel()
 
 	// The override moves b to the front, so a installs later and wins the conflict.
@@ -372,10 +367,10 @@ func TestMergeOverrideFeatureInstallOrder(t *testing.T) {
 	}`)
 }
 
-// TestMergeOverrideFeatureInstallOrderOCILegacyAlias covers the alias branch of applyOverride: an
+// TestMerge_OverrideFeatureInstallOrderOCILegacyAlias covers the alias branch of applyOverride: an
 // "overrideFeatureInstallOrder" entry that names a renamed OCI Feature by its current id must still
 // match a contributor requested under a legacy id, through the Feature's declared "legacyIds".
-func TestMergeOverrideFeatureInstallOrderOCILegacyAlias(t *testing.T) {
+func TestMerge_OverrideFeatureInstallOrderOCILegacyAlias(t *testing.T) {
 	t.Parallel()
 
 	host := startOCIRegistry(t)
@@ -493,7 +488,95 @@ func TestInstallSequence(t *testing.T) {
 	}
 }
 
-func TestMergeAnchorsPointAtFeatureKey(t *testing.T) {
+func TestInstallSequence_InstallsAfterNotPulledIn(t *testing.T) {
+	t.Parallel()
+
+	// b's soft dependency on ./c is resolved so it can be matched, but a soft dependency is never
+	// installed on its own: ./c is not otherwise part of the merge, so it must not appear as a
+	// contributor even though its metadata is fetched.
+	got := resolveOrder(t,
+		`{"features": {"./b": {}}}`,
+		map[string]string{
+			"b": `{"id": "b", "installsAfter": ["./c"], "containerEnv": {"SHARED": "b"}}`,
+			"c": `{"id": "c", "containerEnv": {"SHARED": "c"}}`,
+		})
+	assertOrder(t, got, []string{"./b{}"})
+}
+
+// TestInstallSequence_Override covers applyOverride's contribution: "overrideFeatureInstallOrder"
+// raises listed Features into earlier rounds by list position, and naming a Feature absent from the
+// merge changes nothing. The alias-matching branch is covered by
+// TestMerge_OverrideFeatureInstallOrderOCILegacyAlias.
+func TestInstallSequence_Override(t *testing.T) {
+	t.Parallel()
+
+	// All three Features are independent, so without the override they order by resource id alone.
+	features := map[string]string{
+		"a": `{"id": "a"}`,
+		"b": `{"id": "b"}`,
+		"c": `{"id": "c"}`,
+	}
+	tests := []struct {
+		name string
+		src  string
+		want []string
+	}{
+		{
+			// ./c is listed first (highest priority) and ./b second; each installs in its own earlier
+			// round, leaving the unlisted ./a for last.
+			name: "listed features move into earlier rounds by position",
+			src:  `{"overrideFeatureInstallOrder": ["./c", "./b"], "features": {"./a": {}, "./b": {}, "./c": {}}}`,
+			want: []string{"./c{}", "./b{}", "./a{}"},
+		},
+		{
+			// ./c is fetchable but not part of the merge, so naming it matches no contributor.
+			name: "listing a feature absent from the merge is a no-op",
+			src:  `{"overrideFeatureInstallOrder": ["./c"], "features": {"./a": {}, "./b": {}}}`,
+			want: []string{"./a{}", "./b{}"},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			got := resolveOrder(t, tt.src, features)
+			assertOrder(t, got, tt.want)
+		})
+	}
+}
+
+// TestInstallSequence_IgnoresMalformedShapes covers the type guards on "features" and
+// "overrideFeatureInstallOrder": a value of the wrong JSON type is ignored, not an error.
+func TestInstallSequence_IgnoresMalformedShapes(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		src  string
+		want []string
+	}{
+		{
+			// "features" that is not an object contributes nothing.
+			name: "features is not an object",
+			src:  `{"features": []}`,
+			want: []string{},
+		},
+		{
+			// "overrideFeatureInstallOrder" that is not an array is ignored, leaving the natural order.
+			name: "override is not an array",
+			src:  `{"overrideFeatureInstallOrder": {}, "features": {"./a": {}, "./b": {}}}`,
+			want: []string{"./a{}", "./b{}"},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			got := resolveOrder(t, tt.src, map[string]string{"a": `{"id": "a"}`, "b": `{"id": "b"}`})
+			assertOrder(t, got, tt.want)
+		})
+	}
+}
+
+func TestMerge_AnchorsPointAtFeatureKey(t *testing.T) {
 	t.Parallel()
 
 	src := `{
@@ -524,4 +607,60 @@ func TestMergeAnchorsPointAtFeatureKey(t *testing.T) {
 	if v := root.Find("/name"); v == nil || v.StartOffset != strings.Index(src, `"test"`) {
 		t.Errorf("/name StartOffset changed: %+v", v)
 	}
+}
+
+// mergeSrc parses src as a devcontainer.json, writes each named feature under a temporary
+// directory (referenced as "./<name>"), and merges. It returns the merged tree and the source, so
+// callers can locate anchors in it.
+func mergeSrc(t *testing.T, src string, features map[string]string) *hujson.Value {
+	t.Helper()
+	dir := t.TempDir()
+	for name, content := range features {
+		writeLocalFeature(t, dir, name, content)
+	}
+	root, err := hujson.Parse([]byte(src))
+	if err != nil {
+		t.Fatalf("parse devcontainer.json: %v", err)
+	}
+	if err := Merge(t.Context(), NewFetcher(), openRoot(t, dir), ".", &root); err != nil {
+		t.Fatalf("Merge: %v", err)
+	}
+	return &root
+}
+
+// assertJSON compares the merged tree, reduced to standard JSON, against want.
+func assertJSON(t *testing.T, root *hujson.Value, want string) {
+	t.Helper()
+	clone := root.Clone()
+	clone.Standardize()
+	var got, wantVal any
+	if err := json.Unmarshal(clone.Pack(), &got); err != nil {
+		t.Fatalf("unmarshal merged tree: %v", err)
+	}
+	if err := json.Unmarshal([]byte(want), &wantVal); err != nil {
+		t.Fatalf("unmarshal want: %v", err)
+	}
+	if diff := cmp.Diff(wantVal, got); diff != "" {
+		t.Errorf("merged configuration mismatch (-want +got):\n%s\n%s", diff, clone.Pack())
+	}
+}
+
+// resolveOrder writes each named Feature under a temp directory (referenced as "./<name>"), resolves
+// the devcontainer.json in src through installSequence, and returns the contributors in installation
+// order. It asserts on the resolved contributors directly, at a finer grain than the merged tree.
+func resolveOrder(t *testing.T, src string, features map[string]string) []*contributor {
+	t.Helper()
+	dir := t.TempDir()
+	for name, content := range features {
+		writeLocalFeature(t, dir, name, content)
+	}
+	root, err := hujson.Parse([]byte(src))
+	if err != nil {
+		t.Fatalf("parse devcontainer.json: %v", err)
+	}
+	ordered, err := installSequence(t.Context(), NewFetcher(), openRoot(t, dir), ".", &root)
+	if err != nil {
+		t.Fatalf("installSequence: %v", err)
+	}
+	return ordered
 }

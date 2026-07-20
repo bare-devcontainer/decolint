@@ -54,10 +54,17 @@ type contributor struct {
 
 // displayID returns the identifier used for members synthesized on behalf of this Feature.
 func (c *contributor) displayID() string {
-	if c.md != nil && c.md.ID != "" {
+	if c.hasID() {
 		return c.md.ID
 	}
 	return c.ref
+}
+
+// hasID reports whether this Feature declares an identifier. Image-metadata entries without an "id"
+// do not, so members synthesized for them (e.g. lifecycle hooks) must not be keyed as if they had a
+// stable identity: two such entries would otherwise collapse onto one key.
+func (c *contributor) hasID() bool {
+	return c.md != nil && c.md.ID != ""
 }
 
 // valueKind classifies an optionValue or optScalar. kindObject is first so it is the zero value: a

@@ -1,6 +1,7 @@
 package feature
 
 import (
+	"strconv"
 	"strings"
 
 	"github.com/tailscale/hujson"
@@ -47,6 +48,9 @@ type lifecycleEntry struct {
 	id     string
 	anchor int
 	value  hujson.Value
+	// keyed reports whether id is a stable Feature identifier. When false (an id-less image-metadata
+	// entry, where id is the shared image reference), the entry must not collapse onto another's key.
+	keyed bool
 }
 
 func newMergeState(root *hujson.Object) *mergeState {
@@ -334,14 +338,18 @@ func (s *mergeState) collectLifecycle(c *contributor) {
 			id:     c.displayID(),
 			anchor: c.anchor,
 			value:  anchored(*v, c.anchor),
+			keyed:  c.hasID(),
 		})
 	}
 }
 
 // finishLifecycle rewrites each lifecycle hook at least one Feature contributes to into the
 // specification's object form, with one member per contributed command keyed by the Feature's ID.
-// The user's own command is preserved: an object-form value contributes its members verbatim (they
-// win name conflicts), any other form is kept under the "devcontainer.json" key.
+// A contributor without an ID (an image-metadata entry with no "id") has no stable identity; its
+// command is kept under a distinct key rather than collapsed onto another id-less entry's, so every
+// contributed command survives, as the reference implementation runs them all. The user's own
+// command is preserved: an object-form value contributes its members verbatim (they win name
+// conflicts), any other form is kept under the "devcontainer.json" key.
 func (s *mergeState) finishLifecycle() {
 	for _, hook := range lifecycleHooks {
 		entries := s.lifecycle[hook]
@@ -350,11 +358,13 @@ func (s *mergeState) finishLifecycle() {
 		}
 		merged := &hujson.Object{}
 		for _, e := range entries {
-			if i := findMember(merged, e.id); i >= 0 {
-				merged.Members[i].Value = e.value
-			} else {
-				appendMember(merged, e.id, e.value, e.anchor)
+			if e.keyed {
+				if i := findMember(merged, e.id); i >= 0 {
+					merged.Members[i].Value = e.value
+					continue
+				}
 			}
+			appendMember(merged, uniqueMemberName(merged, e.id), e.value, e.anchor)
 		}
 
 		i := findMember(s.root, hook)
@@ -401,6 +411,21 @@ func findMember(obj *hujson.Object, name string) int {
 		}
 	}
 	return -1
+}
+
+// uniqueMemberName returns name if obj has no such member, otherwise name with a "#N" suffix that
+// obj does not yet use. It keeps distinct id-less contributions (which share a synthesized key) from
+// collapsing into a single member.
+func uniqueMemberName(obj *hujson.Object, name string) string {
+	if findMember(obj, name) < 0 {
+		return name
+	}
+	for n := 2; ; n++ {
+		candidate := name + "#" + strconv.Itoa(n)
+		if findMember(obj, candidate) < 0 {
+			return candidate
+		}
+	}
 }
 
 // appendMember appends a member to obj with a synthesized name carrying the anchor offset, and

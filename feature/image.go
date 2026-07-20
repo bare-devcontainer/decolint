@@ -51,7 +51,6 @@ func (f *Fetcher) FetchImageMetadata(ctx context.Context, raw string) ([]*Metada
 	res, ok := f.imageCache[raw]
 	f.mu.Unlock()
 	if !ok {
-		_, _ = fmt.Fprintf(f.log, "Downloading image metadata(%s)\n", raw)
 		res.entries, res.err = f.fetchImageMetadata(ctx, raw)
 		if res.err != nil {
 			res.err = fmt.Errorf("fetch image %q: %w", raw, res.err)
@@ -64,44 +63,78 @@ func (f *Fetcher) FetchImageMetadata(ctx context.Context, raw string) ([]*Metada
 }
 
 func (f *Fetcher) fetchImageMetadata(ctx context.Context, raw string) ([]*Metadata, error) {
-	ref, err := parseImageRef(raw)
+	img, err := f.fetchImageConfig(ctx, raw)
 	if err != nil {
 		return nil, err
+	}
+	label, ok := img.config.Config.Labels[imageMetadataLabel]
+	if !ok {
+		return nil, nil
+	}
+	return imageMetadataEntries([]byte(label)), nil
+}
+
+// fetchImageConfig retrieves the config of the container image referenced by raw, along with the
+// digest of the resolved image manifest. Every result, including a failure, is cached for the
+// lifetime of the Fetcher; an image serving both the "image" property and a Dockerfile's FROM is
+// downloaded once.
+func (f *Fetcher) fetchImageConfig(ctx context.Context, raw string) (imageConfig, error) {
+	f.mu.Lock()
+	res, ok := f.imageConfigCache[raw]
+	f.mu.Unlock()
+	if !ok {
+		_, _ = fmt.Fprintf(f.log, "Downloading image metadata(%s)\n", raw)
+		res.cfg, res.err = f.fetchImageConfigUncached(ctx, raw)
+		f.mu.Lock()
+		f.imageConfigCache[raw] = res
+		f.mu.Unlock()
+	}
+	return res.cfg, res.err
+}
+
+// imageConfig is a container image's fetched config blob: its raw bytes, its decoded form, and the
+// digest of the image manifest it was resolved through.
+type imageConfig struct {
+	raw            []byte
+	config         ocispec.Image
+	manifestDigest string
+}
+
+func (f *Fetcher) fetchImageConfigUncached(ctx context.Context, raw string) (imageConfig, error) {
+	ref, err := parseImageRef(raw)
+	if err != nil {
+		return imageConfig{}, err
 	}
 	repo, err := f.repository(ref.Registry, ref.Repository)
 	if err != nil {
-		return nil, err
+		return imageConfig{}, err
 	}
 	desc, err := repo.Resolve(ctx, ref.Reference)
 	if err != nil {
-		return nil, fmt.Errorf("resolve %s: %w", ref.Reference, err)
+		return imageConfig{}, fmt.Errorf("resolve %s: %w", ref.Reference, err)
 	}
-	man, _, err := imageManifest(ctx, repo, desc)
+	man, manifestDigest, err := imageManifest(ctx, repo, desc)
 	if err != nil {
-		return nil, err
+		return imageConfig{}, err
 	}
 	// Reject an oversized config before reading it into memory, for the same reason the Feature
 	// layer fetch bounds its blob.
 	if man.Config.Size > maxImageConfigBytes {
-		return nil, fmt.Errorf("config %s size %d exceeds %d bytes", man.Config.Digest, man.Config.Size, maxImageConfigBytes)
+		return imageConfig{}, fmt.Errorf("config %s size %d exceeds %d bytes", man.Config.Digest, man.Config.Size, maxImageConfigBytes)
 	}
 	// content.FetchAll verifies the fetched bytes against the config descriptor's size and digest;
 	// repo.Fetch alone does not hash the body.
 	blob, err := content.FetchAll(ctx, repo, man.Config)
 	if err != nil {
-		return nil, fmt.Errorf("fetch config %s: %w", man.Config.Digest, err)
+		return imageConfig{}, fmt.Errorf("fetch config %s: %w", man.Config.Digest, err)
 	}
 	// Both OCI and Docker image configs carry labels at the same path, so the config is decoded
 	// without a media-type check; a non-image config simply has no labels and degrades to a no-op.
 	var img ocispec.Image
 	if err := json.Unmarshal(blob, &img); err != nil {
-		return nil, fmt.Errorf("decode config %s: %w", man.Config.Digest, err)
+		return imageConfig{}, fmt.Errorf("decode config %s: %w", man.Config.Digest, err)
 	}
-	label, ok := img.Config.Labels[imageMetadataLabel]
-	if !ok {
-		return nil, nil
-	}
-	return imageMetadataEntries([]byte(label)), nil
+	return imageConfig{raw: blob, config: img, manifestDigest: manifestDigest}, nil
 }
 
 // imageMetadataEntries parses the value of a "devcontainer.metadata" image label: an array of

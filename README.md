@@ -126,18 +126,23 @@ decolint -merge
 
 This fetches every referenced Feature to read its contributed
 configuration: OCI references are pulled from their registry, HTTP(S)
-URLs are downloaded, and local paths are read from disk. It also reads
-the base image named by `image` and merges the metadata carried by its
+URLs are downloaded, and local paths are read from disk. It also
+resolves the base image and merges the metadata carried by its
 [`devcontainer.metadata`](https://containers.dev/implementors/spec/#image-metadata)
 label. Image metadata is the lowest-precedence input: a Feature, and
 then the `devcontainer.json` itself, override it. A Feature or image
 that cannot be fetched is an error (exit code 2).
 
-The base image is resolved only from the `image` property, using
-anonymous registry access. A base image reached through `build` (a
-Dockerfile `FROM`) or `dockerComposeFile` is not resolved, an `image`
-containing an unresolved `${...}` variable is skipped, and a private
-image the anonymous client cannot pull is an error.
+The base image is the image named by `image`, or, for a Dockerfile
+configuration, the image the Dockerfile named by `build.dockerfile`
+(or the legacy `dockerFile` property) would build: `LABEL`
+instructions in the Dockerfile and the label inherited from the image
+its `FROM` names both contribute, honoring `build.args` and
+`build.target`. Registries are accessed anonymously. A base image
+reached through `dockerComposeFile` is not resolved, an `image` or
+Dockerfile path containing an unresolved `${...}` variable is
+skipped, and a private image the anonymous client cannot pull is an
+error.
 
 ### Output formats
 

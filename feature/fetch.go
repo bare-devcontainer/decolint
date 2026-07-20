@@ -3,6 +3,7 @@ package feature
 import (
 	"context"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -30,6 +31,7 @@ const metadataFileName = "devcontainer-feature.json"
 // reference shared by several files is fetched at most once per run.
 type Fetcher struct {
 	client *http.Client
+	log    io.Writer
 
 	mu    sync.Mutex
 	cache map[string]fetchResult
@@ -40,15 +42,29 @@ type fetchResult struct {
 	err error
 }
 
-// NewFetcher returns a Fetcher with a default HTTP client.
-func NewFetcher() *Fetcher {
-	return &Fetcher{
+// Option configures a Fetcher created by NewFetcher.
+type Option func(*Fetcher)
+
+// WithLogWriter announces each remote download (an OCI artifact or a tarball) as a human-readable
+// line on w. Without it a Fetcher downloads silently.
+func WithLogWriter(w io.Writer) Option {
+	return func(f *Fetcher) { f.log = w }
+}
+
+// NewFetcher returns a Fetcher with a default HTTP client, configured by the given options.
+func NewFetcher(opts ...Option) *Fetcher {
+	f := &Fetcher{
 		client: &http.Client{
 			Timeout:       30 * time.Second,
 			CheckRedirect: refuseInsecureRedirect,
 		},
+		log:   io.Discard,
 		cache: map[string]fetchResult{},
 	}
+	for _, opt := range opts {
+		opt(f)
+	}
+	return f
 }
 
 // refuseInsecureRedirect rejects a redirect that downgrades an HTTPS request to plain HTTP. A tarball
@@ -101,8 +117,10 @@ func (f *Fetcher) fetch(ctx context.Context, ref Ref, fsRoot *os.Root, configDir
 	case KindLocal:
 		return fetchLocal(fsRoot, filepath.Join(configDir, ref.Raw))
 	case KindTarball:
+		_, _ = fmt.Fprintf(f.log, "Downloading feature(%s)\n", ref.Raw)
 		return f.fetchTarball(ctx, ref.Raw)
 	default:
+		_, _ = fmt.Fprintf(f.log, "Downloading feature(%s)\n", ref.Raw)
 		return f.fetchOCI(ctx, ref)
 	}
 }

@@ -6,6 +6,7 @@ import (
 	"encoding/json/v2"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -687,7 +688,7 @@ func TestRunLint(t *testing.T) {
 		dir := writeDevcontainer(t, `{"image": "ubuntu:latest"}`)
 
 		var stdout bytes.Buffer
-		hasIssue, runErr := runLint(t.Context(), &stdout, Options{Paths: []string{dir}, Format: format.TextFormat{}}, Config{})
+		hasIssue, runErr := runLint(t.Context(), &stdout, io.Discard, Options{Paths: []string{dir}, Format: format.TextFormat{}}, Config{})
 		if runErr != nil || hasIssue {
 			t.Errorf("hasIssue = %v, err = %v, want false, nil; stdout: %s", hasIssue, runErr, stdout.String())
 		}
@@ -703,7 +704,7 @@ func TestRunLint(t *testing.T) {
 			Format: format.TextFormat{},
 		}
 		cfg := Config{Rules: map[string]linter.Severity{"no-image-latest": linter.SeverityError}}
-		hasIssue, runErr := runLint(t.Context(), &stdout, opts, cfg)
+		hasIssue, runErr := runLint(t.Context(), &stdout, io.Discard, opts, cfg)
 		if runErr != nil || !hasIssue {
 			t.Errorf("hasIssue = %v, err = %v, want true, nil; stdout: %s", hasIssue, runErr, stdout.String())
 		}
@@ -719,7 +720,7 @@ func TestRunLint(t *testing.T) {
 			Format: format.TextFormat{},
 		}
 		cfg := Config{Rules: map[string]linter.Severity{"missing-container-def": linter.SeverityOff}}
-		hasIssue, runErr := runLint(t.Context(), &stdout, opts, cfg)
+		hasIssue, runErr := runLint(t.Context(), &stdout, io.Discard, opts, cfg)
 		if runErr != nil || hasIssue {
 			t.Errorf("hasIssue = %v, err = %v, want false, nil; stdout: %s", hasIssue, runErr, stdout.String())
 		}
@@ -733,7 +734,7 @@ func TestRunLint(t *testing.T) {
 			Format: format.TextFormat{},
 		}
 		cfg := Config{Rules: map[string]linter.Severity{"no-image-latst": linter.SeverityError}}
-		hasIssue, runErr := runLint(t.Context(), &stdout, opts, cfg)
+		hasIssue, runErr := runLint(t.Context(), &stdout, io.Discard, opts, cfg)
 		if runErr == nil || hasIssue {
 			t.Errorf("hasIssue = %v, err = %v, want false, non-nil", hasIssue, runErr)
 		}
@@ -752,7 +753,7 @@ func TestRunLint(t *testing.T) {
 			Format: format.TextFormat{},
 		}
 		cfg := Config{Categories: map[string]linter.Severity{"reproducibility": linter.SeverityError}}
-		hasIssue, runErr := runLint(t.Context(), &stdout, opts, cfg)
+		hasIssue, runErr := runLint(t.Context(), &stdout, io.Discard, opts, cfg)
 		if runErr != nil || !hasIssue {
 			t.Errorf("hasIssue = %v, err = %v, want true, nil; stdout: %s", hasIssue, runErr, stdout.String())
 		}
@@ -766,7 +767,7 @@ func TestRunLint(t *testing.T) {
 			Format: format.TextFormat{},
 		}
 		cfg := Config{Categories: map[string]linter.Severity{"secure": linter.SeverityError}}
-		hasIssue, runErr := runLint(t.Context(), &stdout, opts, cfg)
+		hasIssue, runErr := runLint(t.Context(), &stdout, io.Discard, opts, cfg)
 		if runErr == nil || hasIssue {
 			t.Errorf("hasIssue = %v, err = %v, want false, non-nil", hasIssue, runErr)
 		}
@@ -781,7 +782,7 @@ func TestRunLint(t *testing.T) {
 		file := filepath.Join(dir, ".devcontainer", "devcontainer.json")
 
 		var stdout bytes.Buffer
-		hasIssue, runErr := runLint(t.Context(), &stdout, Options{Paths: []string{file}, Format: format.TextFormat{}}, Config{})
+		hasIssue, runErr := runLint(t.Context(), &stdout, io.Discard, Options{Paths: []string{file}, Format: format.TextFormat{}}, Config{})
 		if runErr == nil || hasIssue {
 			t.Errorf("hasIssue = %v, err = %v, want false, 'not a directory'", hasIssue, runErr)
 		}
@@ -797,7 +798,7 @@ func TestRunLint(t *testing.T) {
 			Format: format.TextFormat{},
 		}
 		cfg := Config{Rules: map[string]linter.Severity{"no-bind-mount": linter.SeverityError}}
-		hasIssue, runErr := runLint(t.Context(), &stdout, opts, cfg)
+		hasIssue, runErr := runLint(t.Context(), &stdout, io.Discard, opts, cfg)
 		if runErr != nil || hasIssue {
 			t.Errorf("hasIssue = %v, err = %v, want false, nil; stdout: %s", hasIssue, runErr, stdout.String())
 		}

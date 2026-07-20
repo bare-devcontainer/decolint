@@ -91,7 +91,7 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 		return exitCodeSuccess
 	}
 
-	hasIssue, err := runLint(ctx, stdout, opts, cfg)
+	hasIssue, err := runLint(ctx, stdout, stderr, opts, cfg)
 	if err != nil {
 		_, _ = fmt.Fprintln(stderr, progName+":", err)
 		return exitCodeError
@@ -226,7 +226,7 @@ Flags:
 	return nil
 }
 
-func runLint(ctx context.Context, stdout io.Writer, opts Options, cfg Config) (bool, error) {
+func runLint(ctx context.Context, stdout, stderr io.Writer, opts Options, cfg Config) (bool, error) {
 	threshold := failThreshold
 	if opts.DenyWarnings {
 		threshold = linter.SeverityWarn
@@ -240,7 +240,7 @@ func runLint(ctx context.Context, stdout io.Writer, opts Options, cfg Config) (b
 	var merge mergeFn
 	if cfg.Merge {
 		// One Fetcher per run, so a Feature shared by several files is fetched at most once.
-		fetcher := feature.NewFetcher()
+		fetcher := feature.NewFetcher(feature.WithLogWriter(stderr))
 		merge = func(ctx context.Context, f discovery.ConfigFile, doc *linter.Document) error {
 			return feature.Merge(ctx, fetcher, f.Root, filepath.Dir(f.Path), doc.Tree())
 		}

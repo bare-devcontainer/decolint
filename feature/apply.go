@@ -268,8 +268,7 @@ func deepMerge(dst *hujson.Value, src hujson.Value) {
 			}
 			return
 		}
-	}
-	if dstArr, ok := dst.Value.(*hujson.Array); ok {
+	} else if dstArr, ok := dst.Value.(*hujson.Array); ok {
 		if srcArr, ok := src.Value.(*hujson.Array); ok {
 			for _, e := range srcArr.Elements {
 				if lit, ok := e.Value.(hujson.Literal); ok && lit.Kind() == '"' && arrayContainsString(dstArr, lit.String()) {

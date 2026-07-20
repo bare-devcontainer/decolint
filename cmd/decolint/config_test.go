@@ -16,12 +16,14 @@ func TestConfigMarshalJSONTo(t *testing.T) {
 	t.Run("all fields present", func(t *testing.T) {
 		t.Parallel()
 		cfg := Config{
-			Platforms:     []linter.Platform{linter.PlatformVSCode, linter.PlatformCodespaces},
-			Merge: true,
-			Categories:    map[string]linter.Severity{"security": linter.SeverityError},
-			Rules:         map[string]linter.Severity{"no-image-latest": linter.SeverityError},
+			Platforms:    []linter.Platform{linter.PlatformVSCode, linter.PlatformCodespaces},
+			Merge:        true,
+			DenyWarnings: true,
+			Format:       "github",
+			Categories:   map[string]linter.Severity{"security": linter.SeverityError},
+			Rules:        map[string]linter.Severity{"no-image-latest": linter.SeverityError},
 		}
-		want := `{"platforms":["vscode","codespaces"],"merge":true,"categories":{"security":"error"},"rules":{"no-image-latest":"error"}}`
+		want := `{"platforms":["vscode","codespaces"],"merge":true,"denyWarnings":true,"format":"github","categories":{"security":"error"},"rules":{"no-image-latest":"error"}}`
 		got, err := json.Marshal(cfg)
 		if err != nil {
 			t.Fatalf("json.Marshal: %v", err)
@@ -33,7 +35,8 @@ func TestConfigMarshalJSONTo(t *testing.T) {
 
 	t.Run("all optional fields absent", func(t *testing.T) {
 		t.Parallel()
-		// Platforms, merge, and categories are omitted when empty; rules is always written.
+		// Platforms, merge, denyWarnings, format, and categories are omitted when empty or false;
+		// rules is always written.
 		want := `{"rules":{}}`
 		got, err := json.Marshal(Config{})
 		if err != nil {
@@ -135,6 +138,18 @@ func TestParseConfig(t *testing.T) {
 			"merge",
 			`{"merge": true}`,
 			Config{Merge: true},
+			false,
+		},
+		{
+			"denyWarnings",
+			`{"denyWarnings": true}`,
+			Config{DenyWarnings: true},
+			false,
+		},
+		{
+			"format",
+			`{"format": "json"}`,
+			Config{Format: "json"},
 			false,
 		},
 		{"invalid severity", `{"rules": {"no-image-latest": "critical"}}`, Config{}, true},
@@ -270,6 +285,36 @@ func TestMergeConfig(t *testing.T) {
 			Options{Merge: false, mergeSet: true},
 			Config{Merge: true},
 			Config{Merge: false},
+		},
+		{
+			"CLI deny-warnings flag enables it",
+			Options{DenyWarnings: true, denyWarningsSet: true},
+			Config{},
+			Config{DenyWarnings: true},
+		},
+		{
+			"CLI deny-warnings not given falls back to config file denyWarnings",
+			Options{},
+			Config{DenyWarnings: true},
+			Config{DenyWarnings: true},
+		},
+		{
+			"CLI deny-warnings=false overrides config file denyWarnings: true",
+			Options{DenyWarnings: false, denyWarningsSet: true},
+			Config{DenyWarnings: true},
+			Config{DenyWarnings: false},
+		},
+		{
+			"CLI format overrides config file format",
+			Options{Format: "github"},
+			Config{Format: "json"},
+			Config{Format: "github"},
+		},
+		{
+			"CLI format unset falls back to config file format",
+			Options{},
+			Config{Format: "json"},
+			Config{Format: "json"},
 		},
 	}
 	for _, tt := range tests {

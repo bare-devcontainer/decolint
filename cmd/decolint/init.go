@@ -40,6 +40,12 @@ func initConfigFile(output io.Writer) error {
 // "merge", when true, fetches the Features referenced in each
 // devcontainer.json and lints the merged (effective) configuration, e.g.:
 //   "merge": true
+// "denyWarnings", when true, treats warnings as failures (exit code 1);
+// the -deny-warnings flag takes precedence, e.g.:
+//   "denyWarnings": true
+// "format" selects the output format ("text", "json", or "github"); the
+// -format flag takes precedence, e.g.:
+//   "format": "github"
 `)
 	if err := json.MarshalWrite(&buf, cfg, jsontext.Multiline(true)); err != nil {
 		return fmt.Errorf("marshal %s: %w", name, err)

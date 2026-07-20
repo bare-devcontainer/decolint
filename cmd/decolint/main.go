@@ -227,8 +227,13 @@ Flags:
 }
 
 func runLint(ctx context.Context, stdout, stderr io.Writer, opts Options, cfg Config) (bool, error) {
+	outputFormat, err := parseFormat(cfg.Format)
+	if err != nil {
+		return false, err
+	}
+
 	threshold := failThreshold
-	if opts.DenyWarnings {
+	if cfg.DenyWarnings {
 		threshold = linter.SeverityWarn
 	}
 
@@ -262,7 +267,7 @@ func runLint(ctx context.Context, stdout, stderr io.Writer, opts Options, cfg Co
 		}
 	}
 
-	if err := opts.Format.WriteIssues(stdout, allIssues); err != nil {
+	if err := outputFormat.WriteIssues(stdout, allIssues); err != nil {
 		return false, errors.Join(lintErr, fmt.Errorf("write issues: %w", err))
 	}
 	if lintErr != nil {

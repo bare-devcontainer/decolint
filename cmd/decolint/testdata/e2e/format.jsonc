@@ -1,0 +1,6 @@
+// Config for the e2e test: selects the JSON output format and both platforms from the config
+// file, to exercise the "format" member and the -format flag's precedence over it.
+{
+	"platforms": ["vscode", "codespaces"],
+	"format": "json"
+}

@@ -1050,6 +1050,80 @@ func TestRun_Merge(t *testing.T) {
 			t.Errorf("stderr = %q, want it to mention the unreachable image", stderr.String())
 		}
 	})
+
+	t.Run("merges metadata from a build Dockerfile LABEL", func(t *testing.T) {
+		t.Parallel()
+
+		// The Dockerfile's own LABEL carries the metadata, so the run is hermetic: FROM scratch needs
+		// no registry. The "dockerfile" key sits on line 3, where every merged-in finding must anchor.
+		body := "{\n  \"build\": {\n    \"dockerfile\": \"Dockerfile\"\n  }\n}"
+		dir := writeDevcontainer(t, body)
+		writeDockerfile(t, dir, `FROM scratch
+LABEL devcontainer.metadata='[{"privileged": true, "mounts": ["source=/var/run/docker.sock,target=/var/run/docker.sock,type=bind"]}]'
+`)
+
+		var stdout, stderr bytes.Buffer
+		args := []string{"-format=json", "-merge", "-config=testdata/e2e/merge.jsonc", dir}
+		exitCode := run(t.Context(), args, &stdout, &stderr)
+		if exitCode != 1 {
+			t.Fatalf("exit code = %d, want 1; stderr: %s", exitCode, stderr.String())
+		}
+		for _, ruleID := range []string{"no-privileged-container", "no-docker-socket-mount"} {
+			if !hasRule(t, stdout.Bytes(), ruleID) {
+				t.Errorf("want %s to fire on the merged Dockerfile metadata; output: %s", ruleID, stdout.String())
+			}
+		}
+		var issues []linter.Issue
+		if err := json.Unmarshal(stdout.Bytes(), &issues); err != nil {
+			t.Fatalf("output is not a JSON issue array: %v\noutput: %s", err, stdout.String())
+		}
+		for _, issue := range issues {
+			if issue.Line != 3 {
+				t.Errorf("issue %s reported at line %d, want 3 (the dockerfile reference)", issue.RuleID, issue.Line)
+			}
+		}
+	})
+
+	t.Run("merges base image metadata through a Dockerfile FROM", func(t *testing.T) {
+		t.Parallel()
+
+		host := ocitest.Registry(t)
+		ocitest.PushImage(t, host, "base", "1", map[string]string{
+			"devcontainer.metadata": `[{"privileged": true, "mounts": ["source=/var/run/docker.sock,target=/var/run/docker.sock,type=bind"]}]`,
+		}, false)
+
+		dir := writeDevcontainer(t, `{"build": {"dockerfile": "Dockerfile"}}`)
+		writeDockerfile(t, dir, fmt.Sprintf("FROM %s/base:1\n", host))
+
+		var stdout, stderr bytes.Buffer
+		args := []string{"-format=json", "-merge", "-config=testdata/e2e/merge.jsonc", dir}
+		exitCode := run(t.Context(), args, &stdout, &stderr)
+		if exitCode != 1 {
+			t.Fatalf("exit code = %d, want 1; stderr: %s", exitCode, stderr.String())
+		}
+		for _, ruleID := range []string{"no-privileged-container", "no-docker-socket-mount"} {
+			if !hasRule(t, stdout.Bytes(), ruleID) {
+				t.Errorf("want %s to fire on the inherited base image metadata; output: %s", ruleID, stdout.String())
+			}
+		}
+	})
+
+	t.Run("a Dockerfile base image fetch failure is a runtime error", func(t *testing.T) {
+		t.Parallel()
+		// The base image named by FROM never resolves, so building the Dockerfile fails and the
+		// failure must surface as exit code 2 rather than a lint result.
+		dir := writeDevcontainer(t, `{"build": {"dockerfile": "Dockerfile"}}`)
+		writeDockerfile(t, dir, "FROM registry.invalid/base:1\n")
+
+		var stdout, stderr bytes.Buffer
+		exitCode := run(t.Context(), []string{"-merge", dir}, &stdout, &stderr)
+		if exitCode != 2 {
+			t.Errorf("exit code = %d, want 2; stdout: %s", exitCode, stdout.String())
+		}
+		if !strings.Contains(stderr.String(), "registry.invalid") {
+			t.Errorf("stderr = %q, want it to mention the unreachable base image", stderr.String())
+		}
+	})
 }
 
 // imageRule is a stub rule that flags any "image" property, used to observe which files a lint
@@ -1245,6 +1319,16 @@ func writeDevcontainer(t *testing.T, body string) string {
 		t.Fatalf("WriteFile: %v", err)
 	}
 	return dir
+}
+
+// writeDockerfile writes content as the .devcontainer/Dockerfile of the devcontainer directory dir
+// created by writeDevcontainer, the path a "build.dockerfile" of "Dockerfile" resolves to.
+func writeDockerfile(t *testing.T, dir, content string) {
+	t.Helper()
+	path := filepath.Join(dir, ".devcontainer", "Dockerfile")
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
 }
 
 // baseImageRef pushes a metadata-less base image to host and returns its reference. Using it as the

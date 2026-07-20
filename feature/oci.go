@@ -120,6 +120,9 @@ func featureLayer(man ocispec.Manifest, manifestDigest string) (ocispec.Descript
 // attestation entries after the real platform manifests.
 func imageManifest(ctx context.Context, repo *remote.Repository, desc ocispec.Descriptor) (ocispec.Manifest, string, error) {
 	if desc.MediaType == ocispec.MediaTypeImageIndex || desc.MediaType == dockerManifestListMediaType {
+		if desc.Size > maxManifestBytes {
+			return ocispec.Manifest{}, "", fmt.Errorf("index %s size %d exceeds %d bytes", desc.Digest, desc.Size, maxManifestBytes)
+		}
 		raw, err := content.FetchAll(ctx, repo, desc)
 		if err != nil {
 			return ocispec.Manifest{}, "", fmt.Errorf("fetch index %s: %w", desc.Digest, err)
@@ -134,6 +137,12 @@ func imageManifest(ctx context.Context, repo *remote.Repository, desc ocispec.De
 		desc = index.Manifests[0]
 	}
 
+	// Reject an oversized manifest before reading it into memory. content.FetchAll must buffer the
+	// whole body to verify its digest, and desc.Size comes from the registry (or, for the followed
+	// entry, from an attacker-controllable index), so the declared size is the only bound available.
+	if desc.Size > maxManifestBytes {
+		return ocispec.Manifest{}, "", fmt.Errorf("manifest %s size %d exceeds %d bytes", desc.Digest, desc.Size, maxManifestBytes)
+	}
 	raw, err := content.FetchAll(ctx, repo, desc)
 	if err != nil {
 		return ocispec.Manifest{}, "", fmt.Errorf("fetch manifest %s: %w", desc.Digest, err)

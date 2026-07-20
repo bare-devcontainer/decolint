@@ -178,3 +178,61 @@ func TestFetchOCI_RejectsOversizedLayer(t *testing.T) {
 		t.Errorf("error = %v, want it to mention exceeding the size limit", err)
 	}
 }
+
+// TestFetchOCI_RejectsOversizedManifest covers rejecting a manifest whose declared size exceeds the
+// cap before it is fetched. The oversized size is declared on the index entry the fetch follows,
+// which the test controls, unlike the top-level descriptor a registry HEAD supplies.
+func TestFetchOCI_RejectsOversizedManifest(t *testing.T) {
+	t.Parallel()
+
+	host := ocitest.Registry(t)
+	ctx := t.Context()
+	repo, err := remote.NewRepository(host + "/devcontainers/features/bigmanifest")
+	if err != nil {
+		t.Fatal(err)
+	}
+	repo.PlainHTTP = true
+
+	push := func(mediaType string, data []byte) ocispec.Descriptor {
+		desc := ocispec.Descriptor{MediaType: mediaType, Digest: digest.FromBytes(data), Size: int64(len(data))}
+		if err := repo.Push(ctx, desc, bytes.NewReader(data)); err != nil {
+			t.Fatal(err)
+		}
+		return desc
+	}
+
+	configDesc := push("application/vnd.devcontainers", []byte("{}"))
+	layerDesc := push(featureLayerMediaType, ocitest.FeatureArchive(t, `{"id": "bigmanifest"}`, false))
+	manBytes := mustMarshal(t, ocispec.Manifest{
+		Versioned: specs.Versioned{SchemaVersion: 2},
+		MediaType: ocispec.MediaTypeImageManifest,
+		Config:    configDesc,
+		Layers:    []ocispec.Descriptor{layerDesc},
+	})
+	manDesc := push(ocispec.MediaTypeImageManifest, manBytes)
+	// Declare a manifest larger than the cap while the stored blob is unchanged: the size guard must
+	// reject the followed entry before its blob is fetched.
+	manDesc.Size = maxManifestBytes + 1
+
+	indexBytes := mustMarshal(t, ocispec.Index{
+		Versioned: specs.Versioned{SchemaVersion: 2},
+		MediaType: ocispec.MediaTypeImageIndex,
+		Manifests: []ocispec.Descriptor{manDesc},
+	})
+	indexDesc := ocispec.Descriptor{
+		MediaType: ocispec.MediaTypeImageIndex,
+		Digest:    digest.FromBytes(indexBytes),
+		Size:      int64(len(indexBytes)),
+	}
+	if err := repo.PushReference(ctx, indexDesc, bytes.NewReader(indexBytes), "1"); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err = NewFetcher().Fetch(ctx, host+"/devcontainers/features/bigmanifest:1", nil, "")
+	if err == nil {
+		t.Fatal("Fetch of an oversized manifest: got nil error")
+	}
+	if !strings.Contains(err.Error(), "exceeds") {
+		t.Errorf("error = %v, want it to mention exceeding the size limit", err)
+	}
+}

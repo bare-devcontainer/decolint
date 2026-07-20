@@ -9,7 +9,7 @@ import (
 	"github.com/google/go-cmp/cmp"
 )
 
-func TestRegisterRulesUnknownOverrides(t *testing.T) {
+func TestRegisterRules_UnknownOverrides(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
@@ -61,7 +61,7 @@ func TestRegisterRulesUnknownOverrides(t *testing.T) {
 	}
 }
 
-func TestRegisterRulesPlatformFilter(t *testing.T) {
+func TestRegisterRules_PlatformFilter(t *testing.T) {
 	t.Parallel()
 
 	// no-bind-mount is scoped to PlatformCodespaces, so it should only fire when that
@@ -92,7 +92,7 @@ func TestRegisterRulesPlatformFilter(t *testing.T) {
 	}
 }
 
-func TestRegisterRulesDefaultOffRule(t *testing.T) {
+func TestRegisterRules_DefaultOffRule(t *testing.T) {
 	t.Parallel()
 
 	// no-seccomp-override is off by default, so it should never fire without an override, even
@@ -109,7 +109,7 @@ func TestRegisterRulesDefaultOffRule(t *testing.T) {
 	}
 }
 
-func TestRegisterRulesOverrideEnablesOffDefaultRule(t *testing.T) {
+func TestRegisterRules_OverrideEnablesOffDefaultRule(t *testing.T) {
 	t.Parallel()
 
 	const src = `{"securityOpt": ["seccomp=custom.json"]}`
@@ -135,7 +135,7 @@ func ruleFired(issues []linter.Issue, ruleID string) bool {
 	return false
 }
 
-func TestRegisterRulesSeverityOverride(t *testing.T) {
+func TestRegisterRules_SeverityOverride(t *testing.T) {
 	t.Parallel()
 
 	const src = `{"image": "ubuntu:latest"}`

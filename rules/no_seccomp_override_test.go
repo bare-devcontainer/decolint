@@ -53,7 +53,7 @@ func TestNoSeccompOverride(t *testing.T) {
 	}
 }
 
-func TestNoSeccompOverrideFeature(t *testing.T) {
+func TestNoSeccompOverride_Feature(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {

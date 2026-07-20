@@ -44,7 +44,7 @@ func TestNoPrivilegedContainer(t *testing.T) {
 	}
 }
 
-func TestNoPrivilegedContainerFeature(t *testing.T) {
+func TestNoPrivilegedContainer_Feature(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {

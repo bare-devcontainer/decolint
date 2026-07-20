@@ -43,9 +43,9 @@ func TestFeatureLayer(t *testing.T) {
 	}
 }
 
-// TestFetchOCIEmptyIndex covers the robustness branch that rejects an image index carrying no
+// TestFetchOCI_EmptyIndex covers the robustness branch that rejects an image index carrying no
 // manifests, rather than dereferencing a nonexistent first entry.
-func TestFetchOCIEmptyIndex(t *testing.T) {
+func TestFetchOCI_EmptyIndex(t *testing.T) {
 	t.Parallel()
 
 	host := startOCIRegistry(t)
@@ -78,10 +78,10 @@ func TestFetchOCIEmptyIndex(t *testing.T) {
 	}
 }
 
-// TestFetchOCIRejectsNonFeatureConfig covers rejecting a manifest whose config media type is not the
+// TestFetchOCI_RejectsNonFeatureConfig covers rejecting a manifest whose config media type is not the
 // one the Features distribution specification mandates: such an artifact is not a Feature, and the
 // reference implementation refuses it rather than treating it as one.
-func TestFetchOCIRejectsNonFeatureConfig(t *testing.T) {
+func TestFetchOCI_RejectsNonFeatureConfig(t *testing.T) {
 	t.Parallel()
 
 	host := startOCIRegistry(t)
@@ -128,7 +128,7 @@ func TestFetchOCIRejectsNonFeatureConfig(t *testing.T) {
 	}
 }
 
-func TestFetchOCIRejectsOversizedLayer(t *testing.T) {
+func TestFetchOCI_RejectsOversizedLayer(t *testing.T) {
 	t.Parallel()
 
 	host := startOCIRegistry(t)

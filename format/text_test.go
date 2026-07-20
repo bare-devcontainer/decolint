@@ -54,7 +54,7 @@ Found 1 error and 1 warning.
 	}
 }
 
-func TestTextWriteIssuesWriteError(t *testing.T) {
+func TestTextWriteIssues_WriteError(t *testing.T) {
 	t.Parallel()
 
 	// A non-empty issue list fails on the per-issue write; an empty list writes no issues and

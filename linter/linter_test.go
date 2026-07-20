@@ -47,7 +47,7 @@ func lintSource(t *testing.T, l *Linter, path string, fileType FileType, src str
 	return l.LintDocument(path, fileType, doc)
 }
 
-func TestIssuePosition(t *testing.T) {
+func TestLintDocument_Position(t *testing.T) {
 	t.Parallel()
 
 	src := `{
@@ -65,7 +65,7 @@ func TestIssuePosition(t *testing.T) {
 	}
 }
 
-func TestLintParseError(t *testing.T) {
+func TestParseDocument_Error(t *testing.T) {
 	t.Parallel()
 
 	if _, err := ParseDocument([]byte(`{`)); err == nil {
@@ -88,7 +88,7 @@ var flagRule = &Rule{
 	},
 }
 
-func TestDocumentTreeMutation(t *testing.T) {
+func TestLintDocument_TreeMutation(t *testing.T) {
 	t.Parallel()
 
 	// A synthetic "flag": true member is added whose offsets point at the "name" member of the
@@ -126,7 +126,7 @@ func messagesOf(issues []Issue) []string {
 	return msgs
 }
 
-func TestLintDocumentSortsByPosition(t *testing.T) {
+func TestLintDocument_SortsByPosition(t *testing.T) {
 	t.Parallel()
 
 	// "aa" and "bb" sit on the same line at different columns; "cc" is on a later line.
@@ -158,7 +158,7 @@ func TestLintDocumentSortsByPosition(t *testing.T) {
 	}
 }
 
-func TestLintDocumentSortsByRuleIDAtSamePosition(t *testing.T) {
+func TestLintDocument_SortsByRuleIDAtSamePosition(t *testing.T) {
 	t.Parallel()
 
 	// Both rules flag the document root, so their findings share a line and column and must be
@@ -219,9 +219,9 @@ func TestHasRules(t *testing.T) {
 	}
 }
 
-// TestRegisterRuleOffIsNotApplied covers a rule registered at SeverityOff: it contributes no
+// TestRegisterRule_OffIsNotApplied covers a rule registered at SeverityOff: it contributes no
 // patterns, so HasRules stays false and the rule never runs.
-func TestRegisterRuleOffIsNotApplied(t *testing.T) {
+func TestRegisterRule_OffIsNotApplied(t *testing.T) {
 	t.Parallel()
 
 	l := New()
@@ -234,9 +234,9 @@ func TestRegisterRuleOffIsNotApplied(t *testing.T) {
 	}
 }
 
-// TestLintDocumentIgnoreSuppresses covers the ignore-directive path of LintDocument: a finding on a
+// TestLintDocument_IgnoreSuppresses covers the ignore-directive path of LintDocument: a finding on a
 // line covered by a decolint-ignore directive is dropped.
-func TestLintDocumentIgnoreSuppresses(t *testing.T) {
+func TestLintDocument_IgnoreSuppresses(t *testing.T) {
 	t.Parallel()
 
 	src := `{
@@ -262,7 +262,7 @@ var panicRule = &Rule{
 	},
 }
 
-func TestLintRulePanicIsRecovered(t *testing.T) {
+func TestLintDocument_RulePanicIsRecovered(t *testing.T) {
 	t.Parallel()
 
 	l := New()

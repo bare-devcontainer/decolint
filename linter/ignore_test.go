@@ -15,7 +15,7 @@ func buildIndex(t *testing.T, src string) *ignoreIndex {
 	return buildIgnoreIndex(&root, newPositions([]byte(src)))
 }
 
-func TestIgnoreDirectives(t *testing.T) {
+func TestBuildIgnoreIndex(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {

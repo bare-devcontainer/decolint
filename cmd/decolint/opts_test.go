@@ -10,7 +10,7 @@ import (
 	"github.com/google/go-cmp/cmp"
 )
 
-func TestParseOptionsPlatform(t *testing.T) {
+func TestParseOptions_Platform(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
@@ -55,7 +55,7 @@ func TestParseOptionsPlatform(t *testing.T) {
 	}
 }
 
-func TestParseOptionsFormat(t *testing.T) {
+func TestParseOptions_Format(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
@@ -93,7 +93,7 @@ func TestParseOptionsFormat(t *testing.T) {
 // of listing each variant as a separate table row.
 var dashPrefixes = []string{"-", "--"}
 
-func TestParseOptionsBoolFlags(t *testing.T) {
+func TestParseOptions_BoolFlags(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
@@ -139,10 +139,10 @@ func TestParseOptionsBoolFlags(t *testing.T) {
 	}
 }
 
-func TestParseOptionsMergeSet(t *testing.T) {
+func TestParseOptions_MergeSet(t *testing.T) {
 	t.Parallel()
 
-	// The value of Merge itself is covered by TestParseOptionsBoolFlags; this exercises
+	// The value of Merge itself is covered by TestParseOptions_BoolFlags; this exercises
 	// mergeSet, the bookkeeping unique to this flag (see its doc comment in opts.go).
 	tests := []struct {
 		name string
@@ -168,7 +168,7 @@ func TestParseOptionsMergeSet(t *testing.T) {
 	}
 }
 
-func TestParseOptionsConfig(t *testing.T) {
+func TestParseOptions_Config(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
@@ -193,7 +193,7 @@ func TestParseOptionsConfig(t *testing.T) {
 	}
 }
 
-func TestParseOptionsPaths(t *testing.T) {
+func TestParseOptions_Paths(t *testing.T) {
 	t.Parallel()
 
 	opts, err := parseOptions(nil, io.Discard)

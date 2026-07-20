@@ -394,7 +394,7 @@ func TestRun_Flags(t *testing.T) {
 	})
 }
 
-func TestRunInit(t *testing.T) {
+func TestRun_Init(t *testing.T) {
 	// Uses t.Chdir, which cannot be combined with t.Parallel.
 
 	t.Run("writes every rule at its default severity", func(t *testing.T) {
@@ -569,7 +569,7 @@ func TestRunLint(t *testing.T) {
 	})
 }
 
-func TestRunMerge(t *testing.T) {
+func TestRun_Merge(t *testing.T) {
 	t.Parallel()
 
 	t.Run("findings point at the feature reference", func(t *testing.T) {

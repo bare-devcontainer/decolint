@@ -3,6 +3,8 @@ package feature
 import (
 	"encoding/json/v2"
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -125,6 +127,176 @@ func TestMerge_ImageFetchError(t *testing.T) {
 	}
 	if err := Merge(t.Context(), NewFetcher(), nil, "", &root); err == nil {
 		t.Fatal("Merge with an unreachable image: got nil error")
+	}
+}
+
+func TestMerge_BuildDockerfileMetadata(t *testing.T) {
+	t.Parallel()
+
+	src := `{"build": {"dockerfile": "Dockerfile"}}`
+	root := mergeFiles(t, src, map[string]string{
+		"Dockerfile": "FROM scratch\n" +
+			`LABEL devcontainer.metadata='[{"privileged": true, "remoteUser": "vscode"}]'` + "\n",
+	})
+	assertJSON(t, root, `{
+	  "build": {"dockerfile": "Dockerfile"},
+	  "privileged": true,
+	  "remoteUser": "vscode"
+	}`)
+}
+
+func TestMerge_BuildDockerfileBaseImage(t *testing.T) {
+	t.Parallel()
+
+	host := ocitest.Registry(t)
+	ocitest.PushImage(t, host, "base", "1", map[string]string{
+		imageMetadataLabel: `[{"containerEnv": {"FROM_BASE": "1"}}]`,
+	}, false)
+
+	src := `{"build": {"dockerfile": "Dockerfile"}}`
+	root := mergeFiles(t, src, map[string]string{
+		"Dockerfile": fmt.Sprintf("FROM %s/base:1\n", host),
+	})
+	assertJSON(t, root, `{
+	  "build": {"dockerfile": "Dockerfile"},
+	  "containerEnv": {"FROM_BASE": "1"}
+	}`)
+}
+
+func TestMerge_BuildDockerfileArgsAndTarget(t *testing.T) {
+	t.Parallel()
+
+	host := ocitest.Registry(t)
+	ocitest.PushImage(t, host, "base", "1", map[string]string{imageMetadataLabel: `[{"remoteUser": "one"}]`}, false)
+	ocitest.PushImage(t, host, "base", "2", map[string]string{imageMetadataLabel: `[{"remoteUser": "two"}]`}, false)
+	dockerfile := fmt.Sprintf("ARG TAG=1\nFROM %s/base:${TAG} AS dev\nFROM scratch AS prod\n", host)
+
+	t.Run("args and target select the built stage", func(t *testing.T) {
+		t.Parallel()
+		src := `{"build": {"dockerfile": "Dockerfile", "args": {"TAG": "2"}, "target": "dev"}}`
+		root := mergeFiles(t, src, map[string]string{"Dockerfile": dockerfile})
+		assertJSON(t, root, `{
+		  "build": {"dockerfile": "Dockerfile", "args": {"TAG": "2"}, "target": "dev"},
+		  "remoteUser": "two"
+		}`)
+	})
+
+	t.Run("arg with a variable substitution is dropped for its default", func(t *testing.T) {
+		t.Parallel()
+		src := `{"build": {"dockerfile": "Dockerfile", "args": {"TAG": "${localEnv:TAG}"}, "target": "dev"}}`
+		root := mergeFiles(t, src, map[string]string{"Dockerfile": dockerfile})
+		assertJSON(t, root, `{
+		  "build": {"dockerfile": "Dockerfile", "args": {"TAG": "${localEnv:TAG}"}, "target": "dev"},
+		  "remoteUser": "one"
+		}`)
+	})
+}
+
+func TestMerge_BuildDockerfilePrecedesImage(t *testing.T) {
+	t.Parallel()
+
+	// When both are declared the reference implementation builds the Dockerfile, so the "image"
+	// must not even be fetched: fetching the unresolvable .invalid reference would fail the merge.
+	src := `{"image": "registry.invalid/app:1", "build": {"dockerfile": "Dockerfile"}}`
+	root := mergeFiles(t, src, map[string]string{
+		"Dockerfile": "FROM scratch\n" +
+			`LABEL devcontainer.metadata='{"privileged": true}'` + "\n",
+	})
+	assertJSON(t, root, `{
+	  "image": "registry.invalid/app:1",
+	  "build": {"dockerfile": "Dockerfile"},
+	  "privileged": true
+	}`)
+}
+
+func TestMerge_LegacyDockerFileProperty(t *testing.T) {
+	t.Parallel()
+
+	src := `{"dockerFile": "Dockerfile"}`
+	root := mergeFiles(t, src, map[string]string{
+		"Dockerfile": "FROM scratch\n" +
+			`LABEL devcontainer.metadata='{"init": true}'` + "\n",
+	})
+	assertJSON(t, root, `{"dockerFile": "Dockerfile", "init": true}`)
+}
+
+// TestMerge_LegacyDockerFilePropertyPrecedence pins the reference implementation's preference for
+// the top-level "dockerFile" over "build.dockerfile" when both are present. The schema makes the two
+// forms mutually exclusive, so this only differs on an invalid configuration; decolint tracks the
+// real tooling, which reads the top-level property first (getDockerfile in devcontainers/cli).
+func TestMerge_LegacyDockerFilePropertyPrecedence(t *testing.T) {
+	t.Parallel()
+
+	src := `{"dockerFile": "Top", "build": {"dockerfile": "Nested"}}`
+	root := mergeFiles(t, src, map[string]string{
+		"Top":    "FROM scratch\n" + `LABEL devcontainer.metadata='{"remoteUser": "top"}'` + "\n",
+		"Nested": "FROM scratch\n" + `LABEL devcontainer.metadata='{"remoteUser": "nested"}'` + "\n",
+	})
+	assertJSON(t, root, `{
+	  "dockerFile": "Top",
+	  "build": {"dockerfile": "Nested"},
+	  "remoteUser": "top"
+	}`)
+}
+
+func TestMerge_BuildDockerfileAnchor(t *testing.T) {
+	t.Parallel()
+
+	src := "{\n  \"build\": {\n    \"dockerfile\": \"Dockerfile\"\n  }\n}"
+	root := mergeFiles(t, src, map[string]string{
+		"Dockerfile": "FROM scratch\n" +
+			`LABEL devcontainer.metadata='{"privileged": true, "containerEnv": {"KEY": "value"}}'` + "\n",
+	})
+	anchor := strings.Index(src, `"dockerfile"`)
+	if anchor < 0 {
+		t.Fatal("anchor not found in source")
+	}
+	for _, ptr := range []string{"/privileged", "/containerEnv", "/containerEnv/KEY"} {
+		v := root.Find(ptr)
+		if v == nil {
+			t.Errorf("merged tree lacks %s", ptr)
+			continue
+		}
+		if v.StartOffset != anchor {
+			t.Errorf("%s StartOffset = %d, want %d (the dockerfile key)", ptr, v.StartOffset, anchor)
+		}
+	}
+}
+
+// TestMerge_BuildDockerfileSubstitutionSkipped covers the lint-time-unknowable declarations that
+// skip the Dockerfile without falling back to "image": a variable substitution in the Dockerfile
+// path or in the build target leaves the tree unchanged.
+func TestMerge_BuildDockerfileSubstitutionSkipped(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		src  string
+	}{
+		{"path", `{"build": {"dockerfile": "${localEnv:DIR}/Dockerfile"}}`},
+		{"target", `{"build": {"dockerfile": "Dockerfile", "target": "${localEnv:STAGE}"}}`},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			// The Dockerfile names an unreachable base image, so resolving it would fail the merge.
+			root := mergeFiles(t, tt.src, map[string]string{
+				"Dockerfile": "FROM registry.invalid/app:1\n",
+			})
+			assertJSON(t, root, tt.src)
+		})
+	}
+}
+
+func TestMerge_BuildDockerfileMissing(t *testing.T) {
+	t.Parallel()
+
+	root, err := hujson.Parse([]byte(`{"build": {"dockerfile": "Dockerfile"}}`))
+	if err != nil {
+		t.Fatalf("parse devcontainer.json: %v", err)
+	}
+	if err := Merge(t.Context(), NewFetcher(), openRoot(t, t.TempDir()), ".", &root); err == nil {
+		t.Fatal("Merge with a missing Dockerfile: got nil error")
 	}
 }
 
@@ -728,6 +900,27 @@ func mergeSrc(t *testing.T, src string, features map[string]string) *hujson.Valu
 	dir := t.TempDir()
 	for name, content := range features {
 		writeLocalFeature(t, dir, name, content)
+	}
+	root, err := hujson.Parse([]byte(src))
+	if err != nil {
+		t.Fatalf("parse devcontainer.json: %v", err)
+	}
+	if err := Merge(t.Context(), NewFetcher(), openRoot(t, dir), ".", &root); err != nil {
+		t.Fatalf("Merge: %v", err)
+	}
+	return &root
+}
+
+// mergeFiles parses src as a devcontainer.json, writes each named plain file (e.g. a Dockerfile)
+// under a temporary directory, and merges with that directory as both the root and the config
+// directory.
+func mergeFiles(t *testing.T, src string, files map[string]string) *hujson.Value {
+	t.Helper()
+	dir := t.TempDir()
+	for name, content := range files {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte(content), 0o644); err != nil {
+			t.Fatal(err)
+		}
 	}
 	root, err := hujson.Parse([]byte(src))
 	if err != nil {

@@ -26,6 +26,9 @@ const (
 	// and cannot be verified until the whole body is buffered. The OCI distribution specification
 	// requires registries to accept manifests up to 4 MB.
 	maxManifestBytes = 4 << 20 // 4 MB
+	// maxDockerfileBytes caps a Dockerfile read from disk, whose instructions are interpreted to
+	// derive the labels of the image it would build.
+	maxDockerfileBytes = 4 << 20 // 4 MB
 )
 
 // metadataFileName is the file declaring a Feature, located at the root of the Feature's directory
@@ -40,9 +43,9 @@ type Fetcher struct {
 	client *http.Client
 	log    io.Writer
 
-	mu         sync.Mutex
-	cache      map[string]fetchResult
-	imageCache map[string]imageResult
+	mu               sync.Mutex
+	cache            map[string]fetchResult
+	imageConfigCache map[string]imageConfigResult
 }
 
 type fetchResult struct {
@@ -50,9 +53,9 @@ type fetchResult struct {
 	err error
 }
 
-type imageResult struct {
-	entries []*Metadata
-	err     error
+type imageConfigResult struct {
+	cfg imageConfig
+	err error
 }
 
 // Option configures a Fetcher created by NewFetcher.
@@ -71,9 +74,9 @@ func NewFetcher(opts ...Option) *Fetcher {
 			Timeout:       30 * time.Second,
 			CheckRedirect: refuseInsecureRedirect,
 		},
-		log:        io.Discard,
-		cache:      map[string]fetchResult{},
-		imageCache: map[string]imageResult{},
+		log:              io.Discard,
+		cache:            map[string]fetchResult{},
+		imageConfigCache: map[string]imageConfigResult{},
 	}
 	for _, opt := range opts {
 		opt(f)

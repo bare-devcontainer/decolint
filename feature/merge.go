@@ -2,6 +2,7 @@ package feature
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"slices"
@@ -12,21 +13,26 @@ import (
 
 // Merge fetches the Features referenced under "/features" of root, a devcontainer.json parsed from
 // a file at configDir within fsRoot, along with the Dev Container metadata carried by the
-// "devcontainer.metadata" label of the image named by "/image", and merges the properties they
+// "devcontainer.metadata" label of the configuration's base image, and merges the properties they
 // contribute into root in place, following the merge logic of the Dev Container specification.
-// Features named by "dependsOn" are resolved recursively and contribute properties as well. A base
-// image reachable only through "build" or "dockerComposeFile" is not resolved.
+// Features named by "dependsOn" are resolved recursively and contribute properties as well.
+//
+// The base image is the image named by "/image", or, for a Dockerfile configuration, the image
+// built from the Dockerfile declared by "/build" (or the legacy "/dockerFile" property): its LABEL
+// instructions and the label inherited from the base image its FROM names both contribute. A base
+// image reachable only through "dockerComposeFile" is not resolved.
 //
 // fsRoot and configDir together locate the referencing devcontainer.json (fsRoot is
 // discovery.ConfigFile.Root and configDir is the directory of its Path): a local Feature reference
-// is resolved relative to configDir and read through fsRoot, so it cannot escape fsRoot's boundary.
+// or a Dockerfile is resolved relative to configDir and read through fsRoot, so it cannot escape
+// fsRoot's boundary.
 //
 // Every node Merge adds to the tree carries the byte offset of the key it was pulled in through
-// (the referencing Feature key, or the "image" key for image metadata) in the original file, so
-// findings on merged-in properties point at that reference. Any fetch or parse failure, or a
-// dependency cycle, is returned as an error.
+// (the referencing Feature key, or the "image" or "dockerfile" key for image metadata) in the
+// original file, so findings on merged-in properties point at that reference. Any fetch or parse
+// failure, or a dependency cycle, is returned as an error.
 func Merge(ctx context.Context, f *Fetcher, fsRoot *os.Root, configDir string, root *hujson.Value) error {
-	imageContribs, err := imageContributors(ctx, f, root)
+	imageContribs, err := baseImageContributors(ctx, f, fsRoot, configDir, root)
 	if err != nil {
 		return err
 	}
@@ -49,6 +55,135 @@ func Merge(ctx context.Context, f *Fetcher, fsRoot *os.Root, configDir string, r
 	}
 	state.finish()
 	return nil
+}
+
+// baseImageContributors returns the metadata contributors of the configuration's base image: the
+// image built from the Dockerfile declared by "/build" (or the legacy "/dockerFile" property), or
+// the image named by "/image". A declared Dockerfile takes precedence over "image", matching the
+// reference implementation, which builds the Dockerfile when both are present.
+func baseImageContributors(ctx context.Context, f *Fetcher, fsRoot *os.Root, configDir string, root *hujson.Value) ([]*contributor, error) {
+	contribs, declared, err := dockerfileContributors(ctx, f, fsRoot, configDir, root)
+	if err != nil || declared {
+		return contribs, err
+	}
+	return imageContributors(ctx, f, root)
+}
+
+// dockerfileContributors fetches the metadata the image built from the configuration's Dockerfile
+// would carry and returns one contributor per entry, in label order, anchored at the key declaring
+// the Dockerfile path. declared reports whether root declares a Dockerfile at all, so the caller
+// falls back to "/image" only when it does not; a declared Dockerfile that cannot be resolved at
+// lint time (a variable substitution in its path or target) contributes nothing.
+func dockerfileContributors(ctx context.Context, f *Fetcher, fsRoot *os.Root, configDir string, root *hujson.Value) ([]*contributor, bool, error) {
+	obj, ok := root.Value.(*hujson.Object)
+	if !ok {
+		return nil, false, nil
+	}
+	path, anchor, ok := dockerfilePath(obj)
+	if !ok {
+		return nil, false, nil
+	}
+	// Variable substitutions resolve at container creation time; linting cannot know their values,
+	// so such a Dockerfile is skipped rather than rejected.
+	if strings.Contains(path, "${") {
+		return nil, true, nil
+	}
+	args, target, ok := buildOptions(obj)
+	if !ok {
+		return nil, true, nil
+	}
+	src, err := readDockerfile(fsRoot, filepath.Join(configDir, path))
+	if err != nil {
+		return nil, true, err
+	}
+	entries, err := f.FetchDockerfileMetadata(ctx, src, args, target)
+	if err != nil {
+		return nil, true, fmt.Errorf("build %s: %w", path, err)
+	}
+	contribs := make([]*contributor, 0, len(entries))
+	for _, md := range entries {
+		contribs = append(contribs, &contributor{ref: path, anchor: anchor, md: md})
+	}
+	return contribs, true, nil
+}
+
+// dockerfilePath returns the Dockerfile path root declares, with the byte offset of the declaring
+// key. The Dev Container schema defines two mutually exclusive Dockerfile forms: the top-level
+// "dockerFile" property and the nested "build.dockerfile". The reference implementation prefers the
+// top-level property (getDockerfile: 'dockerFile' in config ? config.dockerFile :
+// config.build.dockerfile), so it is checked first; a valid configuration declares only one.
+func dockerfilePath(obj *hujson.Object) (string, int, bool) {
+	if i := findMember(obj, "dockerFile"); i >= 0 {
+		if lit, ok := obj.Members[i].Value.Value.(hujson.Literal); ok && lit.Kind() == '"' {
+			return lit.String(), obj.Members[i].Name.StartOffset, true
+		}
+	}
+	if i := findMember(obj, "build"); i >= 0 {
+		if buildObj, ok := obj.Members[i].Value.Value.(*hujson.Object); ok {
+			if j := findMember(buildObj, "dockerfile"); j >= 0 {
+				if lit, ok := buildObj.Members[j].Value.Value.(hujson.Literal); ok && lit.Kind() == '"' {
+					return lit.String(), buildObj.Members[j].Name.StartOffset, true
+				}
+			}
+		}
+	}
+	return "", 0, false
+}
+
+// buildOptions extracts the "args" and "target" of the "/build" object. An arg whose value carries
+// a variable substitution cannot be known at lint time and is dropped, approximating a build where
+// the arg is unset so the Dockerfile's own ARG default applies. A target carrying one leaves the
+// built stage itself unknowable, so ok is false and the whole Dockerfile is skipped.
+func buildOptions(obj *hujson.Object) (args map[string]string, target string, ok bool) {
+	i := findMember(obj, "build")
+	if i < 0 {
+		return nil, "", true
+	}
+	buildObj, isObj := obj.Members[i].Value.Value.(*hujson.Object)
+	if !isObj {
+		return nil, "", true
+	}
+	if j := findMember(buildObj, "args"); j >= 0 {
+		if argsObj, isObj := buildObj.Members[j].Value.Value.(*hujson.Object); isObj {
+			for _, m := range argsObj.Members {
+				name, nameOK := m.Name.Value.(hujson.Literal)
+				val, valOK := m.Value.Value.(hujson.Literal)
+				if !nameOK || name.Kind() != '"' || !valOK || val.Kind() != '"' || strings.Contains(val.String(), "${") {
+					continue
+				}
+				if args == nil {
+					args = map[string]string{}
+				}
+				args[name.String()] = val.String()
+			}
+		}
+	}
+	if j := findMember(buildObj, "target"); j >= 0 {
+		if lit, isStr := buildObj.Members[j].Value.Value.(hujson.Literal); isStr && lit.Kind() == '"' {
+			target = lit.String()
+			if strings.Contains(target, "${") {
+				return nil, "", false
+			}
+		}
+	}
+	return args, target, true
+}
+
+// readDockerfile reads the Dockerfile at path through fsRoot, so its resolution cannot escape
+// fsRoot's boundary.
+func readDockerfile(fsRoot *os.Root, path string) ([]byte, error) {
+	info, err := fsRoot.Stat(path)
+	if err != nil {
+		return nil, fmt.Errorf("stat %s: %w", path, err)
+	}
+	if info.Size() > maxDockerfileBytes {
+		return nil, fmt.Errorf("%s exceeds %d bytes", path, maxDockerfileBytes)
+	}
+	src, err := fsRoot.ReadFile(path)
+	if err != nil {
+		return nil, fmt.Errorf("read %s: %w", path, err)
+	}
+	return src, nil
 }
 
 // imageContributors fetches the "devcontainer.metadata" label of the image named by "/image" of

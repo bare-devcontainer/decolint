@@ -15,6 +15,14 @@ var lifecycleHooks = []string{
 	"postAttachCommand",
 }
 
+// scalarProps are the single-valued properties a contributor can set, where a later contributor
+// overrides an earlier one and the user's own value always wins. Features never carry these; they
+// come from image metadata, which commonly sets "remoteUser".
+var scalarProps = []string{
+	"remoteUser",
+	"containerUser",
+}
+
 // mergeState applies contributors to the root object of a devcontainer.json one by one, in
 // installation order, and tracks which values originate from the user's file so that those always
 // win, as the user's configuration is applied last per the specification's merge logic.
@@ -24,6 +32,9 @@ type mergeState struct {
 	userEnvKeys map[string]bool
 	// userMountTargets are the mount targets the user's file defines.
 	userMountTargets map[string]bool
+	// userScalars are the scalar properties (scalarProps) the user's file defines, which a
+	// contributor must not overwrite.
+	userScalars map[string]bool
 	// customizations accumulates the contributors' customizations, detached from the tree; finish
 	// merges the user's own customizations on top and grafts the result.
 	customizations       *hujson.Value
@@ -43,7 +54,13 @@ func newMergeState(root *hujson.Object) *mergeState {
 		root:             root,
 		userEnvKeys:      map[string]bool{},
 		userMountTargets: map[string]bool{},
+		userScalars:      map[string]bool{},
 		lifecycle:        map[string][]lifecycleEntry{},
+	}
+	for _, name := range scalarProps {
+		if findMember(root, name) >= 0 {
+			s.userScalars[name] = true
+		}
 	}
 	if i := findMember(root, "containerEnv"); i >= 0 {
 		if obj, ok := root.Members[i].Value.Value.(*hujson.Object); ok {
@@ -74,8 +91,32 @@ func (s *mergeState) apply(c *contributor) {
 	s.mergeUnion(c, "securityOpt")
 	s.mergeEnv(c)
 	s.mergeMounts(c)
+	for _, name := range scalarProps {
+		s.mergeScalar(c, name)
+	}
 	s.collectCustomizations(c)
 	s.collectLifecycle(c)
+}
+
+// mergeScalar applies a single-valued property (remoteUser, containerUser): a later contributor
+// overrides an earlier one, but a value the user's file sets is left untouched.
+func (s *mergeState) mergeScalar(c *contributor, name string) {
+	if s.userScalars[name] {
+		return
+	}
+	v := c.md.Root.Find("/" + name)
+	if v == nil {
+		return
+	}
+	if _, ok := v.Value.(hujson.Literal); !ok {
+		return
+	}
+	value := anchored(*v, c.anchor)
+	if i := findMember(s.root, name); i >= 0 {
+		s.root.Members[i].Value = value
+	} else {
+		appendMember(s.root, name, value, c.anchor)
+	}
 }
 
 // finish grafts the accumulated customizations and lifecycle hooks into the tree.

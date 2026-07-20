@@ -1,4 +1,5 @@
-// Package feature fetches Dev Container Features referenced by a devcontainer.json and merges the
+// Package feature fetches Dev Container Features referenced by a devcontainer.json, along with the
+// metadata carried by the "devcontainer.metadata" label of the image it names, and merges the
 // properties they contribute into the parsed configuration, producing the effective configuration
 // defined by the Dev Container specification's merge logic (see
 // https://containers.dev/implementors/spec/#merge-logic).

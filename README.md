@@ -110,13 +110,13 @@ decolint -platform=vscode,codespaces
 ### Merging
 
 The [Features](https://containers.dev/implementors/features/) a
-`devcontainer.json` references contribute configuration of their own,
-which the Dev Container tooling merges into the effective
-configuration following the specification's [merge
-logic](https://containers.dev/implementors/spec/#merge-logic). By
+`devcontainer.json` references, and the base image it names, both
+contribute configuration of their own, which the Dev Container tooling
+merges into the effective configuration following the specification's
+[merge logic](https://containers.dev/implementors/spec/#merge-logic). By
 default decolint lints only the raw file, so an issue introduced by a
-Feature (say, one that sets `privileged: true` or bind-mounts the
-Docker socket) goes unnoticed.
+Feature or inherited from the base image (say, one that sets
+`privileged: true` or bind-mounts the Docker socket) goes unnoticed.
 
 Enable merging to lint the merged configuration instead:
 
@@ -126,8 +126,18 @@ decolint -merge
 
 This fetches every referenced Feature to read its contributed
 configuration: OCI references are pulled from their registry, HTTP(S)
-URLs are downloaded, and local paths are read from disk. A Feature
+URLs are downloaded, and local paths are read from disk. It also reads
+the base image named by `image` and merges the metadata carried by its
+[`devcontainer.metadata`](https://containers.dev/implementors/spec/#image-metadata)
+label. Image metadata is the lowest-precedence input: a Feature, and
+then the `devcontainer.json` itself, override it. A Feature or image
 that cannot be fetched is an error (exit code 2).
+
+The base image is resolved only from the `image` property, using
+anonymous registry access. A base image reached through `build` (a
+Dockerfile `FROM`) or `dockerComposeFile` is not resolved, an `image`
+containing an unresolved `${...}` variable is skipped, and a private
+image the anonymous client cannot pull is an error.
 
 ### Output formats
 

@@ -113,9 +113,16 @@ func dockerfileContributors(ctx context.Context, f *Fetcher, fsRoot *os.Root, co
 }
 
 // dockerfilePath returns the Dockerfile path root declares, with the byte offset of the declaring
-// key: "/build/dockerfile", or the legacy top-level "dockerFile" property when the "build" object
-// declares none, the order the reference implementation reads them in.
+// key. The Dev Container schema defines two mutually exclusive Dockerfile forms: the top-level
+// "dockerFile" property and the nested "build.dockerfile". The reference implementation prefers the
+// top-level property (getDockerfile: 'dockerFile' in config ? config.dockerFile :
+// config.build.dockerfile), so it is checked first; a valid configuration declares only one.
 func dockerfilePath(obj *hujson.Object) (string, int, bool) {
+	if i := findMember(obj, "dockerFile"); i >= 0 {
+		if lit, ok := obj.Members[i].Value.Value.(hujson.Literal); ok && lit.Kind() == '"' {
+			return lit.String(), obj.Members[i].Name.StartOffset, true
+		}
+	}
 	if i := findMember(obj, "build"); i >= 0 {
 		if buildObj, ok := obj.Members[i].Value.Value.(*hujson.Object); ok {
 			if j := findMember(buildObj, "dockerfile"); j >= 0 {
@@ -123,11 +130,6 @@ func dockerfilePath(obj *hujson.Object) (string, int, bool) {
 					return lit.String(), buildObj.Members[j].Name.StartOffset, true
 				}
 			}
-		}
-	}
-	if i := findMember(obj, "dockerFile"); i >= 0 {
-		if lit, ok := obj.Members[i].Value.Value.(hujson.Literal); ok && lit.Kind() == '"' {
-			return lit.String(), obj.Members[i].Name.StartOffset, true
 		}
 	}
 	return "", 0, false

@@ -220,6 +220,25 @@ func TestMerge_LegacyDockerFileProperty(t *testing.T) {
 	assertJSON(t, root, `{"dockerFile": "Dockerfile", "init": true}`)
 }
 
+// TestMerge_LegacyDockerFilePropertyPrecedence pins the reference implementation's preference for
+// the top-level "dockerFile" over "build.dockerfile" when both are present. The schema makes the two
+// forms mutually exclusive, so this only differs on an invalid configuration; decolint tracks the
+// real tooling, which reads the top-level property first (getDockerfile in devcontainers/cli).
+func TestMerge_LegacyDockerFilePropertyPrecedence(t *testing.T) {
+	t.Parallel()
+
+	src := `{"dockerFile": "Top", "build": {"dockerfile": "Nested"}}`
+	root := mergeFiles(t, src, map[string]string{
+		"Top":    "FROM scratch\n" + `LABEL devcontainer.metadata='{"remoteUser": "top"}'` + "\n",
+		"Nested": "FROM scratch\n" + `LABEL devcontainer.metadata='{"remoteUser": "nested"}'` + "\n",
+	})
+	assertJSON(t, root, `{
+	  "dockerFile": "Top",
+	  "build": {"dockerfile": "Nested"},
+	  "remoteUser": "top"
+	}`)
+}
+
 func TestMerge_BuildDockerfileAnchor(t *testing.T) {
 	t.Parallel()
 

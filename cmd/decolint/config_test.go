@@ -159,7 +159,7 @@ func TestParseConfig(t *testing.T) {
 	}
 }
 
-func TestLoadConfigExplicitPath(t *testing.T) {
+func TestLoadConfig_ExplicitPath(t *testing.T) {
 	t.Parallel()
 
 	t.Run("missing file", func(t *testing.T) {
@@ -186,7 +186,7 @@ func TestLoadConfigExplicitPath(t *testing.T) {
 	})
 }
 
-func TestLoadConfigDiscovery(t *testing.T) {
+func TestLoadConfig_Discovery(t *testing.T) {
 	// Uses t.Chdir, which cannot be combined with t.Parallel.
 	tests := []struct {
 		name  string

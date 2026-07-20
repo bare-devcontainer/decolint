@@ -62,7 +62,7 @@ func TestFetchLocal(t *testing.T) {
 	}
 }
 
-func TestFetchLocalEscapingRootIsRejected(t *testing.T) {
+func TestFetchLocal_EscapingRootIsRejected(t *testing.T) {
 	t.Parallel()
 
 	// A Feature outside the confining root (here, dir's parent) must not be reachable via "..",
@@ -76,7 +76,7 @@ func TestFetchLocalEscapingRootIsRejected(t *testing.T) {
 	}
 }
 
-func TestFetchLocalMissing(t *testing.T) {
+func TestFetchLocal_Missing(t *testing.T) {
 	t.Parallel()
 
 	f := NewFetcher()
@@ -85,7 +85,7 @@ func TestFetchLocalMissing(t *testing.T) {
 	}
 }
 
-func TestFetchLocalTooLarge(t *testing.T) {
+func TestFetchLocal_TooLarge(t *testing.T) {
 	t.Parallel()
 
 	// A metadata file just over the size cap must be rejected on its declared size, before it is
@@ -102,7 +102,7 @@ func TestFetchLocalTooLarge(t *testing.T) {
 	}
 }
 
-func TestFetchCachesResults(t *testing.T) {
+func TestFetch_CachesResults(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
@@ -129,7 +129,7 @@ func TestFetchCachesResults(t *testing.T) {
 	}
 }
 
-func TestFetchMetadataParse(t *testing.T) {
+func TestFetch_MetadataParse(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
@@ -220,7 +220,7 @@ func TestFetchTarball(t *testing.T) {
 	}
 }
 
-func TestFetchTarballNotFound(t *testing.T) {
+func TestFetchTarball_NotFound(t *testing.T) {
 	t.Parallel()
 
 	srv := httptest.NewTLSServer(http.NotFoundHandler())
@@ -233,7 +233,7 @@ func TestFetchTarballNotFound(t *testing.T) {
 	}
 }
 
-func TestFetchInvalidReference(t *testing.T) {
+func TestFetch_InvalidReference(t *testing.T) {
 	t.Parallel()
 
 	// A reference that is neither a local path nor an HTTPS URI is parsed as an OCI reference; a
@@ -243,11 +243,11 @@ func TestFetchInvalidReference(t *testing.T) {
 	}
 }
 
-func TestFetchTarballFollowsSecureRedirect(t *testing.T) {
+func TestFetchTarball_FollowsSecureRedirect(t *testing.T) {
 	t.Parallel()
 
 	// A redirect that keeps the request on HTTPS preserves the transport guarantee, so it is
-	// followed (unlike the downgrade rejected by TestFetchTarballRefusesInsecureRedirect).
+	// followed (unlike the downgrade rejected by TestFetchTarball_RefusesInsecureRedirect).
 	archive := archiveWithMetadata(t, `{"id": "redirected"}`, true)
 	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/real.tgz" {
@@ -272,7 +272,7 @@ func TestFetchTarballFollowsSecureRedirect(t *testing.T) {
 	}
 }
 
-func TestFetchTarballRefusesInsecureRedirect(t *testing.T) {
+func TestFetchTarball_RefusesInsecureRedirect(t *testing.T) {
 	t.Parallel()
 
 	// A plain-HTTP endpoint that would serve a valid archive if the redirect were followed.
@@ -407,7 +407,7 @@ func TestFetchOCI(t *testing.T) {
 	}
 }
 
-func TestFetchOCIThroughIndex(t *testing.T) {
+func TestFetchOCI_ThroughIndex(t *testing.T) {
 	t.Parallel()
 
 	host := startOCIRegistry(t)
@@ -464,7 +464,7 @@ func tamperingProxy(t *testing.T, host string, replacement []byte) string {
 	return strings.TrimPrefix(srv.URL, "http://")
 }
 
-func TestFetchOCIRejectsTamperedLayer(t *testing.T) {
+func TestFetchOCI_RejectsTamperedLayer(t *testing.T) {
 	t.Parallel()
 
 	host := startOCIRegistry(t)
@@ -479,7 +479,7 @@ func TestFetchOCIRejectsTamperedLayer(t *testing.T) {
 	}
 }
 
-func TestFetchOCIUnknownRepository(t *testing.T) {
+func TestFetchOCI_UnknownRepository(t *testing.T) {
 	t.Parallel()
 
 	host := startOCIRegistry(t)

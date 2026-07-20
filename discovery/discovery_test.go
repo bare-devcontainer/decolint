@@ -30,7 +30,7 @@ func openRoot(t *testing.T, dir string) *os.Root {
 	return root
 }
 
-func TestVisitConfigsSymlink(t *testing.T) {
+func TestVisitConfigs_Symlink(t *testing.T) {
 	t.Parallel()
 
 	// setup creates a dev container definition directory whose .devcontainer/devcontainer.json is a
@@ -231,7 +231,7 @@ func TestVisitConfigs(t *testing.T) {
 	}
 }
 
-func TestVisitConfigsStopsOnError(t *testing.T) {
+func TestVisitConfigs_StopsOnError(t *testing.T) {
 	t.Parallel()
 
 	// Each directory reaches VisitConfigs's fn call through a different code path (feature, template,
@@ -265,10 +265,10 @@ func TestVisitConfigsStopsOnError(t *testing.T) {
 	}
 }
 
-// TestVisitConfigsSubfolderErrorPropagates covers the one-level-deep subfolder branch specifically:
+// TestVisitConfigs_SubfolderErrorPropagates covers the one-level-deep subfolder branch specifically:
 // with no .devcontainer.json and no .devcontainer/devcontainer.json, the first (and only) fn call is
 // for the subfolder config, so its error must surface.
-func TestVisitConfigsSubfolderErrorPropagates(t *testing.T) {
+func TestVisitConfigs_SubfolderErrorPropagates(t *testing.T) {
 	t.Parallel()
 
 	proj := t.TempDir()
@@ -286,9 +286,9 @@ func TestVisitConfigsSubfolderErrorPropagates(t *testing.T) {
 	}
 }
 
-// TestVisitConfigsSkipsSubfolderWithoutConfig covers the loop skipping a .devcontainer subdirectory
+// TestVisitConfigs_SkipsSubfolderWithoutConfig covers the loop skipping a .devcontainer subdirectory
 // that holds no devcontainer.json: it is passed over rather than reported or erroring.
-func TestVisitConfigsSkipsSubfolderWithoutConfig(t *testing.T) {
+func TestVisitConfigs_SkipsSubfolderWithoutConfig(t *testing.T) {
 	t.Parallel()
 
 	proj := t.TempDir()
@@ -313,9 +313,9 @@ func TestVisitConfigsSkipsSubfolderWithoutConfig(t *testing.T) {
 	}
 }
 
-// TestVisitConfigsDevcontainerNotADirectory covers the open error surfaced when .devcontainer exists
+// TestVisitConfigs_DevcontainerNotADirectory covers the open error surfaced when .devcontainer exists
 // but is not a directory, which must not be silently treated as absent.
-func TestVisitConfigsDevcontainerNotADirectory(t *testing.T) {
+func TestVisitConfigs_DevcontainerNotADirectory(t *testing.T) {
 	t.Parallel()
 
 	proj := t.TempDir()

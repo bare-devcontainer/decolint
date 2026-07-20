@@ -22,7 +22,7 @@ func TestGitHubWriteIssues(t *testing.T) {
 	}
 }
 
-func TestGitHubWriteIssuesWriteError(t *testing.T) {
+func TestGitHubWriteIssues_WriteError(t *testing.T) {
 	t.Parallel()
 
 	if err := (GitHubFormat{}).WriteIssues(errWriter{}, testIssues()); !errors.Is(err, errWrite) {

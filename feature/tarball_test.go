@@ -35,7 +35,7 @@ func tarBytes(t *testing.T, files ...tarFile) []byte {
 	return buf.Bytes()
 }
 
-func TestMetadataFromArchiveErrors(t *testing.T) {
+func TestMetadataFromArchive_Errors(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
@@ -89,7 +89,7 @@ func TestMetadataFromArchiveErrors(t *testing.T) {
 	}
 }
 
-func TestFetchTarballCorruptArchive(t *testing.T) {
+func TestFetchTarball_CorruptArchive(t *testing.T) {
 	t.Parallel()
 
 	// A 200 response whose body is neither gzip nor a valid tar, exercising the archive-read error
@@ -110,7 +110,7 @@ func TestFetchTarballCorruptArchive(t *testing.T) {
 	}
 }
 
-func TestFetchTarballContentLengthTooLarge(t *testing.T) {
+func TestFetchTarball_ContentLengthTooLarge(t *testing.T) {
 	t.Parallel()
 
 	// Advertise a Content-Length beyond the archive cap without sending a body, so the size is

@@ -8,7 +8,7 @@ import (
 	"github.com/bare-devcontainer/decolint/rules"
 )
 
-func TestBuiltinRulesDeclareValidCategory(t *testing.T) {
+func TestBuiltin_ValidCategories(t *testing.T) {
 	t.Parallel()
 
 	for _, reg := range rules.Builtin() {
@@ -70,7 +70,7 @@ func TestOverridesSeverityFor(t *testing.T) {
 	}
 }
 
-func TestRegisterRulesUnknownCategory(t *testing.T) {
+func TestRegisterRules_UnknownCategory(t *testing.T) {
 	t.Parallel()
 
 	l := linter.New()
@@ -84,7 +84,7 @@ func TestRegisterRulesUnknownCategory(t *testing.T) {
 	}
 }
 
-func TestRegisterRulesCategoryOverride(t *testing.T) {
+func TestRegisterRules_CategoryOverride(t *testing.T) {
 	t.Parallel()
 
 	// Trips no-seccomp-override, a security rule that is off by default.

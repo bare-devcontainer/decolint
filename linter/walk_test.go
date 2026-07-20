@@ -28,7 +28,7 @@ func pathSpy(id string, paths []string) *Rule {
 	}
 }
 
-func TestWalkDispatch(t *testing.T) {
+func TestWalk_Dispatch(t *testing.T) {
 	t.Parallel()
 
 	src := `{
@@ -78,9 +78,9 @@ func TestWalkDispatch(t *testing.T) {
 	}
 }
 
-// TestWalkSingleTraversal checks that adding rules does not cause the tree to be traversed again:
+// TestWalk_SingleTraversal checks that adding rules does not cause the tree to be traversed again:
 // each of two rules subscribing to the same path is visited exactly once at that path.
-func TestWalkSingleTraversal(t *testing.T) {
+func TestWalk_SingleTraversal(t *testing.T) {
 	t.Parallel()
 
 	src := `{ "image": "ubuntu:24.04" }`

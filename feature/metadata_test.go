@@ -6,7 +6,7 @@ import (
 	"github.com/google/go-cmp/cmp"
 )
 
-func TestParseMetadataErrors(t *testing.T) {
+func TestParseMetadata_Errors(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {

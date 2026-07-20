@@ -51,7 +51,7 @@ func TestNoCapAddAll(t *testing.T) {
 	}
 }
 
-func TestNoCapAddAllFeature(t *testing.T) {
+func TestNoCapAddAll_Feature(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {

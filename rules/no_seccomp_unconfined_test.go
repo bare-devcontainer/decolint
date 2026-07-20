@@ -46,7 +46,7 @@ func TestNoSeccompUnconfined(t *testing.T) {
 	}
 }
 
-func TestNoSeccompUnconfinedFeature(t *testing.T) {
+func TestNoSeccompUnconfined_Feature(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {

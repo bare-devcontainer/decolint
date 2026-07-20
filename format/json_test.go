@@ -20,7 +20,7 @@ func TestJSONWriteIssues(t *testing.T) {
 	}
 }
 
-func TestJSONWriteIssuesEmpty(t *testing.T) {
+func TestJSONWriteIssues_Empty(t *testing.T) {
 	t.Parallel()
 
 	var sb strings.Builder
@@ -33,7 +33,7 @@ func TestJSONWriteIssuesEmpty(t *testing.T) {
 	}
 }
 
-func TestJSONWriteIssuesWriteError(t *testing.T) {
+func TestJSONWriteIssues_WriteError(t *testing.T) {
 	t.Parallel()
 
 	if err := (JSONFormat{}).WriteIssues(errWriter{}, testIssues()); !errors.Is(err, errWrite) {

@@ -45,18 +45,12 @@ type Fetcher struct {
 
 	mu               sync.Mutex
 	cache            map[string]fetchResult
-	imageCache       map[string]imageResult
 	imageConfigCache map[string]imageConfigResult
 }
 
 type fetchResult struct {
 	md  *Metadata
 	err error
-}
-
-type imageResult struct {
-	entries []*Metadata
-	err     error
 }
 
 type imageConfigResult struct {
@@ -82,7 +76,6 @@ func NewFetcher(opts ...Option) *Fetcher {
 		},
 		log:              io.Discard,
 		cache:            map[string]fetchResult{},
-		imageCache:       map[string]imageResult{},
 		imageConfigCache: map[string]imageConfigResult{},
 	}
 	for _, opt := range opts {

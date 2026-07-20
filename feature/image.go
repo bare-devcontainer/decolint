@@ -44,28 +44,12 @@ func parseImageRef(raw string) (registry.Reference, error) {
 // FetchImageMetadata retrieves the Dev Container metadata entries carried by the
 // "devcontainer.metadata" label of the container image referenced by raw, in label order. It
 // returns no entries when the image carries no such label; a label that is not valid JSON is
-// ignored, matching the reference implementation. Every result, including a failure, is cached
-// for the lifetime of the Fetcher.
+// ignored, matching the reference implementation. The underlying image config, including a failure,
+// is cached for the lifetime of the Fetcher; the cheap label parse is redone on each call.
 func (f *Fetcher) FetchImageMetadata(ctx context.Context, raw string) ([]*Metadata, error) {
-	f.mu.Lock()
-	res, ok := f.imageCache[raw]
-	f.mu.Unlock()
-	if !ok {
-		res.entries, res.err = f.fetchImageMetadata(ctx, raw)
-		if res.err != nil {
-			res.err = fmt.Errorf("fetch image %q: %w", raw, res.err)
-		}
-		f.mu.Lock()
-		f.imageCache[raw] = res
-		f.mu.Unlock()
-	}
-	return res.entries, res.err
-}
-
-func (f *Fetcher) fetchImageMetadata(ctx context.Context, raw string) ([]*Metadata, error) {
 	img, err := f.fetchImageConfig(ctx, raw)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("fetch image %q: %w", raw, err)
 	}
 	label, ok := img.config.Config.Labels[imageMetadataLabel]
 	if !ok {

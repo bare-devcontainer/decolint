@@ -180,23 +180,25 @@ func TestFetchImageMetadata(t *testing.T) {
 		}
 	})
 
-	t.Run("caches results", func(t *testing.T) {
+	t.Run("caches the underlying image config", func(t *testing.T) {
 		t.Parallel()
 		host := ocitest.Registry(t)
 		ocitest.PushImage(t, host, "app", "1", map[string]string{imageMetadataLabel: `[{"id": "a"}]`}, false)
 
-		f := NewFetcher()
-		first, err := f.FetchImageMetadata(t.Context(), host+"/app:1")
-		if err != nil {
-			t.Fatalf("first FetchImageMetadata: %v", err)
+		var log strings.Builder
+		f := NewFetcher(WithLogWriter(&log))
+		for range 2 {
+			entries, err := f.FetchImageMetadata(t.Context(), host+"/app:1")
+			if err != nil {
+				t.Fatalf("FetchImageMetadata: %v", err)
+			}
+			if len(entries) != 1 || entries[0].ID != "a" {
+				t.Fatalf("entries = %+v, want one entry a", entries)
+			}
 		}
-		second, err := f.FetchImageMetadata(t.Context(), host+"/app:1")
-		if err != nil {
-			t.Fatalf("second FetchImageMetadata: %v", err)
-		}
-		// A cached result returns the identical slice header, not a re-fetched copy.
-		if &first[0] != &second[0] {
-			t.Error("second FetchImageMetadata did not return the cached result")
+		// The config is fetched once and reused; the label parse repeats but no second download does.
+		if got := strings.Count(log.String(), "Downloading image metadata"); got != 1 {
+			t.Errorf("downloads = %d, want 1 (the config must be cached):\n%s", got, log.String())
 		}
 	})
 }

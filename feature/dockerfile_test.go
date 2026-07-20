@@ -16,7 +16,7 @@ func TestFetchDockerfileMetadata(t *testing.T) {
 		dockerfile := "FROM scratch\n" +
 			`LABEL devcontainer.metadata='[{"id": "a", "privileged": true}, {"id": "b"}]'` + "\n"
 
-		entries, err := NewFetcher().FetchDockerfileMetadata(t.Context(), []byte(dockerfile), nil, "")
+		entries, err := NewFetcher().FetchDockerfileMetadata(t.Context(), []byte(dockerfile), nil, nil, "")
 		if err != nil {
 			t.Fatalf("FetchDockerfileMetadata: %v", err)
 		}
@@ -36,7 +36,7 @@ func TestFetchDockerfileMetadata(t *testing.T) {
 		}, false)
 		dockerfile := fmt.Sprintf("FROM %s/base:1\nRUN true\n", host)
 
-		entries, err := NewFetcher().FetchDockerfileMetadata(t.Context(), []byte(dockerfile), nil, "")
+		entries, err := NewFetcher().FetchDockerfileMetadata(t.Context(), []byte(dockerfile), nil, nil, "")
 		if err != nil {
 			t.Fatalf("FetchDockerfileMetadata: %v", err)
 		}
@@ -54,12 +54,27 @@ func TestFetchDockerfileMetadata(t *testing.T) {
 		dockerfile := fmt.Sprintf("FROM %s/base:1\n", host) +
 			`LABEL devcontainer.metadata='[{"id": "from-dockerfile"}]'` + "\n"
 
-		entries, err := NewFetcher().FetchDockerfileMetadata(t.Context(), []byte(dockerfile), nil, "")
+		entries, err := NewFetcher().FetchDockerfileMetadata(t.Context(), []byte(dockerfile), nil, nil, "")
 		if err != nil {
 			t.Fatalf("FetchDockerfileMetadata: %v", err)
 		}
 		if len(entries) != 1 || entries[0].ID != "from-dockerfile" {
 			t.Fatalf("entries = %+v, want one entry from-dockerfile", entries)
+		}
+	})
+
+	t.Run("passed label overrides the LABEL instruction", func(t *testing.T) {
+		t.Parallel()
+		dockerfile := "FROM scratch\n" +
+			`LABEL devcontainer.metadata='[{"id": "from-dockerfile"}]'` + "\n"
+		labels := map[string]string{imageMetadataLabel: `[{"id": "from-labels"}]`}
+
+		entries, err := NewFetcher().FetchDockerfileMetadata(t.Context(), []byte(dockerfile), nil, labels, "")
+		if err != nil {
+			t.Fatalf("FetchDockerfileMetadata: %v", err)
+		}
+		if len(entries) != 1 || entries[0].ID != "from-labels" {
+			t.Fatalf("entries = %+v, want one entry from-labels", entries)
 		}
 	})
 
@@ -70,7 +85,7 @@ func TestFetchDockerfileMetadata(t *testing.T) {
 		ocitest.PushImage(t, host, "base", "2", map[string]string{imageMetadataLabel: `[{"id": "two"}]`}, false)
 		dockerfile := fmt.Sprintf("ARG TAG=1\nFROM %s/base:${TAG}\n", host)
 
-		entries, err := NewFetcher().FetchDockerfileMetadata(t.Context(), []byte(dockerfile), map[string]string{"TAG": "2"}, "")
+		entries, err := NewFetcher().FetchDockerfileMetadata(t.Context(), []byte(dockerfile), map[string]string{"TAG": "2"}, nil, "")
 		if err != nil {
 			t.Fatalf("FetchDockerfileMetadata: %v", err)
 		}
@@ -85,7 +100,7 @@ func TestFetchDockerfileMetadata(t *testing.T) {
 		ocitest.PushImage(t, host, "base", "1", map[string]string{imageMetadataLabel: `[{"id": "one"}]`}, false)
 		dockerfile := fmt.Sprintf("ARG TAG=1\nFROM %s/base:${TAG}\n", host)
 
-		entries, err := NewFetcher().FetchDockerfileMetadata(t.Context(), []byte(dockerfile), nil, "")
+		entries, err := NewFetcher().FetchDockerfileMetadata(t.Context(), []byte(dockerfile), nil, nil, "")
 		if err != nil {
 			t.Fatalf("FetchDockerfileMetadata: %v", err)
 		}
@@ -101,7 +116,7 @@ func TestFetchDockerfileMetadata(t *testing.T) {
 		ocitest.PushImage(t, host, "base", "prod", map[string]string{imageMetadataLabel: `[{"id": "prod"}]`}, false)
 		dockerfile := fmt.Sprintf("FROM %s/base:dev AS dev\nFROM %s/base:prod AS prod\n", host, host)
 
-		entries, err := NewFetcher().FetchDockerfileMetadata(t.Context(), []byte(dockerfile), nil, "dev")
+		entries, err := NewFetcher().FetchDockerfileMetadata(t.Context(), []byte(dockerfile), nil, nil, "dev")
 		if err != nil {
 			t.Fatalf("FetchDockerfileMetadata: %v", err)
 		}
@@ -120,7 +135,7 @@ func TestFetchDockerfileMetadata(t *testing.T) {
 		// through the stage chain.
 		dockerfile := fmt.Sprintf("FROM %s/base:1 AS intermediate\nFROM intermediate\nRUN true\n", host)
 
-		entries, err := NewFetcher().FetchDockerfileMetadata(t.Context(), []byte(dockerfile), nil, "")
+		entries, err := NewFetcher().FetchDockerfileMetadata(t.Context(), []byte(dockerfile), nil, nil, "")
 		if err != nil {
 			t.Fatalf("FetchDockerfileMetadata: %v", err)
 		}
@@ -135,7 +150,7 @@ func TestFetchDockerfileMetadata(t *testing.T) {
 		ocitest.PushImage(t, host, "base", "1", map[string]string{"other": "value"}, false)
 		dockerfile := fmt.Sprintf("FROM %s/base:1\n", host)
 
-		entries, err := NewFetcher().FetchDockerfileMetadata(t.Context(), []byte(dockerfile), nil, "")
+		entries, err := NewFetcher().FetchDockerfileMetadata(t.Context(), []byte(dockerfile), nil, nil, "")
 		if err != nil {
 			t.Fatalf("FetchDockerfileMetadata: %v", err)
 		}
@@ -147,7 +162,7 @@ func TestFetchDockerfileMetadata(t *testing.T) {
 	t.Run("unfetchable base image is an error", func(t *testing.T) {
 		t.Parallel()
 		dockerfile := "FROM registry.invalid/app:1\n"
-		_, err := NewFetcher().FetchDockerfileMetadata(t.Context(), []byte(dockerfile), nil, "")
+		_, err := NewFetcher().FetchDockerfileMetadata(t.Context(), []byte(dockerfile), nil, nil, "")
 		if err == nil {
 			t.Fatal("FetchDockerfileMetadata with an unreachable base image: got nil error")
 		}
@@ -155,7 +170,7 @@ func TestFetchDockerfileMetadata(t *testing.T) {
 
 	t.Run("unparsable Dockerfile is an error", func(t *testing.T) {
 		t.Parallel()
-		_, err := NewFetcher().FetchDockerfileMetadata(t.Context(), []byte("RUN true\n"), nil, "")
+		_, err := NewFetcher().FetchDockerfileMetadata(t.Context(), []byte("RUN true\n"), nil, nil, "")
 		if err == nil {
 			t.Fatal("FetchDockerfileMetadata without a FROM: got nil error")
 		}
@@ -174,7 +189,7 @@ func TestFetchDockerfileMetadata(t *testing.T) {
 		if _, err := f.FetchImageMetadata(t.Context(), host+"/base:1"); err != nil {
 			t.Fatalf("FetchImageMetadata: %v", err)
 		}
-		if _, err := f.FetchDockerfileMetadata(t.Context(), []byte(dockerfile), nil, ""); err != nil {
+		if _, err := f.FetchDockerfileMetadata(t.Context(), []byte(dockerfile), nil, nil, ""); err != nil {
 			t.Fatalf("FetchDockerfileMetadata: %v", err)
 		}
 		if got := strings.Count(log.String(), "Downloading image metadata"); got != 1 {

@@ -911,17 +911,13 @@ func mergeSrc(t *testing.T, src string, features map[string]string) *hujson.Valu
 	return &root
 }
 
-// mergeFiles parses src as a devcontainer.json, writes each named plain file (e.g. a Dockerfile)
-// under a temporary directory, and merges with that directory as both the root and the config
-// directory.
+// mergeFiles parses src as a devcontainer.json, writes each named plain file (e.g. a Dockerfile
+// or a Compose file, possibly in a subdirectory) under a temporary directory, and merges with that
+// directory as both the root and the config directory.
 func mergeFiles(t *testing.T, src string, files map[string]string) *hujson.Value {
 	t.Helper()
 	dir := t.TempDir()
-	for name, content := range files {
-		if err := os.WriteFile(filepath.Join(dir, name), []byte(content), 0o644); err != nil {
-			t.Fatal(err)
-		}
-	}
+	writeFiles(t, dir, files)
 	root, err := hujson.Parse([]byte(src))
 	if err != nil {
 		t.Fatalf("parse devcontainer.json: %v", err)
@@ -930,6 +926,20 @@ func mergeFiles(t *testing.T, src string, files map[string]string) *hujson.Value
 		t.Fatalf("Merge: %v", err)
 	}
 	return &root
+}
+
+// writeFiles writes each named file under dir, creating intermediate directories.
+func writeFiles(t *testing.T, dir string, files map[string]string) {
+	t.Helper()
+	for name, content := range files {
+		path := filepath.Join(dir, name)
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
 }
 
 // assertJSON compares the merged tree, reduced to standard JSON, against want.

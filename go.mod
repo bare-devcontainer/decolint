@@ -3,6 +3,7 @@ module github.com/bare-devcontainer/decolint
 go 1.26.5
 
 require (
+	github.com/goccy/go-yaml v1.19.2
 	github.com/google/go-cmp v0.7.0
 	github.com/moby/buildkit v0.31.2
 	github.com/olareg/olareg v0.2.2
@@ -26,7 +27,6 @@ require (
 	github.com/felixge/httpsnoop v1.0.4 // indirect
 	github.com/go-logr/logr v1.4.3 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
-	github.com/goccy/go-yaml v1.19.2 // indirect
 	github.com/google/shlex v0.0.0-20191202100458-e7afc7fbc510 // indirect
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/in-toto/attestation v1.2.0 // indirect

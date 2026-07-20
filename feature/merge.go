@@ -19,8 +19,12 @@ import (
 //
 // The base image is the image named by "/image", or, for a Dockerfile configuration, the image
 // built from the Dockerfile declared by "/build" (or the legacy "/dockerFile" property): its LABEL
-// instructions and the label inherited from the base image its FROM names both contribute. A base
-// image reachable only through "dockerComposeFile" is not resolved.
+// instructions and the label inherited from the base image its FROM names both contribute. For a
+// Docker Compose configuration, the base image is the one behind the service named by "/service"
+// in the file(s) named by "/dockerComposeFile" (later files overriding earlier ones): the
+// service's "build" (its Dockerfile, honoring "args", "target", and a "devcontainer.metadata"
+// entry in its build "labels") or, absent one, its "image". Compose "extends", profiles, the
+// COMPOSE_FILE variable, and .env interpolation are not resolved.
 //
 // fsRoot and configDir together locate the referencing devcontainer.json (fsRoot is
 // discovery.ConfigFile.Root and configDir is the directory of its Path): a local Feature reference
@@ -28,8 +32,8 @@ import (
 // fsRoot's boundary.
 //
 // Every node Merge adds to the tree carries the byte offset of the key it was pulled in through
-// (the referencing Feature key, or the "image" or "dockerfile" key for image metadata) in the
-// original file, so findings on merged-in properties point at that reference. Any fetch or parse
+// (the referencing Feature key, or the "image", "dockerfile", or "dockerComposeFile" key for image
+// metadata) in the original file, so findings on merged-in properties point at that reference. Any fetch or parse
 // failure, or a dependency cycle, is returned as an error.
 func Merge(ctx context.Context, f *Fetcher, fsRoot *os.Root, configDir string, root *hujson.Value) error {
 	imageContribs, err := baseImageContributors(ctx, f, fsRoot, configDir, root)
@@ -58,11 +62,16 @@ func Merge(ctx context.Context, f *Fetcher, fsRoot *os.Root, configDir string, r
 }
 
 // baseImageContributors returns the metadata contributors of the configuration's base image: the
-// image built from the Dockerfile declared by "/build" (or the legacy "/dockerFile" property), or
-// the image named by "/image". A declared Dockerfile takes precedence over "image", matching the
-// reference implementation, which builds the Dockerfile when both are present.
+// image behind the Compose service declared by "/dockerComposeFile" and "/service", the image
+// built from the Dockerfile declared by "/build" (or the legacy "/dockerFile" property), or the
+// image named by "/image". A declared Compose file takes precedence over both other forms, and a
+// declared Dockerfile over "image", matching the reference implementation's branch order.
 func baseImageContributors(ctx context.Context, f *Fetcher, fsRoot *os.Root, configDir string, root *hujson.Value) ([]*contributor, error) {
-	contribs, declared, err := dockerfileContributors(ctx, f, fsRoot, configDir, root)
+	contribs, declared, err := composeContributors(ctx, f, fsRoot, configDir, root)
+	if err != nil || declared {
+		return contribs, err
+	}
+	contribs, declared, err = dockerfileContributors(ctx, f, fsRoot, configDir, root)
 	if err != nil || declared {
 		return contribs, err
 	}
@@ -92,11 +101,11 @@ func dockerfileContributors(ctx context.Context, f *Fetcher, fsRoot *os.Root, co
 	if !ok {
 		return nil, true, nil
 	}
-	src, err := readDockerfile(fsRoot, filepath.Join(configDir, path))
+	src, err := readBounded(fsRoot, filepath.Join(configDir, path), maxDockerfileBytes)
 	if err != nil {
 		return nil, true, err
 	}
-	entries, err := f.FetchDockerfileMetadata(ctx, src, args, target)
+	entries, err := f.FetchDockerfileMetadata(ctx, src, args, nil, target)
 	if err != nil {
 		return nil, true, fmt.Errorf("build %s: %w", path, err)
 	}
@@ -169,15 +178,15 @@ func buildOptions(obj *hujson.Object) (args map[string]string, target string, ok
 	return args, target, true
 }
 
-// readDockerfile reads the Dockerfile at path through fsRoot, so its resolution cannot escape
-// fsRoot's boundary.
-func readDockerfile(fsRoot *os.Root, path string) ([]byte, error) {
+// readBounded reads the file at path through fsRoot, so its resolution cannot escape fsRoot's
+// boundary, rejecting a file larger than maxBytes before reading it into memory.
+func readBounded(fsRoot *os.Root, path string, maxBytes int64) ([]byte, error) {
 	info, err := fsRoot.Stat(path)
 	if err != nil {
 		return nil, fmt.Errorf("stat %s: %w", path, err)
 	}
-	if info.Size() > maxDockerfileBytes {
-		return nil, fmt.Errorf("%s exceeds %d bytes", path, maxDockerfileBytes)
+	if info.Size() > maxBytes {
+		return nil, fmt.Errorf("%s exceeds %d bytes", path, maxBytes)
 	}
 	src, err := fsRoot.ReadFile(path)
 	if err != nil {

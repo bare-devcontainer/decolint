@@ -29,6 +29,9 @@ const (
 	// maxDockerfileBytes caps a Dockerfile read from disk, whose instructions are interpreted to
 	// derive the labels of the image it would build.
 	maxDockerfileBytes = 4 << 20 // 4 MB
+	// maxComposeFileBytes caps a Docker Compose file read from disk, parsed to locate the
+	// devcontainer's service and its image or build definition.
+	maxComposeFileBytes = 4 << 20 // 4 MB
 )
 
 // metadataFileName is the file declaring a Feature, located at the root of the Feature's directory

@@ -138,11 +138,18 @@ configuration, the image the Dockerfile named by `build.dockerfile`
 (or the legacy `dockerFile` property) would build: `LABEL`
 instructions in the Dockerfile and the label inherited from the image
 its `FROM` names both contribute, honoring `build.args` and
-`build.target`. Registries are accessed anonymously. A base image
-reached through `dockerComposeFile` is not resolved, an `image` or
-Dockerfile path containing an unresolved `${...}` variable is
-skipped, and a private image the anonymous client cannot pull is an
-error.
+`build.target`. For a Docker Compose configuration, the service named
+by `service` is looked up in the file(s) named by `dockerComposeFile`
+(later files override earlier ones): its `build` is resolved like a
+Dockerfile configuration — honoring `args`, `target`, and a
+`devcontainer.metadata` entry in the build `labels` — or, absent one,
+its `image` is fetched. Compose `extends`, profiles, the
+`COMPOSE_FILE` environment variable, and `.env` interpolation are not
+supported. Registries are accessed anonymously. A reference
+containing an unresolved `${...}` variable (an `image`, a Dockerfile
+or Compose file path, a service name, or a Compose service's image or
+build) is skipped, and a private image the anonymous client cannot
+pull is an error.
 
 ### Output formats
 

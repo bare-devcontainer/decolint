@@ -7,34 +7,45 @@ import (
 	"testing"
 
 	"github.com/bare-devcontainer/decolint/ocitest"
+	"github.com/compose-spec/compose-go/v2/types"
 	"github.com/google/go-cmp/cmp"
 	"github.com/tailscale/hujson"
 )
 
-func TestComposeStringMap(t *testing.T) {
-	t.Parallel()
+// wantService is the flattened, comparable view of a resolved Compose service the load tests assert
+// on, sparing them the pointer-valued MappingWithEquals of types.BuildConfig.
+type wantService struct {
+	image      string
+	hasBuild   bool
+	context    string
+	dockerfile string
+	target     string
+	args       map[string]string
+	labels     map[string]string
+}
 
-	tests := []struct {
-		name string
-		in   any
-		want map[string]string
-	}{
-		{"map form", map[string]any{"A": "1", "B": "2"}, map[string]string{"A": "1", "B": "2"}},
-		{"map non-string value dropped", map[string]any{"A": uint64(1), "B": "2"}, map[string]string{"B": "2"}},
-		{"list form", []any{"A=1", "B=2=3"}, map[string]string{"A": "1", "B": "2=3"}},
-		{"list entry without = dropped", []any{"A=1", "PASSTHROUGH"}, map[string]string{"A": "1"}},
-		{"list non-string entry dropped", []any{uint64(1), "A=1"}, map[string]string{"A": "1"}},
-		{"nil", nil, nil},
-		{"unsupported type", "A=1", nil},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-			if diff := cmp.Diff(tt.want, composeStringMap(tt.in)); diff != "" {
-				t.Errorf("composeStringMap(%v) mismatch (-want +got):\n%s", tt.in, diff)
+// flattenService reduces a resolved service to the fields the merge consumes.
+func flattenService(svc *types.ServiceConfig) wantService {
+	got := wantService{image: svc.Image}
+	if svc.Build != nil {
+		got.hasBuild = true
+		got.context = svc.Build.Context
+		got.dockerfile = svc.Build.Dockerfile
+		got.target = svc.Build.Target
+		for k, v := range svc.Build.Args {
+			if v == nil {
+				continue
 			}
-		})
+			if got.args == nil {
+				got.args = map[string]string{}
+			}
+			got.args[k] = *v
+		}
+		if len(svc.Build.Labels) > 0 {
+			got.labels = svc.Build.Labels
+		}
 	}
+	return got
 }
 
 func TestLoadComposeService(t *testing.T) {
@@ -43,27 +54,27 @@ func TestLoadComposeService(t *testing.T) {
 	tests := []struct {
 		name  string
 		files map[string]string
-		want  composeService
+		want  wantService
 	}{
 		{
 			"image service",
 			map[string]string{"a.yml": "services:\n  app:\n    image: registry.invalid/app:1\n"},
-			composeService{image: "registry.invalid/app:1"},
+			wantService{image: "registry.invalid/app:1"},
 		},
 		{
 			"build mapping",
 			map[string]string{"a.yml": "services:\n  app:\n    build:\n      context: ctx\n      dockerfile: Custom\n      target: dev\n      args:\n        A: \"1\"\n      labels:\n        L: v\n"},
-			composeService{hasBuild: true, context: "ctx", dockerfile: "Custom", target: "dev", args: map[string]string{"A": "1"}, labels: map[string]string{"L": "v"}},
+			wantService{hasBuild: true, context: "ctx", dockerfile: "Custom", target: "dev", args: map[string]string{"A": "1"}, labels: map[string]string{"L": "v"}},
+		},
+		{
+			"build args and labels in list form",
+			map[string]string{"a.yml": "services:\n  app:\n    build:\n      context: ctx\n      args:\n        - A=1\n        - PASSTHROUGH\n      labels:\n        - L=v\n"},
+			wantService{hasBuild: true, context: "ctx", args: map[string]string{"A": "1"}, labels: map[string]string{"L": "v"}},
 		},
 		{
 			"build string shorthand sets the context",
 			map[string]string{"a.yml": "services:\n  app:\n    build: ctx\n"},
-			composeService{hasBuild: true, context: "ctx"},
-		},
-		{
-			"null build is undeclared",
-			map[string]string{"a.yml": "services:\n  app:\n    image: registry.invalid/app:1\n    build:\n"},
-			composeService{image: "registry.invalid/app:1"},
+			wantService{hasBuild: true, context: "ctx"},
 		},
 		{
 			"later file overrides scalars and merges args key-wise",
@@ -71,7 +82,7 @@ func TestLoadComposeService(t *testing.T) {
 				"a.yml": "services:\n  app:\n    image: registry.invalid/app:1\n    build:\n      dockerfile: A\n      args:\n        A: \"1\"\n        B: \"1\"\n",
 				"b.yml": "services:\n  app:\n    image: registry.invalid/app:2\n    build:\n      dockerfile: B\n      args:\n        B: \"2\"\n",
 			},
-			composeService{image: "registry.invalid/app:2", hasBuild: true, dockerfile: "B", args: map[string]string{"A": "1", "B": "2"}},
+			wantService{image: "registry.invalid/app:2", hasBuild: true, dockerfile: "B", args: map[string]string{"A": "1", "B": "2"}},
 		},
 		{
 			"later mapping extends a string shorthand",
@@ -79,7 +90,7 @@ func TestLoadComposeService(t *testing.T) {
 				"a.yml": "services:\n  app:\n    build: ctx\n",
 				"b.yml": "services:\n  app:\n    build:\n      dockerfile: Custom\n",
 			},
-			composeService{hasBuild: true, context: "ctx", dockerfile: "Custom"},
+			wantService{hasBuild: true, context: "ctx", dockerfile: "Custom"},
 		},
 		{
 			"service declared only in a later file",
@@ -87,7 +98,7 @@ func TestLoadComposeService(t *testing.T) {
 				"a.yml": "services:\n  other:\n    image: registry.invalid/other:1\n",
 				"b.yml": "services:\n  app:\n    image: registry.invalid/app:1\n",
 			},
-			composeService{image: "registry.invalid/app:1"},
+			wantService{image: "registry.invalid/app:1"},
 		},
 	}
 	for _, tt := range tests {
@@ -101,11 +112,11 @@ func TestLoadComposeService(t *testing.T) {
 					paths = append(paths, p)
 				}
 			}
-			svc, err := loadComposeService(openRoot(t, dir), ".", paths, "app")
+			svc, err := loadComposeService(t.Context(), openRoot(t, dir), ".", paths, "app")
 			if err != nil {
 				t.Fatalf("loadComposeService: %v", err)
 			}
-			if diff := cmp.Diff(&tt.want, svc, cmp.AllowUnexported(composeService{})); diff != "" {
+			if diff := cmp.Diff(tt.want, flattenService(svc), cmp.AllowUnexported(wantService{})); diff != "" {
 				t.Errorf("service mismatch (-want +got):\n%s", diff)
 			}
 		})
@@ -123,13 +134,15 @@ func TestLoadComposeService_Errors(t *testing.T) {
 		{"unparsable YAML", map[string]string{"a.yml": "services: [\n"}},
 		{"service not found", map[string]string{"a.yml": "services:\n  other:\n    image: registry.invalid/other:1\n"}},
 		{"missing services key", map[string]string{"a.yml": "version: \"3\"\n"}},
+		// A null "build" is invalid Compose; docker compose rejects it, so decolint does too.
+		{"null build", map[string]string{"a.yml": "services:\n  app:\n    image: registry.invalid/app:1\n    build:\n"}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			dir := t.TempDir()
 			writeFiles(t, dir, tt.files)
-			if _, err := loadComposeService(openRoot(t, dir), ".", []string{"a.yml"}, "app"); err == nil {
+			if _, err := loadComposeService(t.Context(), openRoot(t, dir), ".", []string{"a.yml"}, "app"); err == nil {
 				t.Fatal("loadComposeService: got nil error")
 			}
 		})
@@ -183,6 +196,20 @@ func TestMerge_ComposeBuildService(t *testing.T) {
 			"docker-compose.yml": "services:\n  app:\n    build: app\n",
 			"app/Dockerfile":     dockerfile,
 		})
+		assertJSON(t, root, want)
+	})
+
+	t.Run("dockerfile_inline is built without a file", func(t *testing.T) {
+		t.Parallel()
+		// The inline Dockerfile lives in the compose file as a block scalar, so no Dockerfile is
+		// written to disk.
+		compose := "services:\n" +
+			"  app:\n" +
+			"    build:\n" +
+			"      dockerfile_inline: |\n" +
+			"        FROM scratch\n" +
+			`        LABEL devcontainer.metadata='[{"privileged": true}]'` + "\n"
+		root := mergeFiles(t, src, map[string]string{"docker-compose.yml": compose})
 		assertJSON(t, root, want)
 	})
 

@@ -65,17 +65,28 @@ func Merge(ctx context.Context, f *Fetcher, fsRoot *os.Root, configDir string, r
 // image behind the Compose service declared by "/dockerComposeFile" and "/service", the image
 // built from the Dockerfile declared by "/build" (or the legacy "/dockerFile" property), or the
 // image named by "/image". A declared Compose file takes precedence over both other forms, and a
-// declared Dockerfile over "image", matching the reference implementation's branch order.
+// declared Dockerfile over "image", matching the reference implementation's branch order. An error
+// yields no contributors.
 func baseImageContributors(ctx context.Context, f *Fetcher, fsRoot *os.Root, configDir string, root *hujson.Value) ([]*contributor, error) {
 	contribs, declared, err := composeContributors(ctx, f, fsRoot, configDir, root)
-	if err != nil || declared {
-		return contribs, err
+	if err != nil {
+		return nil, err
+	}
+	if declared {
+		return contribs, nil
 	}
 	contribs, declared, err = dockerfileContributors(ctx, f, fsRoot, configDir, root)
-	if err != nil || declared {
-		return contribs, err
+	if err != nil {
+		return nil, err
 	}
-	return imageContributors(ctx, f, root)
+	if declared {
+		return contribs, nil
+	}
+	contribs, err = imageContributors(ctx, f, root)
+	if err != nil {
+		return nil, err
+	}
+	return contribs, nil
 }
 
 // dockerfileContributors fetches the metadata the image built from the configuration's Dockerfile

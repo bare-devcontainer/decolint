@@ -82,8 +82,8 @@ func FeatureArchive(t *testing.T, metadata string, compress bool) []byte {
 	return gzBuf.Bytes()
 }
 
-// PushFeature publishes archive as a Feature artifact at host/repo:tag. When asIndex is true the tag
-// resolves to an image index that points at the manifest, exercising the index-following path.
+// PushFeature publishes archive as a Feature artifact at host/repo:tag. See [pushArtifact] for the
+// meaning of asIndex.
 func PushFeature(t *testing.T, host, repo, tag string, archive []byte, asIndex bool) {
 	t.Helper()
 	pushArtifact(t, host, repo, tag,
@@ -92,8 +92,7 @@ func PushFeature(t *testing.T, host, repo, tag string, archive []byte, asIndex b
 }
 
 // PushImage publishes a minimal container image at host/repo:tag whose config carries the given
-// labels, for exercising the base-image metadata path. When asIndex is true the tag resolves to an
-// image index that points at the manifest, exercising the index-following path.
+// labels, for exercising the base-image metadata path. See [pushArtifact] for the meaning of asIndex.
 func PushImage(t *testing.T, host, repo, tag string, labels map[string]string, asIndex bool) {
 	t.Helper()
 	pushArtifact(t, host, repo, tag,

@@ -12,10 +12,9 @@ import (
 //	// decolint-ignore-next-line <rule-id>[, <rule-id>...]
 //	// decolint-ignore-file [<rule-id>, ...]
 //
-// A "decolint-ignore-line" directive suppresses matching findings on the same line. A
-// "decolint-ignore-next-line" directive suppresses matching findings on the line immediately below.
-// Omitting the rule IDs suppresses all rules. A "decolint-ignore-file" directive suppresses matching
-// findings in the whole file.
+// Each suppresses matching findings: decolint-ignore-line on the same line, decolint-ignore-next-line
+// on the line immediately below, decolint-ignore-file in the whole file. Omitting the rule IDs
+// suppresses all rules.
 const (
 	lineDirective     = "decolint-ignore-line"
 	nextLineDirective = "decolint-ignore-next-line"

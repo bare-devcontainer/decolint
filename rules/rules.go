@@ -140,8 +140,8 @@ func Builtin() []Registration {
 }
 
 // unknownOverrides returns the sorted set of keys in overrides that do not match any built-in rule
-// ID, regardless of platform: a rule that exists but is filtered out by platforms is still known,
-// since overriding a platform-scoped rule that hasn't been enabled is a legitimate no-op, not a typo.
+// ID. Platform filtering is deliberately ignored: a rule that exists but is filtered out by
+// platforms is still known (see [RegisterRules] for why that is not treated as an error).
 func unknownOverrides(overrides map[string]linter.Severity) []string {
 	var unknown []string
 	for id := range overrides {

@@ -249,12 +249,11 @@ type Rule struct {
 	// Category classifies the kind of problem this rule reports. Every rule must declare exactly
 	// one category; the severity of all rules in a category can be adjusted at once.
 	Category Category
-	// FileTypes are the kinds of configuration files this rule applies to. The rule is only run
-	// against files of these types.
+	// FileTypes are the kinds of configuration files this rule applies to.
 	FileTypes []FileType
 	// Platforms are the target platforms this rule applies to. A nil or empty value means the rule
-	// applies to every platform and always runs, regardless of which platforms are selected when the
-	// linter is configured.
+	// applies to every platform, regardless of which platforms are selected when the linter is
+	// configured.
 	Platforms []Platform
 	// Paths are the JSON Pointer patterns of the values this rule wants to inspect. A "*" segment
 	// matches any object member name or array index (e.g. "/mounts/*"); the empty string matches the

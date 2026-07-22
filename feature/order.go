@@ -68,9 +68,9 @@ func (c *contributor) hasID() bool {
 }
 
 // valueKind classifies an optionValue or optScalar. kindObject is first so it is the zero value: a
-// contributor built without options is left as optionValue{}, which then reads as the default empty
+// contributor built without options is left as optionValue{}, which reads as the default empty
 // object. Such nodes (soft-dependency and override entries) are matched by Feature identity rather
-// than by their options, so their option value is never actually compared.
+// than by their options, so their option value is never compared.
 type valueKind int
 
 const (
@@ -265,7 +265,7 @@ func compareTo(a, b *contributor) int {
 	default: // KindLocal
 		// The spec prose says each local Feature is "unique and not equal to any other", but the
 		// reference implementation treats same path + same options as equal (deduplicated); we
-		// follow the implementation, so identical path and options return 0 here.
+		// follow the implementation.
 		if v := strings.Compare(a.resolvedPath, b.resolvedPath); v != 0 {
 			return v
 		}

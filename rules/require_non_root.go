@@ -10,8 +10,8 @@ import (
 // RequireNonRoot reports a devcontainer.json that does not clearly configure a non-root user. Per
 // the devcontainer.json spec, "remoteUser" is the user any lifecycle script and remote editor/IDE
 // server or terminal session runs as, defaulting to "containerUser" (and, ultimately, the image's
-// own default user) when unset. Both properties are therefore consulted: "remoteUser" is checked
-// first, falling back to "containerUser" only when "remoteUser" is unset. It is off by default
+// own default user) when unset. Both properties are therefore consulted: "remoteUser" first, then
+// "containerUser" if "remoteUser" is unset. It is off by default
 // because most configs don't set either property and enabling it by default would be noisy.
 var RequireNonRoot = &linter.Rule{
 	ID:          "require-non-root",
@@ -38,7 +38,6 @@ func checkRequireNonRoot(_ *linter.Context, node *linter.Node) []linter.Finding 
 		}}
 	}
 
-	// "remoteUser" defaults to "containerUser" when unset, so fall back to it.
 	if containerUser, ok := stringMember(obj, "containerUser"); ok {
 		if !isRootUser(containerUser) {
 			return nil

@@ -47,8 +47,8 @@ func composeContributors(ctx context.Context, f *Fetcher, fsRoot *os.Root, confi
 	if !ok || strings.Contains(service, "${") {
 		return nil, true, nil
 	}
-	// The Compose files are resolved relative to the referencing devcontainer.json's directory on the
-	// real filesystem, the base "docker compose" itself would use.
+	// The Compose files resolve relative to the referencing devcontainer.json's directory on the real
+	// filesystem, as "docker compose" itself would.
 	baseDir := filepath.Join(fsRoot.Name(), configDir)
 	svc, err := loadComposeService(ctx, baseDir, paths, service)
 	if err != nil {

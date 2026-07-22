@@ -124,41 +124,23 @@ Enable merging to lint the merged configuration instead:
 decolint -merge
 ```
 
-This fetches every referenced Feature to read its contributed
-configuration: OCI references are pulled from their registry, HTTP(S)
-URLs are downloaded, and local paths are read from disk. It also
-resolves the base image and merges the metadata carried by its
+This fetches every referenced Feature and resolves the base image.
+Metadata from the base image's
 [`devcontainer.metadata`](https://containers.dev/implementors/spec/#image-metadata)
-label. Image metadata is the lowest-precedence input: a Feature, and
-then the `devcontainer.json` itself, override it. A Feature or image
-that cannot be fetched is an error (exit code 2).
+label is the lowest-precedence input: a Feature, and then the
+`devcontainer.json` itself, override it. A Feature or image that cannot
+be fetched is an error (exit code 2).
 
-The base image is the image named by `image`, or, for a Dockerfile
-configuration, the image the Dockerfile named by `build.dockerfile`
-(or the legacy `dockerFile` property) would build: `LABEL`
-instructions in the Dockerfile and the label inherited from the image
-its `FROM` names both contribute, honoring `build.args` and
-`build.target`. For a Docker Compose configuration, the service named
-by `service` is looked up in the file(s) named by `dockerComposeFile`
-(later files override earlier ones, and `extends` and `include` are
-resolved as `docker compose config` resolves them): its `build` is
-resolved like a Dockerfile configuration — honoring `args`, `target`,
-and a `devcontainer.metadata` entry in the build `labels` — or, absent
-one, its `image` is fetched. Compose profiles, the `COMPOSE_FILE`
-environment variable, and `.env` interpolation are not applied.
-Registries are accessed anonymously. A reference containing an
-unresolved `${...}` variable (an `image`, a Dockerfile or Compose file
-path, a service name, or a Compose service's image or build) is
-skipped, and a private image the anonymous client cannot pull is an
-error.
+A few limits apply:
 
-Compose resolution is the one part of `-merge` that reads outside the
-configuration directory: because `dockerComposeFile`, `extends`, and
-`include` routinely reference files elsewhere in the repository (a
-root-level `../docker-compose.yml`, a shared base compose file), the
-Compose files and a service's build context are read from the real
-filesystem relative to the `devcontainer.json`, rather than confined
-to it like every other input.
+- For Docker Compose, `extends` and `include` are resolved as `docker
+  compose config` would, and later files override earlier ones, but
+  Compose profiles, the `COMPOSE_FILE` environment variable, and `.env`
+  interpolation are not.
+- A reference with an unresolved `${...}` variable is skipped, since its
+  value is only known when the container is created.
+- Registries are accessed anonymously, so a private image that cannot be
+  pulled that way counts as a fetch failure.
 
 ### Output formats
 

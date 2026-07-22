@@ -16,10 +16,10 @@ import (
 // composeContributors returns the metadata contributors of the base image reached through
 // "dockerComposeFile" and "service" of root: the image the named service's "build" would produce,
 // or, absent one, the image its "image" names. declared reports whether root declares
-// "dockerComposeFile" at all, so the caller falls back to "build" or "image" only when it does not,
-// matching the reference implementation's branch order. A declaration that cannot be resolved at
-// lint time (a variable substitution in a path, the service name, image, context, dockerfile, or
-// target, or a missing "service" property, which a lint rule already flags) contributes nothing.
+// "dockerComposeFile" at all, which [baseImageContributors] uses to choose the base-image form. A
+// declaration that cannot be resolved at lint time (a variable substitution in a path, the service
+// name, image, context, dockerfile, or target, or a missing "service" property, which a lint rule
+// already flags) contributes nothing.
 //
 // Unlike the rest of the merge, Compose resolution reads from the real filesystem rather than
 // through fsRoot: the reference implementation runs "docker compose config", which resolves
@@ -160,11 +160,11 @@ func composeServiceMetadata(ctx context.Context, f *Fetcher, baseDir, firstCompo
 
 // composeBuildMetadata fetches the metadata the image built from build would carry. The Dockerfile
 // (default "Dockerfile", or the inline "dockerfile_inline" content) resolves relative to the
-// context (default: the first Compose file's directory), honoring "args" and "target" like a
-// devcontainer.json "build" object. A "devcontainer.metadata" entry in "labels" overrides the
-// Dockerfile's own label, as "docker build --label" does; an unresolvable variable substitution
-// skips the build, and an arg carrying one (or an environment passthrough, which has no value in
-// the file) is dropped so the Dockerfile's ARG default applies.
+// context (default: the first Compose file's directory), honoring "args" and "target". A
+// "devcontainer.metadata" entry in the build "labels" is forwarded to override the Dockerfile's own
+// (see [Fetcher.FetchDockerfileMetadata]); an unresolvable variable substitution skips the build,
+// and an arg carrying one (or an environment passthrough, which has no value in the file) is dropped
+// so the Dockerfile's ARG default applies.
 func composeBuildMetadata(ctx context.Context, f *Fetcher, baseDir, firstComposePath string, build *types.BuildConfig) ([]*Metadata, string, error) {
 	if strings.Contains(build.Context, "${") || strings.Contains(build.Dockerfile, "${") || strings.Contains(build.Target, "${") {
 		return nil, "", nil

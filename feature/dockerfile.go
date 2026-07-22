@@ -11,14 +11,11 @@ import (
 )
 
 // FetchDockerfileMetadata computes the Dev Container metadata entries the image built from
-// dockerfile would carry in its "devcontainer.metadata" label: the value set by the Dockerfile's
-// own LABEL instructions, or, absent one, the value inherited from the base image named by FROM,
-// whose config is fetched through the registry. buildArgs and target are the "args" and "target"
-// properties of the devcontainer.json "build" object; they select the built stage and resolve ARG
-// references, including in FROM. labels are applied onto the built image after its LABEL
-// instructions, as "docker build --label" does, so a "devcontainer.metadata" label there overrides
-// the Dockerfile's own. It returns no entries when the built image would carry no such label; a
-// Dockerfile that cannot be parsed or whose base image cannot be fetched is an error.
+// dockerfile would carry in its "devcontainer.metadata" label: the value set by its own LABEL
+// instructions, or, absent one, the value inherited from the base image its FROM names, whose
+// config is fetched through the registry. A "devcontainer.metadata" entry in labels overrides the
+// Dockerfile's own, as "docker build --label" does. It returns no entries, and no error, when the
+// built image would carry no such label.
 func (f *Fetcher) FetchDockerfileMetadata(ctx context.Context, dockerfile []byte, buildArgs, labels map[string]string, target string) ([]*Metadata, error) {
 	res, err := dockerfile2llb.Dockerfile2LLB(ctx, dockerfile, dockerfile2llb.ConvertOpt{
 		Config: dockerui.Config{

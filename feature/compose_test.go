@@ -3,6 +3,7 @@ package feature
 import (
 	"fmt"
 	"maps"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -24,12 +25,18 @@ type wantService struct {
 	labels     map[string]string
 }
 
-// flattenService reduces a resolved service to the fields the merge consumes.
-func flattenService(svc *types.ServiceConfig) wantService {
+// flattenService reduces a resolved service to the fields the merge consumes. The build context,
+// which compose-go resolves to an absolute path, is made relative to dir for a stable comparison.
+func flattenService(dir string, svc *types.ServiceConfig) wantService {
 	got := wantService{image: svc.Image}
 	if svc.Build != nil {
 		got.hasBuild = true
 		got.context = svc.Build.Context
+		if svc.Build.Context != "" {
+			if rel, err := filepath.Rel(dir, svc.Build.Context); err == nil {
+				got.context = rel
+			}
+		}
 		got.dockerfile = svc.Build.Dockerfile
 		got.target = svc.Build.Target
 		for k, v := range svc.Build.Args {
@@ -46,6 +53,24 @@ func flattenService(svc *types.ServiceConfig) wantService {
 		}
 	}
 	return got
+}
+
+func TestReadFileLimited(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	writeFiles(t, dir, map[string]string{"f": "hello"})
+	path := filepath.Join(dir, "f")
+
+	if got, err := readFileLimited(path, 8); err != nil || string(got) != "hello" {
+		t.Fatalf("readFileLimited within limit = %q, %v; want \"hello\", nil", got, err)
+	}
+	if _, err := readFileLimited(path, 4); err == nil {
+		t.Error("readFileLimited over limit: got nil error")
+	}
+	if _, err := readFileLimited(filepath.Join(dir, "missing"), 8); err == nil {
+		t.Error("readFileLimited on a missing file: got nil error")
+	}
 }
 
 func TestLoadComposeService(t *testing.T) {
@@ -112,11 +137,11 @@ func TestLoadComposeService(t *testing.T) {
 					paths = append(paths, p)
 				}
 			}
-			svc, err := loadComposeService(t.Context(), openRoot(t, dir), ".", paths, "app")
+			svc, err := loadComposeService(t.Context(), dir, paths, "app")
 			if err != nil {
 				t.Fatalf("loadComposeService: %v", err)
 			}
-			if diff := cmp.Diff(tt.want, flattenService(svc), cmp.AllowUnexported(wantService{})); diff != "" {
+			if diff := cmp.Diff(tt.want, flattenService(dir, svc), cmp.AllowUnexported(wantService{})); diff != "" {
 				t.Errorf("service mismatch (-want +got):\n%s", diff)
 			}
 		})
@@ -142,7 +167,7 @@ func TestLoadComposeService_Errors(t *testing.T) {
 			t.Parallel()
 			dir := t.TempDir()
 			writeFiles(t, dir, tt.files)
-			if _, err := loadComposeService(t.Context(), openRoot(t, dir), ".", []string{"a.yml"}, "app"); err == nil {
+			if _, err := loadComposeService(t.Context(), dir, []string{"a.yml"}, "app"); err == nil {
 				t.Fatal("loadComposeService: got nil error")
 			}
 		})
@@ -169,6 +194,119 @@ func TestMerge_ComposeImageService(t *testing.T) {
 	}`)
 }
 
+func TestMerge_ComposeExtends(t *testing.T) {
+	t.Parallel()
+
+	host := ocitest.Registry(t)
+	ocitest.PushImage(t, host, "base", "1", map[string]string{
+		imageMetadataLabel: `[{"privileged": true}]`,
+	}, false)
+
+	src := `{"dockerComposeFile": "docker-compose.yml", "service": "app"}`
+	want := `{
+	  "dockerComposeFile": "docker-compose.yml",
+	  "service": "app",
+	  "privileged": true
+	}`
+
+	t.Run("service extends a base service in another file", func(t *testing.T) {
+		t.Parallel()
+		root := mergeFiles(t, src, map[string]string{
+			"docker-compose.yml": "services:\n  app:\n    extends:\n      file: base/compose.yml\n      service: base\n",
+			"base/compose.yml":   fmt.Sprintf("services:\n  base:\n    image: %s/base:1\n", host),
+		})
+		assertJSON(t, root, want)
+	})
+
+	t.Run("extends chains across nested files", func(t *testing.T) {
+		t.Parallel()
+		// app -> a/mid.yml(mid) -> a/base.yml(base), where a/base.yml resolves relative to a/mid.yml.
+		root := mergeFiles(t, src, map[string]string{
+			"docker-compose.yml": "services:\n  app:\n    extends:\n      file: a/mid.yml\n      service: mid\n",
+			"a/mid.yml":          "services:\n  mid:\n    extends:\n      file: base.yml\n      service: base\n",
+			"a/base.yml":         fmt.Sprintf("services:\n  base:\n    image: %s/base:1\n", host),
+		})
+		assertJSON(t, root, want)
+	})
+}
+
+func TestMerge_ComposeInclude(t *testing.T) {
+	t.Parallel()
+
+	host := ocitest.Registry(t)
+	ocitest.PushImage(t, host, "base", "1", map[string]string{
+		imageMetadataLabel: `[{"privileged": true}]`,
+	}, false)
+
+	// The compose file includes another that defines the base service the app extends.
+	src := `{"dockerComposeFile": "docker-compose.yml", "service": "app"}`
+	root := mergeFiles(t, src, map[string]string{
+		"docker-compose.yml": "include:\n  - base/compose.yml\nservices:\n  app:\n    extends:\n      service: base\n",
+		"base/compose.yml":   fmt.Sprintf("services:\n  base:\n    image: %s/base:1\n", host),
+	})
+	assertJSON(t, root, `{
+	  "dockerComposeFile": "docker-compose.yml",
+	  "service": "app",
+	  "privileged": true
+	}`)
+}
+
+// TestMerge_ComposeFileOutsideConfigDir covers the common layout of a devcontainer.json under
+// .devcontainer that names a Compose file at the repository root via a "../" path: Compose
+// resolution reads from the real filesystem, so it is not confined to the config directory. The
+// config is opened confined to .devcontainer, mirroring discovery.
+func TestMerge_ComposeFileOutsideConfigDir(t *testing.T) {
+	t.Parallel()
+
+	src := `{"dockerComposeFile": "../docker-compose.yml", "service": "app"}`
+	want := `{
+	  "dockerComposeFile": "../docker-compose.yml",
+	  "service": "app",
+	  "privileged": true
+	}`
+
+	t.Run("image at the repository root", func(t *testing.T) {
+		t.Parallel()
+		host := ocitest.Registry(t)
+		ocitest.PushImage(t, host, "base", "1", map[string]string{imageMetadataLabel: `[{"privileged": true}]`}, false)
+
+		repo := t.TempDir()
+		writeFiles(t, repo, map[string]string{
+			"docker-compose.yml": fmt.Sprintf("services:\n  app:\n    image: %s/base:1\n", host),
+		})
+		root := mergeOutsideDir(t, repo, src)
+		assertJSON(t, root, want)
+	})
+
+	t.Run("build context at the repository root", func(t *testing.T) {
+		t.Parallel()
+		// The Dockerfile sits at the repository root, outside the .devcontainer the config is confined
+		// to, exercising the out-of-directory read and the absolute display reference.
+		repo := t.TempDir()
+		writeFiles(t, repo, map[string]string{
+			"docker-compose.yml": "services:\n  app:\n    build:\n      context: .\n",
+			"Dockerfile":         "FROM scratch\n" + `LABEL devcontainer.metadata='[{"privileged": true}]'` + "\n",
+		})
+		root := mergeOutsideDir(t, repo, src)
+		assertJSON(t, root, want)
+	})
+}
+
+// mergeOutsideDir parses src as the .devcontainer/devcontainer.json of repo and merges it with the
+// root confined to that .devcontainer directory, the confinement discovery applies.
+func mergeOutsideDir(t *testing.T, repo, src string) *hujson.Value {
+	t.Helper()
+	writeFiles(t, repo, map[string]string{".devcontainer/devcontainer.json": src})
+	root, err := hujson.Parse([]byte(src))
+	if err != nil {
+		t.Fatalf("parse devcontainer.json: %v", err)
+	}
+	if err := Merge(t.Context(), NewFetcher(), openRoot(t, filepath.Join(repo, ".devcontainer")), ".", &root); err != nil {
+		t.Fatalf("Merge: %v", err)
+	}
+	return &root
+}
+
 func TestMerge_ComposeBuildService(t *testing.T) {
 	t.Parallel()
 
@@ -184,7 +322,7 @@ func TestMerge_ComposeBuildService(t *testing.T) {
 	t.Run("context and dockerfile", func(t *testing.T) {
 		t.Parallel()
 		root := mergeFiles(t, src, map[string]string{
-			"docker-compose.yml": "services:\n  app:\n    build:\n      context: app\n      dockerfile: Custom.Dockerfile\n",
+			"docker-compose.yml":    "services:\n  app:\n    build:\n      context: app\n      dockerfile: Custom.Dockerfile\n",
 			"app/Custom.Dockerfile": dockerfile,
 		})
 		assertJSON(t, root, want)

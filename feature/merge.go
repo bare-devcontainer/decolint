@@ -23,13 +23,16 @@ import (
 // Docker Compose configuration, the base image is the one behind the service named by "/service"
 // in the file(s) named by "/dockerComposeFile" (later files overriding earlier ones): the
 // service's "build" (its Dockerfile, honoring "args", "target", and a "devcontainer.metadata"
-// entry in its build "labels") or, absent one, its "image". Compose "extends", profiles, the
-// COMPOSE_FILE variable, and .env interpolation are not resolved.
+// entry in its build "labels") or, absent one, its "image". Compose "extends" and "include" are
+// resolved as the reference implementation's "docker compose config" resolves them; profiles, the
+// COMPOSE_FILE variable, and .env interpolation are not applied.
 //
 // fsRoot and configDir together locate the referencing devcontainer.json (fsRoot is
 // discovery.ConfigFile.Root and configDir is the directory of its Path): a local Feature reference
 // or a Dockerfile is resolved relative to configDir and read through fsRoot, so it cannot escape
-// fsRoot's boundary.
+// fsRoot's boundary. Docker Compose resolution is the one exception: its files, and a Compose
+// service's build context, are read from the real filesystem relative to configDir, since
+// "extends" and "include" routinely reference files outside the configuration directory.
 //
 // Every node Merge adds to the tree carries the byte offset of the key it was pulled in through
 // (the referencing Feature key, or the "image", "dockerfile", or "dockerComposeFile" key for image

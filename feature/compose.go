@@ -20,6 +20,12 @@ import (
 // matching the reference implementation's branch order. A declaration that cannot be resolved at
 // lint time (a variable substitution in a path, the service name, image, context, dockerfile, or
 // target, or a missing "service" property, which a lint rule already flags) contributes nothing.
+//
+// Unlike the rest of the merge, Compose resolution reads from the real filesystem rather than
+// through fsRoot: the reference implementation runs "docker compose config", which resolves
+// "extends" and "include" against files that commonly sit outside the configuration directory (a
+// compose file named "../docker-compose.yml", or a service that extends a root-level file), so the
+// fsRoot confinement is deliberately not applied here.
 func composeContributors(ctx context.Context, f *Fetcher, fsRoot *os.Root, configDir string, root *hujson.Value) ([]*contributor, bool, error) {
 	obj, ok := root.Value.(*hujson.Object)
 	if !ok {
@@ -41,11 +47,14 @@ func composeContributors(ctx context.Context, f *Fetcher, fsRoot *os.Root, confi
 	if !ok || strings.Contains(service, "${") {
 		return nil, true, nil
 	}
-	svc, err := loadComposeService(ctx, fsRoot, configDir, paths, service)
+	// The Compose files are resolved relative to the referencing devcontainer.json's directory on the
+	// real filesystem, the base "docker compose" itself would use.
+	baseDir := filepath.Join(fsRoot.Name(), configDir)
+	svc, err := loadComposeService(ctx, baseDir, paths, service)
 	if err != nil {
 		return nil, true, err
 	}
-	entries, ref, err := composeServiceMetadata(ctx, f, fsRoot, configDir, paths[0], svc)
+	entries, ref, err := composeServiceMetadata(ctx, f, baseDir, paths[0], svc)
 	if err != nil {
 		return nil, true, err
 	}
@@ -96,22 +105,20 @@ func composeServiceName(obj *hujson.Object) (string, bool) {
 	return lit.String(), true
 }
 
-// loadComposeService reads each Compose file through fsRoot and returns the named service resolved
-// by compose-go, merged across all of them per the Compose specification. Interpolation is skipped
-// so a "${...}" variable is preserved verbatim for the caller to recognize as unresolvable at lint
-// time; extends and includes, which would read files outside fsRoot, are skipped as well, leaving
-// them unresolved like the reference implementation's other unsupported constructs. A missing or
-// unparsable file, or a service found in none of them, is an error.
-func loadComposeService(ctx context.Context, fsRoot *os.Root, configDir string, paths []string, service string) (*types.ServiceConfig, error) {
+// loadComposeService reads each Compose file at baseDir and returns the named service resolved by
+// compose-go, merged across all of them per the Compose specification, with "extends" and "include"
+// resolved as "docker compose config" would. Interpolation is skipped so a "${...}" variable is
+// preserved verbatim for the caller to recognize as unresolvable at lint time; the COMPOSE_FILE
+// variable, profiles, and ".env" interpolation are likewise not applied. A missing or unparsable
+// file (including one an "extends" or "include" names), or a service found in none of them, is an
+// error.
+func loadComposeService(ctx context.Context, baseDir string, paths []string, service string) (*types.ServiceConfig, error) {
 	files := make([]types.ConfigFile, 0, len(paths))
 	for _, p := range paths {
-		src, err := readBounded(fsRoot, filepath.Join(configDir, p), maxComposeFileBytes)
-		if err != nil {
-			return nil, err
-		}
-		files = append(files, types.ConfigFile{Filename: p, Content: src})
+		files = append(files, types.ConfigFile{Filename: filepath.Join(baseDir, p)})
 	}
 	project, err := loader.LoadWithContext(ctx, types.ConfigDetails{
+		WorkingDir:  filepath.Dir(filepath.Join(baseDir, paths[0])),
 		ConfigFiles: files,
 		Environment: types.Mapping{},
 	}, func(o *loader.Options) {
@@ -121,8 +128,9 @@ func loadComposeService(ctx context.Context, fsRoot *os.Root, configDir string, 
 		o.SkipConsistencyCheck = true
 		o.SkipDefaultValues = true
 		o.SkipResolveEnvironment = true
-		o.SkipExtends = true
-		o.SkipInclude = true
+		// Resolve a service's build context to an absolute path against the file that declares it, so
+		// a build inherited through "extends" from another directory reads its Dockerfile correctly.
+		o.ResolvePaths = true
 	})
 	if err != nil {
 		return nil, fmt.Errorf("parse %s: %w", strings.Join(paths, ", "), err)
@@ -139,9 +147,9 @@ func loadComposeService(ctx context.Context, fsRoot *os.Root, configDir string, 
 // relative to firstComposePath, the first declared Compose file, matching the reference
 // implementation's default project directory. A service declaring neither a resolvable "build" nor
 // a resolvable "image" contributes nothing.
-func composeServiceMetadata(ctx context.Context, f *Fetcher, fsRoot *os.Root, configDir, firstComposePath string, svc *types.ServiceConfig) ([]*Metadata, string, error) {
+func composeServiceMetadata(ctx context.Context, f *Fetcher, baseDir, firstComposePath string, svc *types.ServiceConfig) ([]*Metadata, string, error) {
 	if svc.Build != nil {
-		return composeBuildMetadata(ctx, f, fsRoot, configDir, firstComposePath, svc.Build)
+		return composeBuildMetadata(ctx, f, baseDir, firstComposePath, svc.Build)
 	}
 	if svc.Image == "" || strings.Contains(svc.Image, "${") {
 		return nil, "", nil
@@ -157,7 +165,7 @@ func composeServiceMetadata(ctx context.Context, f *Fetcher, fsRoot *os.Root, co
 // Dockerfile's own label, as "docker build --label" does; an unresolvable variable substitution
 // skips the build, and an arg carrying one (or an environment passthrough, which has no value in
 // the file) is dropped so the Dockerfile's ARG default applies.
-func composeBuildMetadata(ctx context.Context, f *Fetcher, fsRoot *os.Root, configDir, firstComposePath string, build *types.BuildConfig) ([]*Metadata, string, error) {
+func composeBuildMetadata(ctx context.Context, f *Fetcher, baseDir, firstComposePath string, build *types.BuildConfig) ([]*Metadata, string, error) {
 	if strings.Contains(build.Context, "${") || strings.Contains(build.Dockerfile, "${") || strings.Contains(build.Target, "${") {
 		return nil, "", nil
 	}
@@ -190,18 +198,56 @@ func composeBuildMetadata(ctx context.Context, f *Fetcher, fsRoot *os.Root, conf
 		return entries, "dockerfile_inline", nil
 	}
 
+	// build.Context is the absolute context directory compose-go resolved (see ResolvePaths); it is
+	// empty only when the build declares no context, defaulting to the first Compose file's directory.
+	context := build.Context
+	if context == "" {
+		context = filepath.Dir(filepath.Join(baseDir, firstComposePath))
+	}
 	dockerfile := build.Dockerfile
 	if dockerfile == "" {
 		dockerfile = "Dockerfile"
 	}
-	path := filepath.Join(filepath.Dir(firstComposePath), build.Context, dockerfile)
-	src, err := readBounded(fsRoot, filepath.Join(configDir, path), maxDockerfileBytes)
+	dockerfilePath := dockerfile
+	if !filepath.IsAbs(dockerfilePath) {
+		dockerfilePath = filepath.Join(context, dockerfile)
+	}
+	src, err := readFileLimited(dockerfilePath, maxDockerfileBytes)
 	if err != nil {
 		return nil, "", err
 	}
+	ref := composeDisplayRef(baseDir, dockerfilePath)
 	entries, err := f.FetchDockerfileMetadata(ctx, src, args, labels, build.Target)
 	if err != nil {
-		return nil, "", fmt.Errorf("build %s: %w", path, err)
+		return nil, "", fmt.Errorf("build %s: %w", ref, err)
 	}
-	return entries, path, nil
+	return entries, ref, nil
+}
+
+// composeDisplayRef renders a Dockerfile path for display: relative to the configuration directory
+// when it lies within it, and absolute otherwise (a build context reached through "extends" or a
+// "../" Compose file may sit outside it).
+func composeDisplayRef(baseDir, path string) string {
+	if rel, err := filepath.Rel(baseDir, path); err == nil && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return rel
+	}
+	return path
+}
+
+// readFileLimited reads the file at path from the real filesystem, rejecting a file larger than
+// maxBytes before reading it into memory. It is used for the Compose build path, which resolves
+// against files that may sit outside the configuration's fsRoot boundary.
+func readFileLimited(path string, maxBytes int64) ([]byte, error) {
+	info, err := os.Stat(path)
+	if err != nil {
+		return nil, fmt.Errorf("stat %s: %w", path, err)
+	}
+	if info.Size() > maxBytes {
+		return nil, fmt.Errorf("%s exceeds %d bytes", path, maxBytes)
+	}
+	src, err := os.ReadFile(path)
+	if err != nil {
+		return nil, fmt.Errorf("read %s: %w", path, err)
+	}
+	return src, nil
 }

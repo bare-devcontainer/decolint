@@ -9,9 +9,9 @@ import (
 // Metadata is the declaration of one fetched Feature: the content of its
 // devcontainer-feature.json.
 type Metadata struct {
-	// ID is the Feature's declared identifier.
+	// ID is the Feature's declared identifier, or "" when it declares none (as image-metadata
+	// entries do; see [contributor.hasID]).
 	ID string
-	// Version is the Feature's declared version.
 	Version string
 	// DependsOn lists the Features this Feature depends on, in declaration order. Dependencies are
 	// installed before the Feature and contribute properties of their own.

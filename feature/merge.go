@@ -11,26 +11,14 @@ import (
 	"github.com/tailscale/hujson"
 )
 
-// Merge fetches the Features referenced under "/features" of root, a devcontainer.json parsed from
-// a file at configDir within fsRoot, along with the Dev Container metadata carried by the
-// "devcontainer.metadata" label of the configuration's base image, and merges the properties they
-// contribute into root in place, following the merge logic of the Dev Container specification.
-// Features named by "dependsOn" are resolved recursively and contribute properties as well.
+// Merge resolves everything a devcontainer.json inherits and folds it into root in place, following
+// the Dev Container specification's merge logic. The inputs are the Features referenced under
+// "/features" (and, recursively, those their "dependsOn" names) and the metadata carried by the
+// configuration's base image, resolved by [baseImageContributors].
 //
-// The base image is the image named by "/image", or, for a Dockerfile configuration, the image
-// built from the Dockerfile declared by "/build" (or the legacy "/dockerFile" property): its LABEL
-// instructions and the label inherited from the base image its FROM names both contribute. A base
-// image reachable only through "dockerComposeFile" is not resolved.
-//
-// fsRoot and configDir together locate the referencing devcontainer.json (fsRoot is
-// discovery.ConfigFile.Root and configDir is the directory of its Path): a local Feature reference
-// or a Dockerfile is resolved relative to configDir and read through fsRoot, so it cannot escape
-// fsRoot's boundary.
-//
-// Every node Merge adds to the tree carries the byte offset of the key it was pulled in through
-// (the referencing Feature key, or the "image" or "dockerfile" key for image metadata) in the
-// original file, so findings on merged-in properties point at that reference. Any fetch or parse
-// failure, or a dependency cycle, is returned as an error.
+// Every node Merge adds carries the byte offset of the key it was pulled in through, so findings on
+// merged-in properties point at that reference. Any fetch or parse failure, or a dependency cycle,
+// is returned as an error.
 func Merge(ctx context.Context, f *Fetcher, fsRoot *os.Root, configDir string, root *hujson.Value) error {
 	imageContribs, err := baseImageContributors(ctx, f, fsRoot, configDir, root)
 	if err != nil {
@@ -57,23 +45,43 @@ func Merge(ctx context.Context, f *Fetcher, fsRoot *os.Root, configDir string, r
 	return nil
 }
 
-// baseImageContributors returns the metadata contributors of the configuration's base image: the
-// image built from the Dockerfile declared by "/build" (or the legacy "/dockerFile" property), or
-// the image named by "/image". A declared Dockerfile takes precedence over "image", matching the
-// reference implementation, which builds the Dockerfile when both are present.
+// baseImageContributors returns the metadata contributors of the configuration's base image. It
+// tries the three declaration forms in order, and the first one root declares wins — even when it
+// yields no contributors, so a later form is never used as a fallback:
+//
+//   - "dockerComposeFile" with "service" ([composeContributors])
+//   - "build", or the legacy "dockerFile" ([dockerfileContributors])
+//   - "image" ([imageContributors])
+//
+// Only one form is valid at a time, so the order matters only for an invalid config that declares
+// several; it then resolves the one the real tooling would.
 func baseImageContributors(ctx context.Context, f *Fetcher, fsRoot *os.Root, configDir string, root *hujson.Value) ([]*contributor, error) {
-	contribs, declared, err := dockerfileContributors(ctx, f, fsRoot, configDir, root)
-	if err != nil || declared {
-		return contribs, err
+	contribs, declared, err := composeContributors(ctx, f, fsRoot, configDir, root)
+	if err != nil {
+		return nil, err
 	}
-	return imageContributors(ctx, f, root)
+	if declared {
+		return contribs, nil
+	}
+	contribs, declared, err = dockerfileContributors(ctx, f, fsRoot, configDir, root)
+	if err != nil {
+		return nil, err
+	}
+	if declared {
+		return contribs, nil
+	}
+	contribs, err = imageContributors(ctx, f, root)
+	if err != nil {
+		return nil, err
+	}
+	return contribs, nil
 }
 
 // dockerfileContributors fetches the metadata the image built from the configuration's Dockerfile
-// would carry and returns one contributor per entry, in label order, anchored at the key declaring
-// the Dockerfile path. declared reports whether root declares a Dockerfile at all, so the caller
-// falls back to "/image" only when it does not; a declared Dockerfile that cannot be resolved at
-// lint time (a variable substitution in its path or target) contributes nothing.
+// would carry, anchored at the key declaring the Dockerfile path. declared reports whether root
+// declares a Dockerfile at all, which [baseImageContributors] uses to choose the base-image form; a
+// declared Dockerfile whose path or target cannot be resolved at lint time (a "${...}"
+// substitution) contributes nothing.
 func dockerfileContributors(ctx context.Context, f *Fetcher, fsRoot *os.Root, configDir string, root *hujson.Value) ([]*contributor, bool, error) {
 	obj, ok := root.Value.(*hujson.Object)
 	if !ok {
@@ -92,11 +100,11 @@ func dockerfileContributors(ctx context.Context, f *Fetcher, fsRoot *os.Root, co
 	if !ok {
 		return nil, true, nil
 	}
-	src, err := readDockerfile(fsRoot, filepath.Join(configDir, path))
+	src, err := readBounded(fsRoot, filepath.Join(configDir, path), maxDockerfileBytes)
 	if err != nil {
 		return nil, true, err
 	}
-	entries, err := f.FetchDockerfileMetadata(ctx, src, args, target)
+	entries, err := f.FetchDockerfileMetadata(ctx, src, args, nil, target)
 	if err != nil {
 		return nil, true, fmt.Errorf("build %s: %w", path, err)
 	}
@@ -169,15 +177,15 @@ func buildOptions(obj *hujson.Object) (args map[string]string, target string, ok
 	return args, target, true
 }
 
-// readDockerfile reads the Dockerfile at path through fsRoot, so its resolution cannot escape
-// fsRoot's boundary.
-func readDockerfile(fsRoot *os.Root, path string) ([]byte, error) {
+// readBounded reads the file at path through fsRoot, so its resolution cannot escape fsRoot's
+// boundary, rejecting a file larger than maxBytes before reading it into memory.
+func readBounded(fsRoot *os.Root, path string, maxBytes int64) ([]byte, error) {
 	info, err := fsRoot.Stat(path)
 	if err != nil {
 		return nil, fmt.Errorf("stat %s: %w", path, err)
 	}
-	if info.Size() > maxDockerfileBytes {
-		return nil, fmt.Errorf("%s exceeds %d bytes", path, maxDockerfileBytes)
+	if info.Size() > maxBytes {
+		return nil, fmt.Errorf("%s exceeds %d bytes", path, maxBytes)
 	}
 	src, err := fsRoot.ReadFile(path)
 	if err != nil {
@@ -186,10 +194,9 @@ func readDockerfile(fsRoot *os.Root, path string) ([]byte, error) {
 	return src, nil
 }
 
-// imageContributors fetches the "devcontainer.metadata" label of the image named by "/image" of
-// root and returns one contributor per metadata entry, in label order, anchored at the "image"
-// key. There is nothing to contribute when root declares no image, when the image is not a plain
-// string, or when the image carries no label.
+// imageContributors fetches the "devcontainer.metadata" label of the image named by "/image",
+// anchored at the "image" key. It contributes nothing when root declares no usable image or the
+// image carries no label.
 func imageContributors(ctx context.Context, f *Fetcher, root *hujson.Value) ([]*contributor, error) {
 	obj, ok := root.Value.(*hujson.Object)
 	if !ok {
@@ -258,8 +265,8 @@ func installSequence(ctx context.Context, f *Fetcher, fsRoot *os.Root, configDir
 }
 
 // newNode builds an unresolved contributor for a Feature reference requested with the given options,
-// anchored at anchor. Its source-type-specific fields that do not require fetching (the local path,
-// the OCI reference, the tarball URI) are filled in; the digest and aliases are set once fetched.
+// anchored at anchor. Only the fields that need no fetching are filled from the parsed reference;
+// the digest and aliases are set later, once the Feature is fetched.
 func newNode(ref string, options optionValue, anchor int, configDir string) (*contributor, error) {
 	parsed, err := ParseRef(ref)
 	if err != nil {

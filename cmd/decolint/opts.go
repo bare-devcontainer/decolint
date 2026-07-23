@@ -14,14 +14,13 @@ import (
 type Options struct {
 	// Paths are the directories to lint.
 	Paths []string
-	// DenyWarnings, when set, lowers the fail threshold to linter.Warn so that warnings also cause
-	// exit code 1. The config file's "denyWarnings" member sets it as well, but -deny-warnings takes
-	// precedence over it, in either direction, when explicitly given (see denyWarningsSet and
-	// mergeConfig).
+	// DenyWarnings mirrors [Config.DenyWarnings]. When -deny-warnings is explicitly given it takes
+	// precedence over the config file's "denyWarnings" member, in either direction (see
+	// denyWarningsSet and mergeConfig).
 	DenyWarnings bool
-	// denyWarningsSet records whether -deny-warnings was explicitly passed, distinguishing that from
-	// its default false value so mergeConfig can tell "not given" (defer to the config file) apart
-	// from "explicitly given as false" (override the config file's "denyWarnings": true).
+	// denyWarningsSet records whether -deny-warnings was explicitly passed, so mergeConfig can tell
+	// "not given" (defer to the config file) apart from "explicitly given as false" (override the
+	// config file's "denyWarnings": true).
 	denyWarningsSet bool
 	// ConfigPath is the raw -config flag value (empty if not given), resolved into a Config by
 	// loadConfig.
@@ -30,14 +29,12 @@ type Options struct {
 	// with no target platform. If empty, only rules with no target platform are registered, unless
 	// overridden by the config file's "platforms" member (see mergeConfig).
 	Platforms []linter.Platform
-	// Merge, when set, fetches the Features referenced in each devcontainer.json and lints
-	// the merged (effective) configuration instead of the raw file. The config file's
-	// "merge" member sets it as well, but -merge takes precedence over it, in
-	// either direction, when explicitly given (see mergeSet and mergeConfig).
+	// Merge mirrors [Config.Merge]. When -merge is explicitly given it takes precedence over the
+	// config file's "merge" member, in either direction (see mergeSet and mergeConfig).
 	Merge bool
-	// mergeSet records whether -merge was explicitly passed, distinguishing that
-	// from its default false value so mergeConfig can tell "not given" (defer to the config file)
-	// apart from "explicitly given as false" (override the config file's "merge": true).
+	// mergeSet records whether -merge was explicitly passed, so mergeConfig can tell "not given"
+	// (defer to the config file) apart from "explicitly given as false" (override the config file's
+	// "merge": true).
 	mergeSet bool
 	// Format is the raw -format flag value ("" if not given), naming how lint issues are written to
 	// stdout: "text", "json", or "github". A non-empty value replaces the config file's "format"

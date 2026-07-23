@@ -6,7 +6,7 @@ import (
 
 // NoBindMount reports "mounts" entries that use the "bind" mount type. The Dev Container
 // spec allows bind mounts, but GitHub Codespaces silently ignores them, except for a mount whose
-// source is the Docker socket, so other bind mounts have no effect there.
+// source is the Docker socket.
 var NoBindMount = &linter.Rule{
 	ID:          "no-bind-mount",
 	Description: `disallow "bind" type entries in "mounts", which GitHub Codespaces silently ignores except for the Docker socket`,

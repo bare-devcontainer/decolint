@@ -1124,6 +1124,83 @@ LABEL devcontainer.metadata='[{"privileged": true, "mounts": ["source=/var/run/d
 			t.Errorf("stderr = %q, want it to mention the unreachable base image", stderr.String())
 		}
 	})
+
+	t.Run("merges metadata through a Compose service image", func(t *testing.T) {
+		t.Parallel()
+
+		host := ocitest.Registry(t)
+		ocitest.PushImage(t, host, "base", "1", map[string]string{
+			"devcontainer.metadata": `[{"privileged": true, "mounts": ["source=/var/run/docker.sock,target=/var/run/docker.sock,type=bind"]}]`,
+		}, false)
+
+		dir := writeDevcontainer(t, `{"dockerComposeFile": "docker-compose.yml", "service": "app"}`)
+		writeComposeFile(t, dir, fmt.Sprintf("services:\n  app:\n    image: %s/base:1\n", host))
+
+		var stdout, stderr bytes.Buffer
+		args := []string{"-format=json", "-merge", "-config=testdata/e2e/merge.jsonc", dir}
+		exitCode := run(t.Context(), args, &stdout, &stderr)
+		if exitCode != 1 {
+			t.Fatalf("exit code = %d, want 1; stderr: %s", exitCode, stderr.String())
+		}
+		for _, ruleID := range []string{"no-privileged-container", "no-docker-socket-mount"} {
+			if !hasRule(t, stdout.Bytes(), ruleID) {
+				t.Errorf("want %s to fire on the merged Compose service image metadata; output: %s", ruleID, stdout.String())
+			}
+		}
+	})
+
+	t.Run("merges metadata through a Compose service Dockerfile, anchored at dockerComposeFile", func(t *testing.T) {
+		t.Parallel()
+
+		body := "{\n" +
+			`  "dockerComposeFile": "docker-compose.yml",` + "\n" +
+			`  "service": "app"` + "\n}"
+		dir := writeDevcontainer(t, body)
+		writeComposeFile(t, dir, "services:\n  app:\n    build:\n      context: .\n")
+		writeDockerfile(t, dir, `FROM scratch
+LABEL devcontainer.metadata='[{"privileged": true, "mounts": ["source=/var/run/docker.sock,target=/var/run/docker.sock,type=bind"]}]'
+`)
+
+		var stdout, stderr bytes.Buffer
+		args := []string{"-format=json", "-merge", "-config=testdata/e2e/merge.jsonc", dir}
+		exitCode := run(t.Context(), args, &stdout, &stderr)
+		if exitCode != 1 {
+			t.Fatalf("exit code = %d, want 1; stderr: %s", exitCode, stderr.String())
+		}
+		for _, ruleID := range []string{"no-privileged-container", "no-docker-socket-mount"} {
+			if !hasRule(t, stdout.Bytes(), ruleID) {
+				t.Errorf("want %s to fire on the merged Compose Dockerfile metadata; output: %s", ruleID, stdout.String())
+			}
+		}
+		// The config references the Compose file on line 2; every merged-in property must be reported
+		// there rather than at the service or the Dockerfile.
+		var issues []linter.Issue
+		if err := json.Unmarshal(stdout.Bytes(), &issues); err != nil {
+			t.Fatalf("output is not a JSON issue array: %v\noutput: %s", err, stdout.String())
+		}
+		for _, issue := range issues {
+			if issue.Line != 2 {
+				t.Errorf("issue %s reported at line %d, want 2 (the dockerComposeFile reference)", issue.RuleID, issue.Line)
+			}
+		}
+	})
+
+	t.Run("a Compose service image fetch failure is a runtime error", func(t *testing.T) {
+		t.Parallel()
+		// The service names an image that never resolves, so fetching its metadata fails and the
+		// failure must surface as exit code 2 rather than a lint result.
+		dir := writeDevcontainer(t, `{"dockerComposeFile": "docker-compose.yml", "service": "app"}`)
+		writeComposeFile(t, dir, "services:\n  app:\n    image: registry.invalid/base:1\n")
+
+		var stdout, stderr bytes.Buffer
+		exitCode := run(t.Context(), []string{"-merge", dir}, &stdout, &stderr)
+		if exitCode != 2 {
+			t.Errorf("exit code = %d, want 2; stdout: %s", exitCode, stdout.String())
+		}
+		if !strings.Contains(stderr.String(), "registry.invalid") {
+			t.Errorf("stderr = %q, want it to mention the unreachable base image", stderr.String())
+		}
+	})
 }
 
 // imageRule is a stub rule that flags any "image" property, used to observe which files a lint
@@ -1326,6 +1403,17 @@ func writeDevcontainer(t *testing.T, body string) string {
 func writeDockerfile(t *testing.T, dir, content string) {
 	t.Helper()
 	path := filepath.Join(dir, ".devcontainer", "Dockerfile")
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+}
+
+// writeComposeFile writes content as the .devcontainer/docker-compose.yml of the devcontainer
+// directory dir created by writeDevcontainer, the path a "dockerComposeFile" of
+// "docker-compose.yml" resolves to.
+func writeComposeFile(t *testing.T, dir, content string) {
+	t.Helper()
+	path := filepath.Join(dir, ".devcontainer", "docker-compose.yml")
 	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
 		t.Fatalf("WriteFile: %v", err)
 	}

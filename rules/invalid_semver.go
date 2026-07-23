@@ -9,8 +9,7 @@ import (
 )
 
 // InvalidSemver reports a Feature's or Template's "version" property when its value is not a valid
-// semantic version, per the Dev Container Features/Templates specification, which requires
-// "version" to follow the semver.org format.
+// semantic version, per the Dev Container Features/Templates specification.
 var InvalidSemver = &linter.Rule{
 	ID:          "invalid-semver",
 	Description: `disallow a Feature's or Template's "version" that is not a valid semantic version`,

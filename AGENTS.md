@@ -8,9 +8,6 @@
     - `ci: pin action SHAs`
     - `chore: update renovate config`
 - Use minimal external dependencies.
-- Documentation comments should explain the contract of a function/package, not the implementation details.
-- Inline comments should be used to explain "why" something is done, not "what" is done. The code itself should be clear enough to convey the "what".
-- All comments should be important for future maintainers. Do not add comments only meaningful to the current author/pull request.
 
 ## Workflows
 
@@ -55,3 +52,20 @@
   implementation wins: decolint tracks the real tooling's behavior. Specific
   conflicts are documented as inline comments at the relevant code (see the
   install-order sort in `feature/order.go`).
+
+## Documentation and comments
+
+- For the same information, prefer the shortest, simplest wording. Trim words, clauses, and sentences that add no meaning.
+- Documentation comments should explain the contract of a function/package, not the implementation details.
+- Inline comments should be used to explain "why" something is done, not "what" is done. The code itself should be clear enough to convey the "what".
+- All comments should be important for future maintainers. Do not add comments only meaningful to the current author/pull request.
+- Give the reader the orientation they need before reading the code — the overall picture and the caveats that are not obvious from the code — and leave out anything the signature, types, or surrounding code already make clear.
+- State each fact in one place. When a comment would restate another function's or package's contract, link to it (e.g. a Go doc link `[Name]`) instead of repeating it.
+- Prefer a bullet list to a single long sentence when enumerating several forms, cases, or alternatives.
+- Keep adjacent paragraphs distinct; each should add something the others do not.
+
+User-facing documentation (the README and CLI help) additionally:
+
+- Is written for people who use decolint, not those who develop it: document observable behavior and the choices a user has to make, and omit internal mechanisms and implementation choices.
+- Does not explain what the reader already knows from their own configuration or usage.
+- Does not include notes whose meaning depends on an internal invariant the reader cannot see — a caveat that only makes sense as a contrast to how decolint is built internally.

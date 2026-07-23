@@ -11,6 +11,8 @@ decolint is a linter for [Dev Container](https://containers.dev/) configuration 
 
 It checks for common mistakes, security issues, and best practices in these files. See [Rules](#rules) for the list of checks decolint performs.
 
+A container's final configuration comes not only from its own file but also from the base image and the Features it uses. With [`-merge`](#merging), decolint resolves all of these as they would be at runtime and lints the fully merged configuration.
+
 ## Installation
 
 decolint can be installed as a prebuilt binary, as a container image, or
@@ -122,12 +124,11 @@ Enable merging to lint the merged configuration instead:
 decolint -merge
 ```
 
-This fetches every referenced Feature and resolves the base image.
-Metadata from the base image's
+This fetches every referenced Feature and resolves the base image,
+including any metadata in the base image's
 [`devcontainer.metadata`](https://containers.dev/implementors/spec/#image-metadata)
-label is the lowest-precedence input: a Feature, and then the
-`devcontainer.json` itself, override it. A Feature or image that cannot
-be fetched is an error (exit code 2).
+label. A Feature or image that cannot be fetched is an error (exit code
+2).
 
 Merging also resolves the `${...}`
 [variables](https://containers.dev/implementors/json_reference/#variables-in-devcontainerjson)
@@ -153,11 +154,13 @@ A few limits apply:
 
 - For Docker Compose, `extends` and `include` are resolved as `docker
   compose config` would, and later files override earlier ones. Compose
-  `${...}` interpolation resolves from the config file's
-  [`localEnv`](#config-file) map: an unset variable resolves to its
-  default (`${VAR:-default}`) or the empty string, and a `${VAR:?}`
-  requirement on an unset variable is an error. Compose profiles, the
-  `COMPOSE_FILE` environment variable, and `.env` files are not applied.
+  interpolation uses its own bare `${NAME}` syntax — not
+  devcontainer.json's `${localEnv:NAME}` — but reads the same values from
+  the config file's [`localEnv`](#config-file) map: an unset variable
+  resolves to its default (`${VAR:-default}`) or the empty string, and a
+  `${VAR:?}` requirement on an unset variable is an error. Compose
+  profiles, the `COMPOSE_FILE` environment variable, and `.env` files are
+  not applied.
 - Registries are accessed anonymously, so a private image that cannot be
   pulled that way counts as a fetch failure.
 
@@ -222,8 +225,8 @@ ready to edit:
 rule in a [category](#rule-categories) at once; `rules` sets an
 individual rule's severity and takes precedence over its category.
 `localEnv` maps names to the values `${localEnv:NAME}` resolves to when
-[merging](#merging); it is also the environment Compose-file `${...}`
-interpolation reads:
+[merging](#merging); it is also the environment Compose-file `${NAME}`
+interpolation reads (note the differing [syntax](#merging)):
 
 ```jsonc
 {

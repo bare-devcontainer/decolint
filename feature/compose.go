@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"slices"
 	"strings"
 
 	"github.com/compose-spec/compose-go/v2/loader"
@@ -17,9 +16,9 @@ import (
 // "dockerComposeFile" and "service" of root: the image the named service's "build" would produce,
 // or, absent one, the image its "image" names. declared reports whether root declares
 // "dockerComposeFile" at all, which [baseImageContributors] uses to choose the base-image form. A
-// declaration that cannot be resolved at lint time (a variable substitution in a path, the service
-// name, image, context, dockerfile, or target, or a missing "service" property, which a lint rule
-// already flags) contributes nothing.
+// declaration that cannot be resolved at lint time (a Compose-interpolation variable in the
+// service's image, context, dockerfile, or target, or a missing "service" property, which a lint
+// rule already flags) contributes nothing.
 //
 // Unlike the rest of the merge, Compose resolution reads from the real filesystem rather than
 // through fsRoot: the reference implementation runs "docker compose config", which resolves
@@ -38,13 +37,8 @@ func composeContributors(ctx context.Context, f *Fetcher, fsRoot *os.Root, confi
 	if len(paths) == 0 {
 		return nil, true, nil
 	}
-	// Variable substitutions resolve at container creation time; linting cannot know their values,
-	// so a declaration carrying one is skipped rather than rejected.
-	if slices.ContainsFunc(paths, func(p string) bool { return strings.Contains(p, "${") }) {
-		return nil, true, nil
-	}
 	service, ok := composeServiceName(obj)
-	if !ok || strings.Contains(service, "${") {
+	if !ok {
 		return nil, true, nil
 	}
 	// The Compose files resolve relative to the referencing devcontainer.json's directory on the real

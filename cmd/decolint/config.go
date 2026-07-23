@@ -26,6 +26,9 @@ type Config struct {
 	// Format selects how lint issues are written to stdout: "text" (the default when empty), "json",
 	// or "github". The -format flag takes precedence.
 	Format string `json:"format"`
+	// LocalEnv maps names to the values "${localEnv:NAME}" (and "${env:NAME}") resolve to when
+	// linting; see [substitute.Context.LocalEnv]. Host environment variables are never read.
+	LocalEnv map[string]string `json:"localEnv"`
 	// Categories maps a category name to the severity every rule in that category should be
 	// overridden to. Per-rule entries in Rules take precedence.
 	Categories map[string]linter.Severity `json:"categories"`
@@ -33,11 +36,10 @@ type Config struct {
 	Rules map[string]linter.Severity `json:"rules"`
 }
 
-// MarshalJSONTo encodes cfg with its categories and rules written in sorted key order, for use
-// with encoding/json/v2. Map iteration order is otherwise unspecified, so without this, marshaling
-// the same Config twice could produce differently ordered output. The "platforms", "merge",
-// "denyWarnings", "format", and "categories" members are omitted when empty or false, so generated
-// configs (see initConfigFile) stay minimal.
+// MarshalJSONTo encodes cfg with its map members written in sorted key order, for use with
+// encoding/json/v2. Map iteration order is otherwise unspecified, so without this, marshaling
+// the same Config twice could produce differently ordered output. All members but "rules" are
+// omitted when empty or false, so generated configs (see initConfigFile) stay minimal.
 func (cfg Config) MarshalJSONTo(enc *jsontext.Encoder) error {
 	if err := enc.WriteToken(jsontext.BeginObject); err != nil {
 		return fmt.Errorf("encode config: %w", err)
@@ -74,18 +76,26 @@ func (cfg Config) MarshalJSONTo(enc *jsontext.Encoder) error {
 			return fmt.Errorf("encode config: %w", err)
 		}
 	}
+	if len(cfg.LocalEnv) > 0 {
+		if err := enc.WriteToken(jsontext.String("localEnv")); err != nil {
+			return fmt.Errorf("encode config: %w", err)
+		}
+		if err := writeSortedMap(enc, cfg.LocalEnv); err != nil {
+			return err
+		}
+	}
 	if len(cfg.Categories) > 0 {
 		if err := enc.WriteToken(jsontext.String("categories")); err != nil {
 			return fmt.Errorf("encode config: %w", err)
 		}
-		if err := writeSeverityMap(enc, cfg.Categories); err != nil {
+		if err := writeSortedMap(enc, cfg.Categories); err != nil {
 			return err
 		}
 	}
 	if err := enc.WriteToken(jsontext.String("rules")); err != nil {
 		return fmt.Errorf("encode config: %w", err)
 	}
-	if err := writeSeverityMap(enc, cfg.Rules); err != nil {
+	if err := writeSortedMap(enc, cfg.Rules); err != nil {
 		return err
 	}
 	if err := enc.WriteToken(jsontext.EndObject); err != nil {
@@ -94,21 +104,21 @@ func (cfg Config) MarshalJSONTo(enc *jsontext.Encoder) error {
 	return nil
 }
 
-// writeSeverityMap encodes m as a JSON object with its members in sorted key order.
-func writeSeverityMap(enc *jsontext.Encoder, m map[string]linter.Severity) error {
+// writeSortedMap encodes m as a JSON object with its members in sorted key order.
+func writeSortedMap[V any](enc *jsontext.Encoder, m map[string]V) error {
 	if err := enc.WriteToken(jsontext.BeginObject); err != nil {
-		return fmt.Errorf("encode severity map: %w", err)
+		return fmt.Errorf("encode config map: %w", err)
 	}
 	for _, key := range slices.Sorted(maps.Keys(m)) {
 		if err := enc.WriteToken(jsontext.String(key)); err != nil {
-			return fmt.Errorf("encode severity map: %w", err)
+			return fmt.Errorf("encode config map: %w", err)
 		}
 		if err := json.MarshalEncode(enc, m[key]); err != nil {
-			return fmt.Errorf("encode severity map: %w", err)
+			return fmt.Errorf("encode config map: %w", err)
 		}
 	}
 	if err := enc.WriteToken(jsontext.EndObject); err != nil {
-		return fmt.Errorf("encode severity map: %w", err)
+		return fmt.Errorf("encode config map: %w", err)
 	}
 	return nil
 }
@@ -117,8 +127,8 @@ func writeSeverityMap(enc *jsontext.Encoder, m map[string]linter.Severity) error
 // -platform replaces the config file's Platforms (an empty -platform defers to the config file
 // rather than clearing it). -merge and -deny-warnings, when explicitly given, override Merge and
 // DenyWarnings in either direction (e.g. "-merge=false" disables merging even if the config file
-// sets "merge": true). A non-empty -format replaces the config file's Format. Categories and Rules
-// are config-file only.
+// sets "merge": true). A non-empty -format replaces the config file's Format. LocalEnv, Categories,
+// and Rules are config-file only.
 func mergeConfig(opts Options, cfg Config) Config {
 	if len(opts.Platforms) > 0 {
 		cfg.Platforms = opts.Platforms

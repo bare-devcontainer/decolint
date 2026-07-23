@@ -46,6 +46,9 @@ func initConfigFile(output io.Writer) error {
 // "format" selects the output format ("text", "json", or "github"); the
 // -format flag takes precedence, e.g.:
 //   "format": "github"
+// "localEnv" supplies the values ${localEnv:NAME} resolves to when linting;
+// environment variables are never read, e.g.:
+//   "localEnv": { "USERPROFILE": "/home/user" }
 `)
 	if err := json.MarshalWrite(&buf, cfg, jsontext.Multiline(true)); err != nil {
 		return fmt.Errorf("marshal %s: %w", name, err)

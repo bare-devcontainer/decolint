@@ -1223,6 +1223,7 @@ func TestLintPath(t *testing.T) {
 		l.RegisterRule(imageRule, linter.SeverityWarn)
 		return l
 	}
+	noSubst := func(string, *linter.Document) {}
 	body := `{"image": "ubuntu:24.04"}`
 
 	t.Run("aggregates issues across configs", func(t *testing.T) {
@@ -1235,7 +1236,7 @@ func TestLintPath(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		issues, err := lintPath(t.Context(), newLinter(), nil, dir)
+		issues, err := lintPath(t.Context(), newLinter(), noSubst, nil, dir)
 		if err != nil {
 			t.Fatalf("lintPath: %v", err)
 		}
@@ -1267,7 +1268,7 @@ func TestLintPath(t *testing.T) {
 			t.Fatal(err)
 		}
 		defer func() { _ = root.Close() }()
-		issues, err := lintDir(t.Context(), newLinter(), nil, root)
+		issues, err := lintDir(t.Context(), newLinter(), noSubst, nil, root)
 		if err == nil {
 			t.Fatal("got nil error, want a parse error for the broken config")
 		}
@@ -1282,7 +1283,7 @@ func TestLintPath(t *testing.T) {
 
 	t.Run("directory without config", func(t *testing.T) {
 		t.Parallel()
-		_, err := lintPath(t.Context(), newLinter(), nil, t.TempDir())
+		_, err := lintPath(t.Context(), newLinter(), noSubst, nil, t.TempDir())
 		if err == nil || !strings.Contains(err.Error(), "no devcontainer configuration found") {
 			t.Errorf("err = %v, want 'no devcontainer configuration found'", err)
 		}
@@ -1294,7 +1295,7 @@ func TestLintPath(t *testing.T) {
 		wantErr := errors.New("fetch failed")
 		merge := func(context.Context, discovery.ConfigFile, *linter.Document) error { return wantErr }
 
-		if _, err := lintPath(t.Context(), newLinter(), merge, dir); !errors.Is(err, wantErr) {
+		if _, err := lintPath(t.Context(), newLinter(), noSubst, merge, dir); !errors.Is(err, wantErr) {
 			t.Errorf("lintPath error = %v, want %v", err, wantErr)
 		}
 	})
@@ -1308,7 +1309,7 @@ func TestLintPath(t *testing.T) {
 			return nil
 		}
 
-		if _, err := lintPath(t.Context(), linter.New(), merge, dir); err != nil {
+		if _, err := lintPath(t.Context(), linter.New(), noSubst, merge, dir); err != nil {
 			t.Fatalf("lintPath: %v", err)
 		}
 		if called {
@@ -1336,13 +1337,80 @@ func TestLintPath(t *testing.T) {
 			called = true
 			return nil
 		}
+		subst := func(string, *linter.Document) {}
 
-		if _, err := lintPath(t.Context(), l, merge, dir); err != nil {
+		if _, err := lintPath(t.Context(), l, subst, merge, dir); err != nil {
 			t.Fatalf("lintPath: %v", err)
 		}
 		if called {
 			t.Error("merge ran on a Feature configuration")
 		}
+	})
+}
+
+func TestLintDir_WorkspaceFolderError(t *testing.T) {
+	// Uses t.Chdir, which cannot be combined with t.Parallel.
+
+	// A relative root name resolves against the working directory; deleting it makes the
+	// workspace folder unresolvable, which must surface as an error.
+	dir := t.TempDir()
+	t.Chdir(dir)
+	root, err := os.OpenRoot(".")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = root.Close() }()
+	if err := os.Remove(dir); err != nil {
+		t.Fatal(err)
+	}
+
+	subst := func(string, *linter.Document) {}
+	if _, err := lintDir(t.Context(), linter.New(), subst, nil, root); err == nil ||
+		!strings.Contains(err.Error(), "resolve workspace folder") {
+		t.Errorf("err = %v, want a workspace folder resolution error", err)
+	}
+}
+
+// TestRun_Substitution checks that ${...} variables resolve before rules run: no-image-latest
+// reports the resolved image reference, from the localEnv default without a config value and from
+// the configured value with one.
+func TestRun_Substitution(t *testing.T) {
+	t.Parallel()
+
+	dir := writeDevcontainer(t, `{"image": "${localEnv:BASE:ubuntu}:latest"}`)
+	const rulesMember = `"rules": {"no-image-latest": "error"}`
+
+	assertImage := func(t *testing.T, config, wantImage string) {
+		t.Helper()
+		path := filepath.Join(t.TempDir(), "config.jsonc")
+		if err := os.WriteFile(path, []byte(config), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		var stdout, stderr bytes.Buffer
+		exitCode := run(t.Context(), []string{"-format=json", "-config=" + path, dir}, &stdout, &stderr)
+		if exitCode != 1 {
+			t.Fatalf("exit code = %d, want 1; stderr: %s", exitCode, stderr.String())
+		}
+		var issues []linter.Issue
+		if err := json.Unmarshal(stdout.Bytes(), &issues); err != nil {
+			t.Fatalf("output is not a JSON issue array: %v\noutput: %s", err, stdout.String())
+		}
+		if len(issues) != 1 || issues[0].RuleID != "no-image-latest" {
+			t.Fatalf("issues = %v, want one no-image-latest", issues)
+		}
+		if !strings.Contains(issues[0].Message, `"`+wantImage+`"`) {
+			t.Errorf("message = %q, want it to name %q", issues[0].Message, wantImage)
+		}
+	}
+
+	t.Run("undefined localEnv falls back to the default", func(t *testing.T) {
+		t.Parallel()
+		assertImage(t, `{`+rulesMember+`}`, "ubuntu:latest")
+	})
+
+	t.Run("configured localEnv value wins", func(t *testing.T) {
+		t.Parallel()
+		assertImage(t, `{"localEnv": {"BASE": "debian"}, `+rulesMember+`}`, "debian:latest")
 	})
 }
 

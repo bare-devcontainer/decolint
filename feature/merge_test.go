@@ -105,16 +105,6 @@ func TestMerge_ImageMetadataAnchor(t *testing.T) {
 	}
 }
 
-func TestMerge_ImageVariableSubstitutionSkipped(t *testing.T) {
-	t.Parallel()
-
-	// A variable substitution cannot be resolved at lint time, so the image is not fetched and the
-	// tree is left unchanged. An unreachable host would otherwise fail the merge.
-	src := `{"image": "registry.invalid/app:${localEnv:TAG}"}`
-	root := mergeSrc(t, src, nil)
-	assertJSON(t, root, src)
-}
-
 func TestMerge_ImageFetchError(t *testing.T) {
 	t.Parallel()
 
@@ -181,15 +171,6 @@ func TestMerge_BuildDockerfileArgsAndTarget(t *testing.T) {
 		}`)
 	})
 
-	t.Run("arg with a variable substitution is dropped for its default", func(t *testing.T) {
-		t.Parallel()
-		src := `{"build": {"dockerfile": "Dockerfile", "args": {"TAG": "${localEnv:TAG}"}, "target": "dev"}}`
-		root := mergeFiles(t, src, map[string]string{"Dockerfile": dockerfile})
-		assertJSON(t, root, `{
-		  "build": {"dockerfile": "Dockerfile", "args": {"TAG": "${localEnv:TAG}"}, "target": "dev"},
-		  "remoteUser": "one"
-		}`)
-	})
 }
 
 func TestMerge_BuildDockerfilePrecedesImage(t *testing.T) {
@@ -260,31 +241,6 @@ func TestMerge_BuildDockerfileAnchor(t *testing.T) {
 		if v.StartOffset != anchor {
 			t.Errorf("%s StartOffset = %d, want %d (the dockerfile key)", ptr, v.StartOffset, anchor)
 		}
-	}
-}
-
-// TestMerge_BuildDockerfileSubstitutionSkipped covers the lint-time-unknowable declarations that
-// skip the Dockerfile without falling back to "image": a variable substitution in the Dockerfile
-// path or in the build target leaves the tree unchanged.
-func TestMerge_BuildDockerfileSubstitutionSkipped(t *testing.T) {
-	t.Parallel()
-
-	tests := []struct {
-		name string
-		src  string
-	}{
-		{"path", `{"build": {"dockerfile": "${localEnv:DIR}/Dockerfile"}}`},
-		{"target", `{"build": {"dockerfile": "Dockerfile", "target": "${localEnv:STAGE}"}}`},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-			// The Dockerfile names an unreachable base image, so resolving it would fail the merge.
-			root := mergeFiles(t, tt.src, map[string]string{
-				"Dockerfile": "FROM registry.invalid/app:1\n",
-			})
-			assertJSON(t, root, tt.src)
-		})
 	}
 }
 

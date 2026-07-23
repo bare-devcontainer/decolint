@@ -20,10 +20,11 @@ func TestConfigMarshalJSONTo(t *testing.T) {
 			Merge:        true,
 			DenyWarnings: true,
 			Format:       "github",
+			LocalEnv:     map[string]string{"HOME": "/home/user"},
 			Categories:   map[string]linter.Severity{"security": linter.SeverityError},
 			Rules:        map[string]linter.Severity{"no-image-latest": linter.SeverityError},
 		}
-		want := `{"platforms":["vscode","codespaces"],"merge":true,"denyWarnings":true,"format":"github","categories":{"security":"error"},"rules":{"no-image-latest":"error"}}`
+		want := `{"platforms":["vscode","codespaces"],"merge":true,"denyWarnings":true,"format":"github","localEnv":{"HOME":"/home/user"},"categories":{"security":"error"},"rules":{"no-image-latest":"error"}}`
 		got, err := json.Marshal(cfg)
 		if err != nil {
 			t.Fatalf("json.Marshal: %v", err)
@@ -47,9 +48,13 @@ func TestConfigMarshalJSONTo(t *testing.T) {
 		}
 	})
 
-	t.Run("sorts categories and rules by key", func(t *testing.T) {
+	t.Run("sorts localEnv, categories, and rules by key", func(t *testing.T) {
 		t.Parallel()
 		cfg := Config{
+			LocalEnv: map[string]string{
+				"USERPROFILE": "C:\\Users\\user",
+				"HOME":        "/home/user",
+			},
 			Categories: map[string]linter.Severity{
 				"security":        linter.SeverityError,
 				"reproducibility": linter.SeverityWarn,
@@ -62,7 +67,7 @@ func TestConfigMarshalJSONTo(t *testing.T) {
 				"missing-required-props": linter.SeverityError,
 			},
 		}
-		want := `{"categories":{"reproducibility":"warn","security":"error"},"rules":{"id-dir-mismatch":"error","missing-required-props":"error","no-image-latest":"error","pin-image-digest":"warn","require-non-root":"off"}}`
+		want := `{"localEnv":{"HOME":"/home/user","USERPROFILE":"C:\\Users\\user"},"categories":{"reproducibility":"warn","security":"error"},"rules":{"id-dir-mismatch":"error","missing-required-props":"error","no-image-latest":"error","pin-image-digest":"warn","require-non-root":"off"}}`
 		// Marshal repeatedly: map iteration order is randomized per run, so this would be
 		// flaky if MarshalJSONTo didn't force a deterministic, key-sorted order.
 		for range 5 {
@@ -150,6 +155,12 @@ func TestParseConfig(t *testing.T) {
 			"format",
 			`{"format": "json"}`,
 			Config{Format: "json"},
+			false,
+		},
+		{
+			"localEnv",
+			`{"localEnv": {"HOME": "/home/user", "TAG": ""}}`,
+			Config{LocalEnv: map[string]string{"HOME": "/home/user", "TAG": ""}},
 			false,
 		},
 		{"invalid severity", `{"rules": {"no-image-latest": "critical"}}`, Config{}, true},

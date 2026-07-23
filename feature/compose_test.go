@@ -79,26 +79,61 @@ func TestLoadComposeService(t *testing.T) {
 	tests := []struct {
 		name  string
 		files map[string]string
+		env   map[string]string
 		want  wantService
 	}{
 		{
 			"image service",
 			map[string]string{"a.yml": "services:\n  app:\n    image: registry.invalid/app:1\n"},
+			nil,
 			wantService{image: "registry.invalid/app:1"},
+		},
+		{
+			"variable interpolated from env",
+			map[string]string{"a.yml": "services:\n  app:\n    image: registry.invalid/app:${TAG}\n"},
+			map[string]string{"TAG": "2"},
+			wantService{image: "registry.invalid/app:2"},
+		},
+		{
+			"unset variable takes its default",
+			map[string]string{"a.yml": "services:\n  app:\n    image: registry.invalid/app:${TAG:-1}\n"},
+			nil,
+			wantService{image: "registry.invalid/app:1"},
+		},
+		{
+			"unset variable resolves to empty",
+			map[string]string{"a.yml": "services:\n  app:\n    image: registry.invalid/app:1${SUFFIX}\n"},
+			nil,
+			wantService{image: "registry.invalid/app:1"},
+		},
+		{
+			"passthrough arg resolves from env",
+			map[string]string{"a.yml": "services:\n  app:\n    build:\n      context: ctx\n      args:\n        - PASSTHROUGH\n"},
+			map[string]string{"PASSTHROUGH": "v"},
+			wantService{hasBuild: true, context: "ctx", args: map[string]string{"PASSTHROUGH": "v"}},
+		},
+		{
+			"passthrough arg absent from env is dropped",
+			map[string]string{"a.yml": "services:\n  app:\n    build:\n      context: ctx\n      args:\n        - PASSTHROUGH\n"},
+			nil,
+			wantService{hasBuild: true, context: "ctx"},
 		},
 		{
 			"build mapping",
 			map[string]string{"a.yml": "services:\n  app:\n    build:\n      context: ctx\n      dockerfile: Custom\n      target: dev\n      args:\n        A: \"1\"\n      labels:\n        L: v\n"},
+			nil,
 			wantService{hasBuild: true, context: "ctx", dockerfile: "Custom", target: "dev", args: map[string]string{"A": "1"}, labels: map[string]string{"L": "v"}},
 		},
 		{
 			"build args and labels in list form",
 			map[string]string{"a.yml": "services:\n  app:\n    build:\n      context: ctx\n      args:\n        - A=1\n        - PASSTHROUGH\n      labels:\n        - L=v\n"},
+			nil,
 			wantService{hasBuild: true, context: "ctx", args: map[string]string{"A": "1"}, labels: map[string]string{"L": "v"}},
 		},
 		{
 			"build string shorthand sets the context",
 			map[string]string{"a.yml": "services:\n  app:\n    build: ctx\n"},
+			nil,
 			wantService{hasBuild: true, context: "ctx"},
 		},
 		{
@@ -107,6 +142,7 @@ func TestLoadComposeService(t *testing.T) {
 				"a.yml": "services:\n  app:\n    image: registry.invalid/app:1\n    build:\n      dockerfile: A\n      args:\n        A: \"1\"\n        B: \"1\"\n",
 				"b.yml": "services:\n  app:\n    image: registry.invalid/app:2\n    build:\n      dockerfile: B\n      args:\n        B: \"2\"\n",
 			},
+			nil,
 			wantService{image: "registry.invalid/app:2", hasBuild: true, dockerfile: "B", args: map[string]string{"A": "1", "B": "2"}},
 		},
 		{
@@ -115,6 +151,7 @@ func TestLoadComposeService(t *testing.T) {
 				"a.yml": "services:\n  app:\n    build: ctx\n",
 				"b.yml": "services:\n  app:\n    build:\n      dockerfile: Custom\n",
 			},
+			nil,
 			wantService{hasBuild: true, context: "ctx", dockerfile: "Custom"},
 		},
 		{
@@ -123,6 +160,7 @@ func TestLoadComposeService(t *testing.T) {
 				"a.yml": "services:\n  other:\n    image: registry.invalid/other:1\n",
 				"b.yml": "services:\n  app:\n    image: registry.invalid/app:1\n",
 			},
+			nil,
 			wantService{image: "registry.invalid/app:1"},
 		},
 	}
@@ -137,7 +175,7 @@ func TestLoadComposeService(t *testing.T) {
 					paths = append(paths, p)
 				}
 			}
-			svc, err := loadComposeService(t.Context(), dir, paths, "app")
+			svc, err := loadComposeService(t.Context(), dir, paths, "app", tt.env)
 			if err != nil {
 				t.Fatalf("loadComposeService: %v", err)
 			}
@@ -161,13 +199,17 @@ func TestLoadComposeService_Errors(t *testing.T) {
 		{"missing services key", map[string]string{"a.yml": "version: \"3\"\n"}},
 		// A null "build" is invalid Compose; docker compose rejects it, so decolint does too.
 		{"null build", map[string]string{"a.yml": "services:\n  app:\n    image: registry.invalid/app:1\n    build:\n"}},
+		// A "${VAR:?}" requirement on an unset variable errors, as "docker compose config" does.
+		{"required variable unset", map[string]string{"a.yml": "services:\n  app:\n    image: registry.invalid/app:${TAG:?tag required}\n"}},
+		// "${localEnv:TAG}" is not a valid Compose interpolation (":T" is not an operator), so it errors.
+		{"invalid interpolation format", map[string]string{"a.yml": "services:\n  app:\n    image: registry.invalid/app:${localEnv:TAG}\n"}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			dir := t.TempDir()
 			writeFiles(t, dir, tt.files)
-			if _, err := loadComposeService(t.Context(), dir, []string{"a.yml"}, "app"); err == nil {
+			if _, err := loadComposeService(t.Context(), dir, []string{"a.yml"}, "app", nil); err == nil {
 				t.Fatal("loadComposeService: got nil error")
 			}
 		})
@@ -301,7 +343,7 @@ func mergeOutsideDir(t *testing.T, repo, src string) *hujson.Value {
 	if err != nil {
 		t.Fatalf("parse devcontainer.json: %v", err)
 	}
-	if err := Merge(t.Context(), NewFetcher(), openRoot(t, filepath.Join(repo, ".devcontainer")), ".", &root); err != nil {
+	if err := Merge(t.Context(), NewFetcher(), openRoot(t, filepath.Join(repo, ".devcontainer")), ".", nil, &root); err != nil {
 		t.Fatalf("Merge: %v", err)
 	}
 	return &root
@@ -386,11 +428,15 @@ func TestMerge_ComposeBuildArgsAndTarget(t *testing.T) {
 	tests := []struct {
 		name       string
 		build      string
+		env        map[string]string
 		remoteUser string
 	}{
-		{"args map form and target select the built stage", "      args:\n        TAG: \"2\"\n      target: dev\n", "two"},
-		{"args list form", "      args:\n        - TAG=2\n      target: dev\n", "two"},
-		{"arg with a variable substitution is dropped for its default", "      args:\n        TAG: ${localEnv:TAG}\n      target: dev\n", "one"},
+		{"args map form and target select the built stage", "      args:\n        TAG: \"2\"\n      target: dev\n", nil, "two"},
+		{"args list form", "      args:\n        - TAG=2\n      target: dev\n", nil, "two"},
+		{"arg interpolated from env", "      args:\n        TAG: ${TAG}\n      target: dev\n", map[string]string{"TAG": "2"}, "two"},
+		{"arg takes its default when unset", "      args:\n        TAG: ${TAG:-2}\n      target: dev\n", nil, "two"},
+		{"passthrough arg resolves from env", "      args:\n        - TAG\n      target: dev\n", map[string]string{"TAG": "2"}, "two"},
+		{"passthrough arg absent from env is dropped for its default", "      args:\n        - TAG\n      target: dev\n", nil, "one"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -399,7 +445,7 @@ func TestMerge_ComposeBuildArgsAndTarget(t *testing.T) {
 				"docker-compose.yml": "services:\n  app:\n    build:\n      context: .\n" + tt.build,
 			}
 			maps.Copy(f, files)
-			root := mergeFiles(t, src, f)
+			root := mergeFilesEnv(t, src, f, tt.env)
 			assertJSON(t, root, want(tt.remoteUser))
 		})
 	}
@@ -524,57 +570,100 @@ func TestMerge_ComposePrecedesBuildAndImage(t *testing.T) {
 	}`)
 }
 
-// TestMerge_ComposeVariableSubstitutionSkipped covers the declarations a Compose-interpolation
-// variable leaves unknowable at lint time (decolint does not apply interpolation), which skip
-// compose resolution without falling back to "build" or "image": each fixture would fail the merge
-// (a missing file or an unreachable registry) if resolution were attempted.
-func TestMerge_ComposeVariableSubstitutionSkipped(t *testing.T) {
+// TestMerge_ComposeInterpolation covers Compose "${...}" variables resolved from the localEnv map,
+// across the service's image, build context, dockerfile, target, and metadata label. Each fixture
+// resolves to the same privileged base image, so a failed interpolation would drop the contribution
+// and fail the assertion.
+func TestMerge_ComposeInterpolation(t *testing.T) {
 	t.Parallel()
+
+	host := ocitest.Registry(t)
+	ocitest.PushImage(t, host, "base", "1", map[string]string{imageMetadataLabel: `[{"privileged": true}]`}, false)
+	dockerfile := "FROM scratch AS dev\n" + `LABEL devcontainer.metadata='[{"privileged": true}]'` + "\n"
+
+	src := `{"dockerComposeFile": "docker-compose.yml", "service": "app"}`
+	want := `{
+	  "dockerComposeFile": "docker-compose.yml",
+	  "service": "app",
+	  "privileged": true
+	}`
 
 	tests := []struct {
 		name  string
-		src   string
 		files map[string]string
+		env   map[string]string
 	}{
 		{
-			"service image",
-			`{"dockerComposeFile": "docker-compose.yml", "service": "app"}`,
-			map[string]string{"docker-compose.yml": "services:\n  app:\n    image: registry.invalid/app:${TAG}\n"},
+			"image tag from env",
+			map[string]string{"docker-compose.yml": fmt.Sprintf("services:\n  app:\n    image: %s/base:${TAG}\n", host)},
+			map[string]string{"TAG": "1"},
 		},
 		{
-			"build context",
-			`{"dockerComposeFile": "docker-compose.yml", "service": "app"}`,
-			map[string]string{"docker-compose.yml": "services:\n  app:\n    build: ${DIR}\n"},
+			"image tag default applies when unset",
+			map[string]string{"docker-compose.yml": fmt.Sprintf("services:\n  app:\n    image: %s/base:${TAG:-1}\n", host)},
+			nil,
 		},
 		{
-			"build dockerfile",
-			`{"dockerComposeFile": "docker-compose.yml", "service": "app"}`,
-			map[string]string{"docker-compose.yml": "services:\n  app:\n    build:\n      dockerfile: ${DF}\n"},
+			"unset variable resolves to empty",
+			map[string]string{"docker-compose.yml": fmt.Sprintf("services:\n  app:\n    image: %s/base:1${SUFFIX}\n", host)},
+			nil,
 		},
 		{
-			"build target",
-			`{"dockerComposeFile": "docker-compose.yml", "service": "app"}`,
+			"build context and dockerfile from env",
+			map[string]string{
+				"docker-compose.yml": "services:\n  app:\n    build:\n      context: ${DIR}\n      dockerfile: ${DF}\n",
+				"ctx/Custom":         dockerfile,
+			},
+			map[string]string{"DIR": "ctx", "DF": "Custom"},
+		},
+		{
+			"build target from env",
 			map[string]string{
 				"docker-compose.yml": "services:\n  app:\n    build:\n      context: .\n      target: ${STAGE}\n",
-				"Dockerfile":         "FROM registry.invalid/app:1\n",
+				"Dockerfile":         dockerfile,
 			},
+			map[string]string{"STAGE": "dev"},
 		},
 		{
-			"metadata build label",
-			`{"dockerComposeFile": "docker-compose.yml", "service": "app"}`,
+			"metadata build label from env",
 			map[string]string{
 				"docker-compose.yml": "services:\n  app:\n    build:\n      context: .\n      labels:\n        devcontainer.metadata: ${MD}\n",
-				"Dockerfile":         "FROM registry.invalid/app:1\n",
+				"Dockerfile":         "FROM scratch\n",
 			},
+			map[string]string{"MD": `[{"privileged": true}]`},
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			root := mergeFiles(t, tt.src, tt.files)
-			assertJSON(t, root, tt.src)
+			root := mergeFilesEnv(t, src, tt.files, tt.env)
+			assertJSON(t, root, want)
 		})
 	}
+}
+
+// TestMerge_ComposeDockerfileInlineEscape covers a "$$" escape in "dockerfile_inline": Compose
+// interpolation collapses it to a literal "$", so the Dockerfile "ARG"/"ENV" reference it guards
+// reaches the build intact rather than being interpolated away.
+func TestMerge_ComposeDockerfileInlineEscape(t *testing.T) {
+	t.Parallel()
+
+	host := ocitest.Registry(t)
+	ocitest.PushImage(t, host, "base", "1", map[string]string{imageMetadataLabel: `[{"privileged": true}]`}, false)
+
+	compose := "services:\n" +
+		"  app:\n" +
+		"    build:\n" +
+		"      dockerfile_inline: |\n" +
+		"        ARG TAG=1\n" +
+		fmt.Sprintf("        FROM %s/base:$${TAG}\n", host)
+	src := `{"dockerComposeFile": "docker-compose.yml", "service": "app"}`
+	root := mergeFiles(t, src, map[string]string{"docker-compose.yml": compose})
+	assertJSON(t, root, `{
+	  "dockerComposeFile": "docker-compose.yml",
+	  "service": "app",
+	  "privileged": true
+	}`)
 }
 
 // TestMerge_ComposeMissingService covers declarations that resolve to nothing without an error: a
@@ -643,6 +732,23 @@ func TestMerge_ComposeResolveErrors(t *testing.T) {
 			`{"dockerComposeFile": "docker-compose.yml", "service": "app"}`,
 			map[string]string{"docker-compose.yml": "services:\n  app:\n    image: registry.invalid/app:1\n"},
 		},
+		{
+			"required variable unset",
+			`{"dockerComposeFile": "docker-compose.yml", "service": "app"}`,
+			map[string]string{"docker-compose.yml": "services:\n  app:\n    image: registry.invalid/app:${TAG:?tag required}\n"},
+		},
+		{
+			// An unset variable with no default leaves an empty tag; resolving it to ":latest" would
+			// silently lint the wrong image, so it is an error (see [parseImageRef]).
+			"image tag from unset variable",
+			`{"dockerComposeFile": "docker-compose.yml", "service": "app"}`,
+			map[string]string{"docker-compose.yml": "services:\n  app:\n    image: registry.invalid/app:${TAG}\n"},
+		},
+		{
+			"invalid interpolation format",
+			`{"dockerComposeFile": "docker-compose.yml", "service": "app"}`,
+			map[string]string{"docker-compose.yml": "services:\n  app:\n    image: registry.invalid/app:${localEnv:TAG}\n"},
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -653,7 +759,7 @@ func TestMerge_ComposeResolveErrors(t *testing.T) {
 			if err != nil {
 				t.Fatalf("parse devcontainer.json: %v", err)
 			}
-			if err := Merge(t.Context(), NewFetcher(), openRoot(t, dir), ".", &root); err == nil {
+			if err := Merge(t.Context(), NewFetcher(), openRoot(t, dir), ".", nil, &root); err == nil {
 				t.Fatal("Merge: got nil error")
 			}
 		})

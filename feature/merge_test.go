@@ -115,7 +115,7 @@ func TestMerge_ImageFetchError(t *testing.T) {
 	if err != nil {
 		t.Fatalf("parse devcontainer.json: %v", err)
 	}
-	if err := Merge(t.Context(), NewFetcher(), nil, "", &root); err == nil {
+	if err := Merge(t.Context(), NewFetcher(), nil, "", nil, &root); err == nil {
 		t.Fatal("Merge with an unreachable image: got nil error")
 	}
 }
@@ -251,7 +251,7 @@ func TestMerge_BuildDockerfileMissing(t *testing.T) {
 	if err != nil {
 		t.Fatalf("parse devcontainer.json: %v", err)
 	}
-	if err := Merge(t.Context(), NewFetcher(), openRoot(t, t.TempDir()), ".", &root); err == nil {
+	if err := Merge(t.Context(), NewFetcher(), openRoot(t, t.TempDir()), ".", nil, &root); err == nil {
 		t.Fatal("Merge with a missing Dockerfile: got nil error")
 	}
 }
@@ -501,7 +501,7 @@ func TestMerge_DependsOnCycle(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := Merge(t.Context(), NewFetcher(), openRoot(t, dir), ".", &root); err == nil || !strings.Contains(err.Error(), "cycle") {
+	if err := Merge(t.Context(), NewFetcher(), openRoot(t, dir), ".", nil, &root); err == nil || !strings.Contains(err.Error(), "cycle") {
 		t.Errorf("Merge with a dependency cycle: err = %v, want a cycle error", err)
 	}
 }
@@ -562,7 +562,7 @@ func TestMerge_ResolveErrors(t *testing.T) {
 			if err != nil {
 				t.Fatalf("parse devcontainer.json: %v", err)
 			}
-			if err := Merge(t.Context(), NewFetcher(), openRoot(t, dir), ".", &root); err == nil {
+			if err := Merge(t.Context(), NewFetcher(), openRoot(t, dir), ".", nil, &root); err == nil {
 				t.Error("Merge: got nil error, want a resolution error")
 			}
 		})
@@ -630,7 +630,7 @@ func TestMerge_OverrideFeatureInstallOrderOCILegacyAlias(t *testing.T) {
 			t.Fatalf("parse devcontainer.json: %v", err)
 		}
 		// OCI Features need no confining root; local resolution is not exercised here.
-		if err := Merge(t.Context(), NewFetcher(), nil, "", &root); err != nil {
+		if err := Merge(t.Context(), NewFetcher(), nil, "", nil, &root); err != nil {
 			t.Fatalf("Merge: %v", err)
 		}
 		return &root
@@ -861,7 +861,7 @@ func mergeSrc(t *testing.T, src string, features map[string]string) *hujson.Valu
 	if err != nil {
 		t.Fatalf("parse devcontainer.json: %v", err)
 	}
-	if err := Merge(t.Context(), NewFetcher(), openRoot(t, dir), ".", &root); err != nil {
+	if err := Merge(t.Context(), NewFetcher(), openRoot(t, dir), ".", nil, &root); err != nil {
 		t.Fatalf("Merge: %v", err)
 	}
 	return &root
@@ -872,13 +872,20 @@ func mergeSrc(t *testing.T, src string, features map[string]string) *hujson.Valu
 // directory as both the root and the config directory.
 func mergeFiles(t *testing.T, src string, files map[string]string) *hujson.Value {
 	t.Helper()
+	return mergeFilesEnv(t, src, files, nil)
+}
+
+// mergeFilesEnv is [mergeFiles] with env supplied as the localEnv that Compose-file interpolation
+// reads.
+func mergeFilesEnv(t *testing.T, src string, files, env map[string]string) *hujson.Value {
+	t.Helper()
 	dir := t.TempDir()
 	writeFiles(t, dir, files)
 	root, err := hujson.Parse([]byte(src))
 	if err != nil {
 		t.Fatalf("parse devcontainer.json: %v", err)
 	}
-	if err := Merge(t.Context(), NewFetcher(), openRoot(t, dir), ".", &root); err != nil {
+	if err := Merge(t.Context(), NewFetcher(), openRoot(t, dir), ".", env, &root); err != nil {
 		t.Fatalf("Merge: %v", err)
 	}
 	return &root

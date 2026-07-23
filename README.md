@@ -3,7 +3,7 @@
 [![CI](https://github.com/bare-devcontainer/decolint/actions/workflows/ci.yml/badge.svg)](https://github.com/bare-devcontainer/decolint/actions/workflows/ci.yml)
 [![Attestation Checks](https://github.com/bare-devcontainer/decolint/actions/workflows/attest-check.yml/badge.svg)](https://github.com/bare-devcontainer/decolint/actions/workflows/attest-check.yml)
 
-decolint is a linter for [Dev Container](https://containers.dev/) configuration files. Following file types are supported:
+decolint is a linter for [Dev Container](https://containers.dev/) configuration files. The following file types are supported:
 
 - Dev Container definition (`devcontainer.json`)
 - Feature (`devcontainer-feature.json`)
@@ -41,8 +41,7 @@ GOEXPERIMENT=jsonv2 go install github.com/bare-devcontainer/decolint/cmd/decolin
 ```
 
 `GOEXPERIMENT=jsonv2` is required because decolint uses the still
-experimental `encoding/json/v2` standard library package. 
-
+experimental `encoding/json/v2` standard library package.
 
 ## Usage
 
@@ -78,7 +77,6 @@ overrides the config file when given:
 | [Category severities](#rule-categories) | `categories` | — |
 | [Rule severities](#rules) | `rules` | — |
 
-Command-line flags override the corresponding config-file setting.
 `-merge` and `-deny-warnings` override in either direction when given
 explicitly — e.g. `-merge=false` disables merging even if the config
 file sets `"merge": true`. Category and rule severities are config-file
@@ -154,10 +152,12 @@ would use:
 A few limits apply:
 
 - For Docker Compose, `extends` and `include` are resolved as `docker
-  compose config` would, and later files override earlier ones, but
-  Compose profiles, the `COMPOSE_FILE` environment variable, and `.env`
-  interpolation are not; a Compose value carrying an uninterpolated
-  `${...}` variable is skipped.
+  compose config` would, and later files override earlier ones. Compose
+  `${...}` interpolation resolves from the config file's
+  [`localEnv`](#config-file) map: an unset variable resolves to its
+  default (`${VAR:-default}`) or the empty string, and a `${VAR:?}`
+  requirement on an unset variable is an error. Compose profiles, the
+  `COMPOSE_FILE` environment variable, and `.env` files are not applied.
 - Registries are accessed anonymously, so a private image that cannot be
   pulled that way counts as a fetch failure.
 
@@ -222,7 +222,8 @@ ready to edit:
 rule in a [category](#rule-categories) at once; `rules` sets an
 individual rule's severity and takes precedence over its category.
 `localEnv` maps names to the values `${localEnv:NAME}` resolves to when
-[merging](#merging):
+[merging](#merging); it is also the environment Compose-file `${...}`
+interpolation reads:
 
 ```jsonc
 {

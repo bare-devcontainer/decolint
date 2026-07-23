@@ -13,13 +13,14 @@ import (
 // Merge resolves everything a devcontainer.json inherits and folds it into root in place, following
 // the Dev Container specification's merge logic. The inputs are the Features referenced under
 // "/features" (and, recursively, those their "dependsOn" names) and the metadata carried by the
-// configuration's base image, resolved by [baseImageContributors].
+// configuration's base image, resolved by [baseImageContributors]. Compose files named by
+// "dockerComposeFile" are interpolated with localEnv as the environment (see [loadComposeService]).
 //
 // Every node Merge adds carries the byte offset of the key it was pulled in through, so findings on
 // merged-in properties point at that reference. Any fetch or parse failure, or a dependency cycle,
 // is returned as an error.
-func Merge(ctx context.Context, f *Fetcher, fsRoot *os.Root, configDir string, root *hujson.Value) error {
-	imageContribs, err := baseImageContributors(ctx, f, fsRoot, configDir, root)
+func Merge(ctx context.Context, f *Fetcher, fsRoot *os.Root, configDir string, localEnv map[string]string, root *hujson.Value) error {
+	imageContribs, err := baseImageContributors(ctx, f, fsRoot, configDir, localEnv, root)
 	if err != nil {
 		return err
 	}
@@ -54,8 +55,8 @@ func Merge(ctx context.Context, f *Fetcher, fsRoot *os.Root, configDir string, r
 //
 // Only one form is valid at a time, so the order matters only for an invalid config that declares
 // several; it then resolves the one the real tooling would.
-func baseImageContributors(ctx context.Context, f *Fetcher, fsRoot *os.Root, configDir string, root *hujson.Value) ([]*contributor, error) {
-	contribs, declared, err := composeContributors(ctx, f, fsRoot, configDir, root)
+func baseImageContributors(ctx context.Context, f *Fetcher, fsRoot *os.Root, configDir string, localEnv map[string]string, root *hujson.Value) ([]*contributor, error) {
+	contribs, declared, err := composeContributors(ctx, f, fsRoot, configDir, localEnv, root)
 	if err != nil {
 		return nil, err
 	}

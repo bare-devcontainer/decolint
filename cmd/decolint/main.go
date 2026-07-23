@@ -251,7 +251,7 @@ func runLint(ctx context.Context, stdout, stderr io.Writer, opts Options, cfg Co
 		// One Fetcher per run, so a Feature shared by several files is fetched at most once.
 		fetcher := feature.NewFetcher(feature.WithLogWriter(stderr))
 		merge = func(ctx context.Context, f discovery.ConfigFile, doc *linter.Document) error {
-			return feature.Merge(ctx, fetcher, f.Root, filepath.Dir(f.Path), doc.Tree())
+			return feature.Merge(ctx, fetcher, f.Root, filepath.Dir(f.Path), cfg.LocalEnv, doc.Tree())
 		}
 		subst = func(workspaceFolder string, doc *linter.Document) {
 			substitute.Apply(substitute.Context{

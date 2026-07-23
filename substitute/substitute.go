@@ -11,7 +11,9 @@
 //   - ${localWorkspaceFolder} and ${localWorkspaceFolderBasename}: [Context.LocalWorkspaceFolder].
 //   - ${containerWorkspaceFolder} and ${containerWorkspaceFolderBasename}: the configuration's own
 //     "workspaceFolder", or its spec default.
-//   - ${devcontainerId}: the fixed placeholder [DevcontainerID].
+//   - ${devcontainerId}: the fixed placeholder [DevcontainerID], but only in the properties the
+//     spec allows it in (those not used to build the image, since the id is unknown at build time;
+//     see [devcontainerIDProperties]). Elsewhere it resolves to the empty string.
 //   - Anything else (${containerEnv:...}, unrecognized or malformed variables): the empty string.
 package substitute
 
@@ -29,6 +31,29 @@ import (
 // labels, which only exist once a container is created — and is the real algorithm applied to the
 // fixed input "decolint".
 const DevcontainerID = "1chpi9f3o037fhb9uo08e7p6i6i29ikr887u4fh4eq6a2rml99ua"
+
+// devcontainerIDProperties are the devcontainer.json top-level properties in which ${devcontainerId}
+// may appear. The spec restricts it to properties not used to build the image, because the id is not
+// known at (pre-)build time. See
+// https://containers.dev/implementors/json_reference/#variables-in-devcontainerjson.
+var devcontainerIDProperties = map[string]struct{}{
+	"name":                 {},
+	"runArgs":              {},
+	"initializeCommand":    {},
+	"onCreateCommand":      {},
+	"updateContentCommand": {},
+	"postCreateCommand":    {},
+	"postStartCommand":     {},
+	"postAttachCommand":    {},
+	"workspaceFolder":      {},
+	"workspaceMount":       {},
+	"mounts":               {},
+	"containerEnv":         {},
+	"remoteEnv":            {},
+	"containerUser":        {},
+	"remoteUser":           {},
+	"customizations":       {},
+}
 
 // Context supplies the values variables resolve to.
 type Context struct {
@@ -49,27 +74,45 @@ var variablePattern = regexp.MustCompile(`\$\{(.*?)\}`)
 // substituted, and replaced text is not re-scanned, both per the reference implementation. Every
 // node keeps its original byte offsets, so findings on substituted values still point at the
 // source text.
+//
+// ${devcontainerId} is resolved only within the top-level properties that allow it (see
+// [devcontainerIDProperties]); elsewhere it resolves to the empty string like an unknowable
+// variable.
 func Apply(ctx Context, root *hujson.Value) {
 	containerWS := containerWorkspaceFolder(ctx, root)
-	apply(ctx, containerWS, root)
+	obj, ok := root.Value.(*hujson.Object)
+	if !ok {
+		apply(ctx, containerWS, false, root)
+		return
+	}
+	for i := range obj.Members {
+		name := ""
+		if lit, ok := obj.Members[i].Name.Value.(hujson.Literal); ok && lit.Kind() == '"' {
+			name = lit.String()
+		}
+		_, idAllowed := devcontainerIDProperties[name]
+		apply(ctx, containerWS, idAllowed, &obj.Members[i].Value)
+	}
 }
 
-func apply(ctx Context, containerWS string, v *hujson.Value) {
+// apply resolves variables in v and its descendants. idAllowed reports whether the top-level
+// property v lives under permits ${devcontainerId}; it propagates unchanged into nested nodes.
+func apply(ctx Context, containerWS string, idAllowed bool, v *hujson.Value) {
 	switch t := v.Value.(type) {
 	case *hujson.Object:
 		for i := range t.Members {
-			apply(ctx, containerWS, &t.Members[i].Value)
+			apply(ctx, containerWS, idAllowed, &t.Members[i].Value)
 		}
 	case *hujson.Array:
 		for i := range t.Elements {
-			apply(ctx, containerWS, &t.Elements[i])
+			apply(ctx, containerWS, idAllowed, &t.Elements[i])
 		}
 	case hujson.Literal:
 		if t.Kind() != '"' {
 			return
 		}
 		s := t.String()
-		if resolved := resolveString(ctx, containerWS, s); resolved != s {
+		if resolved := resolveString(ctx, containerWS, idAllowed, s); resolved != s {
 			v.Value = hujson.String(resolved)
 		}
 	}
@@ -86,7 +129,9 @@ func containerWorkspaceFolder(ctx Context, root *hujson.Value) string {
 		return ""
 	}
 	if raw, ok := stringMember(obj, "workspaceFolder"); ok {
-		return resolveString(ctx, raw, raw)
+		// ${devcontainerId} is left unresolved here: this value feeds the container workspace
+		// folder, a build-time value the id is not available for.
+		return resolveString(ctx, raw, false, raw)
 	}
 	if hasMember(obj, "dockerComposeFile") {
 		return "/"
@@ -95,12 +140,12 @@ func containerWorkspaceFolder(ctx Context, root *hujson.Value) string {
 }
 
 // resolveString resolves every variable in s. containerWS is the value ${containerWorkspaceFolder}
-// resolves to.
+// resolves to. idAllowed reports whether s lives in a property that permits ${devcontainerId}.
 //
 // Divergences from the reference implementation, which defers what it cannot resolve locally: an
 // unrecognized variable (kept as written there) and a bare ${localEnv}/${env} (a configuration
 // error there) both resolve to the empty string, like an undefined environment variable.
-func resolveString(ctx Context, containerWS, s string) string {
+func resolveString(ctx Context, containerWS string, idAllowed bool, s string) string {
 	return variablePattern.ReplaceAllStringFunc(s, func(match string) string {
 		inner := match[len("${") : len(match)-len("}")]
 		parts := strings.Split(inner, ":")
@@ -128,7 +173,10 @@ func resolveString(ctx Context, containerWS, s string) string {
 		case "containerWorkspaceFolderBasename":
 			return posixBasename(containerWS)
 		case "devcontainerId":
-			return DevcontainerID
+			if idAllowed {
+				return DevcontainerID
+			}
+			return ""
 		default:
 			return ""
 		}

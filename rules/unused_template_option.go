@@ -13,7 +13,7 @@ import (
 var UnusedTemplateOption = &linter.Rule{
 	ID:          "unused-template-option",
 	Description: "disallow a Template option that no file in the Template references",
-	Category:    linter.CategoryCorrectness,
+	Category:    linter.CategoryStyle,
 	FileTypes:   []linter.FileType{linter.Template},
 	Paths:       []string{"/options"},
 	Check:       checkUnusedTemplateOption,

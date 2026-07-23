@@ -209,7 +209,8 @@ func TestRun(t *testing.T) {
 			want: []firing{
 				{templateFile, "id-dir-mismatch", linter.SeverityError},
 				{templateFile, "undefined-template-option", linter.SeverityError},
-				{templateFile, "unused-template-option", linter.SeverityError},
+				// unused-template-option is a style rule, off by default, so it does not fire here even
+				// though the fixture declares an unused option.
 				{templateBundledFile, "missing-container-def", linter.SeverityError},
 			},
 			wantExitCode: 1,

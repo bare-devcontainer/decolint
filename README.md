@@ -294,7 +294,6 @@ Only `correctness` runs by default; the rest are `off` until enabled:
 | `no-bind-mount` | `correctness` | `codespaces` | disallow `bind` type entries in `mounts`, which GitHub Codespaces silently ignores except for the Docker socket |
 | `no-host-port-format` | `correctness` | `codespaces` | disallow `host:port` entries in `forwardPorts` and `portsAttributes`, which GitHub Codespaces does not support |
 | `undefined-template-option` | `correctness` | (all) | disallow a `${templateOption:...}` reference to an option not declared in devcontainer-template.json |
-| `unused-template-option` | `correctness` | (all) | disallow a Template option that no file in the Template references |
 | `no-cap-add-all` | `security` | (all) | disallow granting all Linux capabilities via an `ALL` entry in a devcontainer.json's or Feature's `capAdd` property, or a `--cap-add=ALL` entry in a devcontainer.json's `runArgs` |
 | `no-docker-socket-mount` | `security` | (all) | disallow bind-mounting the host's Docker socket via a devcontainer.json's `mounts` or `runArgs`, which grants the container root-equivalent control over the host |
 | `no-privileged-container` | `security` | (all) | disallow running the container in privileged mode via a devcontainer.json's or Feature's `privileged` property, or a `--privileged` entry in a devcontainer.json's `runArgs` |
@@ -308,6 +307,7 @@ Only `correctness` runs by default; the rest are `off` until enabled:
 | `pin-feature-version` | `reproducibility` | (all) | disallow a Feature reference without an explicit version or with the `latest` version |
 | `pin-image-digest` | `reproducibility` | (all) | disallow an `image` property that does not pin the image by content digest (e.g. `image@sha256:...`) |
 | `no-app-port` | `style` | (all) | disallow the legacy `appPort` property in favor of `forwardPorts` |
+| `unused-template-option` | `style` | (all) | disallow a Template option that no file in the Template references |
 
 ## Suppressing findings
 

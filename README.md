@@ -3,7 +3,7 @@
 [![CI](https://github.com/bare-devcontainer/decolint/actions/workflows/ci.yml/badge.svg)](https://github.com/bare-devcontainer/decolint/actions/workflows/ci.yml)
 [![Attestation Checks](https://github.com/bare-devcontainer/decolint/actions/workflows/attest-check.yml/badge.svg)](https://github.com/bare-devcontainer/decolint/actions/workflows/attest-check.yml)
 
-decolint is a linter for [Dev Container](https://containers.dev/) configuration files. Following file types are supported:
+decolint is a linter for [Dev Container](https://containers.dev/) configuration files. The following file types are supported:
 
 - Dev Container definition (`devcontainer.json`)
 - Feature (`devcontainer-feature.json`)
@@ -41,8 +41,7 @@ GOEXPERIMENT=jsonv2 go install github.com/bare-devcontainer/decolint/cmd/decolin
 ```
 
 `GOEXPERIMENT=jsonv2` is required because decolint uses the still
-experimental `encoding/json/v2` standard library package. 
-
+experimental `encoding/json/v2` standard library package.
 
 ## Usage
 
@@ -78,7 +77,6 @@ overrides the config file when given:
 | [Category severities](#rule-categories) | `categories` | — |
 | [Rule severities](#rules) | `rules` | — |
 
-Command-line flags override the corresponding config-file setting.
 `-merge` and `-deny-warnings` override in either direction when given
 explicitly — e.g. `-merge=false` disables merging even if the config
 file sets `"merge": true`. Category and rule severities are config-file

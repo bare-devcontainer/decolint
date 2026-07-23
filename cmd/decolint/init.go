@@ -46,7 +46,7 @@ func initConfigFile(output io.Writer) error {
 // "format" selects the output format ("text", "json", or "github"); the
 // -format flag takes precedence, e.g.:
 //   "format": "github"
-// "localEnv" supplies the values ${localEnv:NAME} resolves to when linting;
+// "localEnv" supplies the values ${localEnv:NAME} resolves to when merging;
 // environment variables are never read, e.g.:
 //   "localEnv": { "USERPROFILE": "/home/user" }
 `)

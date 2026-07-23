@@ -1371,17 +1371,23 @@ func TestLintDir_WorkspaceFolderError(t *testing.T) {
 	}
 }
 
-// TestRun_Substitution checks that ${...} variables resolve before rules run: no-image-latest
-// reports the resolved image reference, from the localEnv default without a config value and from
-// the configured value with one.
+// TestRun_Substitution checks that ${...} variables resolve only under -merge, since substitution
+// and merging together compute the effective configuration: with merging on, no-image-latest
+// reports the resolved image reference; with merging off, it reports the raw ${localEnv:...} text.
 func TestRun_Substitution(t *testing.T) {
 	t.Parallel()
 
-	dir := writeDevcontainer(t, `{"image": "${localEnv:BASE:ubuntu}:latest"}`)
-	const rulesMember = `"rules": {"no-image-latest": "error"}`
+	// The image resolves against the in-process registry so a merge run stays hermetic; its "latest"
+	// tag is what trips no-image-latest.
+	host := ocitest.Registry(t)
+	ocitest.PushImage(t, host, "base", "latest", nil, false)
+	resolved := host + "/base:latest"
 
-	assertImage := func(t *testing.T, config, wantImage string) {
+	dir := writeDevcontainer(t, `{"image": "${localEnv:REGISTRY}/base:latest"}`)
+
+	lintImage := func(t *testing.T, mergeMember string) linter.Issue {
 		t.Helper()
+		config := fmt.Sprintf(`{%s"localEnv": {"REGISTRY": %q}, "rules": {"no-image-latest": "error"}}`, mergeMember, host)
 		path := filepath.Join(t.TempDir(), "config.jsonc")
 		if err := os.WriteFile(path, []byte(config), 0o644); err != nil {
 			t.Fatal(err)
@@ -1398,19 +1404,23 @@ func TestRun_Substitution(t *testing.T) {
 		if len(issues) != 1 || issues[0].RuleID != "no-image-latest" {
 			t.Fatalf("issues = %v, want one no-image-latest", issues)
 		}
-		if !strings.Contains(issues[0].Message, `"`+wantImage+`"`) {
-			t.Errorf("message = %q, want it to name %q", issues[0].Message, wantImage)
-		}
+		return issues[0]
 	}
 
-	t.Run("undefined localEnv falls back to the default", func(t *testing.T) {
+	t.Run("merge resolves the variable", func(t *testing.T) {
 		t.Parallel()
-		assertImage(t, `{`+rulesMember+`}`, "ubuntu:latest")
+		issue := lintImage(t, `"merge": true, `)
+		if !strings.Contains(issue.Message, `"`+resolved+`"`) {
+			t.Errorf("message = %q, want it to name the resolved image %q", issue.Message, resolved)
+		}
 	})
 
-	t.Run("configured localEnv value wins", func(t *testing.T) {
+	t.Run("without merge the variable is left as written", func(t *testing.T) {
 		t.Parallel()
-		assertImage(t, `{"localEnv": {"BASE": "debian"}, `+rulesMember+`}`, "debian:latest")
+		issue := lintImage(t, "")
+		if !strings.Contains(issue.Message, "${localEnv:REGISTRY}") {
+			t.Errorf("message = %q, want it to keep the unresolved variable", issue.Message)
+		}
 	})
 }
 

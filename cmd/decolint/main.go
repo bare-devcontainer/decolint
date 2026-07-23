@@ -243,19 +243,22 @@ func runLint(ctx context.Context, stdout, stderr io.Writer, opts Options, cfg Co
 	if err := rules.RegisterRules(l, cfg.Platforms, overrides); err != nil {
 		return false, fmt.Errorf("register rules: %w", err)
 	}
+	// Variable substitution and Feature merging together compute the effective configuration, so
+	// both are enabled by -merge: without it, decolint lints the file as written.
 	var merge mergeFn
+	var subst substituteFn
 	if cfg.Merge {
 		// One Fetcher per run, so a Feature shared by several files is fetched at most once.
 		fetcher := feature.NewFetcher(feature.WithLogWriter(stderr))
 		merge = func(ctx context.Context, f discovery.ConfigFile, doc *linter.Document) error {
 			return feature.Merge(ctx, fetcher, f.Root, filepath.Dir(f.Path), doc.Tree())
 		}
-	}
-	subst := func(workspaceFolder string, doc *linter.Document) {
-		substitute.Apply(substitute.Context{
-			LocalEnv:             cfg.LocalEnv,
-			LocalWorkspaceFolder: workspaceFolder,
-		}, doc.Tree())
+		subst = func(workspaceFolder string, doc *linter.Document) {
+			substitute.Apply(substitute.Context{
+				LocalEnv:             cfg.LocalEnv,
+				LocalWorkspaceFolder: workspaceFolder,
+			}, doc.Tree())
+		}
 	}
 
 	var allIssues []linter.Issue
@@ -287,8 +290,9 @@ func runLint(ctx context.Context, stdout, stderr io.Writer, opts Options, cfg Co
 // mergeFn merges Feature-contributed properties into doc's tree before rules run; see lintFile.
 type mergeFn func(ctx context.Context, f discovery.ConfigFile, doc *linter.Document) error
 
-// substituteFn resolves ${...} variables in doc's tree before merge and rules run;
-// workspaceFolder is the value ${localWorkspaceFolder} resolves to. See lintFile.
+// substituteFn resolves ${...} variables in doc's tree before merge and rules run; workspaceFolder
+// is the value ${localWorkspaceFolder} resolves to. It is nil unless merging is enabled. See
+// lintFile.
 type substituteFn func(workspaceFolder string, doc *linter.Document)
 
 // lintPath lints the devcontainer directory at path. The directory is opened as an os.Root, so
@@ -316,15 +320,20 @@ func lintDir(ctx context.Context, l *linter.Linter, subst substituteFn, merge me
 		return nil, fmt.Errorf("aborted %s: %w", dir, err)
 	}
 	// The linted directory is the workspace folder the real tooling would mount, even for a
-	// configuration discovered in a sub-root like .devcontainer.
-	workspaceFolder, err := filepath.Abs(dir)
-	if err != nil {
-		return nil, fmt.Errorf("resolve workspace folder %s: %w", dir, err)
+	// configuration discovered in a sub-root like .devcontainer. It is only needed for variable
+	// substitution, so it is resolved only when that runs.
+	var workspaceFolder string
+	if subst != nil {
+		abs, err := filepath.Abs(dir)
+		if err != nil {
+			return nil, fmt.Errorf("resolve workspace folder %s: %w", dir, err)
+		}
+		workspaceFolder = abs
 	}
 	var issues []linter.Issue
 	var errs []error
 	found := false
-	err = discovery.VisitConfigs(root, func(f discovery.ConfigFile) error {
+	err := discovery.VisitConfigs(root, func(f discovery.ConfigFile) error {
 		found = true
 		if err := ctx.Err(); err != nil {
 			return fmt.Errorf("aborted %s: %w", filepath.Join(f.Root.Name(), f.Path), err)
@@ -350,9 +359,10 @@ func lintDir(ctx context.Context, l *linter.Linter, subst substituteFn, merge me
 
 // lintFile reads and lints the single configuration file f, reporting issues under
 // filepath.Join(f.Root.Name(), f.Path). The file is read through f.Root, so its resolution cannot
-// escape that boundary. subst runs on dev container configurations first, so merge and rules see
-// resolved values. merge, if non-nil, runs on dev container configurations before rules and is
-// skipped when no rule applies to f's type, so a file with no active rules does no Feature fetches.
+// escape that boundary. subst, if non-nil, resolves variables in dev container configurations
+// before merge and rules run, so both see resolved values. merge, if non-nil, runs on dev container
+// configurations before rules and is skipped when no rule applies to f's type, so a file with no
+// active rules does no Feature fetches.
 func lintFile(ctx context.Context, l *linter.Linter, subst substituteFn, merge mergeFn, f discovery.ConfigFile, workspaceFolder string) ([]linter.Issue, error) {
 	display := filepath.Join(f.Root.Name(), f.Path)
 	src, err := f.Root.ReadFile(f.Path)
@@ -363,7 +373,7 @@ func lintFile(ctx context.Context, l *linter.Linter, subst substituteFn, merge m
 	if err != nil {
 		return nil, fmt.Errorf("%s: %w", display, err)
 	}
-	if f.Type == linter.Devcontainer {
+	if subst != nil && f.Type == linter.Devcontainer {
 		subst(workspaceFolder, doc)
 	}
 	if merge != nil && f.Type == linter.Devcontainer && l.HasRules(f.Type) {

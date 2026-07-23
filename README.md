@@ -107,27 +107,6 @@ rules scoped to specific platforms:
 decolint -platform=vscode,codespaces
 ```
 
-### Variable substitution
-
-Before rules run, decolint resolves the `${...}`
-[variables](https://containers.dev/implementors/json_reference/#variables-in-devcontainerjson)
-in every `devcontainer.json`, so findings report the values the real
-tooling would use:
-
-- `${localEnv:NAME}` (and `${env:NAME}`) resolves from the config
-  file's [`localEnv`](#config-file) map only — decolint never reads
-  environment variables. A name missing from the map resolves to the
-  default in `${localEnv:NAME:default}`, or to the empty string.
-- `${localWorkspaceFolder}` resolves to the linted directory's absolute
-  path, `${containerWorkspaceFolder}` to the configuration's
-  `workspaceFolder` (defaulting to `/workspaces/<folder name>`, or `/`
-  for Docker Compose); each has a `...Basename` variant.
-- `${devcontainerId}` resolves to a fixed placeholder with the format
-  of a real id, since the real value exists only once a container is
-  created.
-- Anything else, including `${containerEnv:NAME}`, resolves to the
-  empty string.
-
 ### Merging
 
 The [Features](https://containers.dev/implementors/features/) a
@@ -151,6 +130,26 @@ Metadata from the base image's
 label is the lowest-precedence input: a Feature, and then the
 `devcontainer.json` itself, override it. A Feature or image that cannot
 be fetched is an error (exit code 2).
+
+Merging also resolves the `${...}`
+[variables](https://containers.dev/implementors/json_reference/#variables-in-devcontainerjson)
+in the `devcontainer.json` first, so the reference a Feature or image is
+fetched by, and the values the rules see, match what the real tooling
+would use:
+
+- `${localEnv:NAME}` (and `${env:NAME}`) resolves from the config
+  file's [`localEnv`](#config-file) map only — decolint never reads
+  environment variables. A name missing from the map resolves to the
+  default in `${localEnv:NAME:default}`, or to the empty string.
+- `${localWorkspaceFolder}` resolves to the linted directory's absolute
+  path, `${containerWorkspaceFolder}` to the configuration's
+  `workspaceFolder` (defaulting to `/workspaces/<folder name>`, or `/`
+  for Docker Compose); each has a `...Basename` variant.
+- `${devcontainerId}` resolves to a fixed placeholder with the format
+  of a real id, since the real value exists only once a container is
+  created.
+- Anything else, including `${containerEnv:NAME}`, resolves to the
+  empty string.
 
 A few limits apply:
 
@@ -222,8 +221,8 @@ ready to edit:
 `categories` sets the severity (`error`, `warn`, or `off`) of every
 rule in a [category](#rule-categories) at once; `rules` sets an
 individual rule's severity and takes precedence over its category.
-`localEnv` maps names to the values `${localEnv:NAME}` resolves to
-(see [Variable substitution](#variable-substitution)):
+`localEnv` maps names to the values `${localEnv:NAME}` resolves to when
+[merging](#merging):
 
 ```jsonc
 {

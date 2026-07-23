@@ -131,14 +131,33 @@ label is the lowest-precedence input: a Feature, and then the
 `devcontainer.json` itself, override it. A Feature or image that cannot
 be fetched is an error (exit code 2).
 
+Merging also resolves the `${...}`
+[variables](https://containers.dev/implementors/json_reference/#variables-in-devcontainerjson)
+in the `devcontainer.json` first, so the reference a Feature or image is
+fetched by, and the values the rules see, match what the real tooling
+would use:
+
+- `${localEnv:NAME}` (and `${env:NAME}`) resolves from the config
+  file's [`localEnv`](#config-file) map only — decolint never reads
+  environment variables. A name missing from the map resolves to the
+  default in `${localEnv:NAME:default}`, or to the empty string.
+- `${localWorkspaceFolder}` resolves to the linted directory's absolute
+  path, `${containerWorkspaceFolder}` to the configuration's
+  `workspaceFolder` (defaulting to `/workspaces/<folder name>`, or `/`
+  for Docker Compose); each has a `...Basename` variant.
+- `${devcontainerId}` resolves to a fixed placeholder with the format
+  of a real id, since the real value exists only once a container is
+  created.
+- Anything else, including `${containerEnv:NAME}`, resolves to the
+  empty string.
+
 A few limits apply:
 
 - For Docker Compose, `extends` and `include` are resolved as `docker
   compose config` would, and later files override earlier ones, but
   Compose profiles, the `COMPOSE_FILE` environment variable, and `.env`
-  interpolation are not.
-- A reference with an unresolved `${...}` variable is skipped, since its
-  value is only known when the container is created.
+  interpolation are not; a Compose value carrying an uninterpolated
+  `${...}` variable is skipped.
 - Registries are accessed anonymously, so a private image that cannot be
   pulled that way counts as a fetch failure.
 
@@ -201,8 +220,17 @@ ready to edit:
 
 `categories` sets the severity (`error`, `warn`, or `off`) of every
 rule in a [category](#rule-categories) at once; `rules` sets an
-individual rule's severity and takes precedence over its category. The
-remaining members mirror their flags: `platforms`, `merge`,
+individual rule's severity and takes precedence over its category.
+`localEnv` maps names to the values `${localEnv:NAME}` resolves to when
+[merging](#merging):
+
+```jsonc
+{
+  "localEnv": { "USERPROFILE": "/home/user" }
+}
+```
+
+The remaining members mirror their flags: `platforms`, `merge`,
 `denyWarnings`, and `format` (see the [Configuration](#configuration)
 table).
 

@@ -524,9 +524,10 @@ func TestMerge_ComposePrecedesBuildAndImage(t *testing.T) {
 	}`)
 }
 
-// TestMerge_ComposeVariableSubstitutionSkipped covers the lint-time-unknowable declarations that
-// skip compose resolution without falling back to "build" or "image": each fixture would fail the
-// merge (a missing file or an unreachable registry) if resolution were attempted.
+// TestMerge_ComposeVariableSubstitutionSkipped covers the declarations a Compose-interpolation
+// variable leaves unknowable at lint time (decolint does not apply interpolation), which skip
+// compose resolution without falling back to "build" or "image": each fixture would fail the merge
+// (a missing file or an unreachable registry) if resolution were attempted.
 func TestMerge_ComposeVariableSubstitutionSkipped(t *testing.T) {
 	t.Parallel()
 
@@ -535,16 +536,6 @@ func TestMerge_ComposeVariableSubstitutionSkipped(t *testing.T) {
 		src   string
 		files map[string]string
 	}{
-		{
-			"compose file path",
-			`{"dockerComposeFile": "${localEnv:DIR}/docker-compose.yml", "service": "app"}`,
-			nil,
-		},
-		{
-			"service name",
-			`{"dockerComposeFile": "docker-compose.yml", "service": "${localEnv:SVC}"}`,
-			nil,
-		},
 		{
 			"service image",
 			`{"dockerComposeFile": "docker-compose.yml", "service": "app"}`,

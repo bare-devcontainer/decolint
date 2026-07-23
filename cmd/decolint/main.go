@@ -17,6 +17,7 @@ import (
 	"github.com/bare-devcontainer/decolint/feature"
 	"github.com/bare-devcontainer/decolint/linter"
 	"github.com/bare-devcontainer/decolint/rules"
+	"github.com/bare-devcontainer/decolint/substitute"
 )
 
 // progName is the program name, used in the flag set, usage text, and error messages.
@@ -242,12 +243,21 @@ func runLint(ctx context.Context, stdout, stderr io.Writer, opts Options, cfg Co
 	if err := rules.RegisterRules(l, cfg.Platforms, overrides); err != nil {
 		return false, fmt.Errorf("register rules: %w", err)
 	}
+	// Variable substitution and Feature merging together compute the effective configuration, so
+	// both are enabled by -merge: without it, decolint lints the file as written.
 	var merge mergeFn
+	var subst substituteFn
 	if cfg.Merge {
 		// One Fetcher per run, so a Feature shared by several files is fetched at most once.
 		fetcher := feature.NewFetcher(feature.WithLogWriter(stderr))
 		merge = func(ctx context.Context, f discovery.ConfigFile, doc *linter.Document) error {
 			return feature.Merge(ctx, fetcher, f.Root, filepath.Dir(f.Path), doc.Tree())
+		}
+		subst = func(workspaceFolder string, doc *linter.Document) {
+			substitute.Apply(substitute.Context{
+				LocalEnv:             cfg.LocalEnv,
+				LocalWorkspaceFolder: workspaceFolder,
+			}, doc.Tree())
 		}
 	}
 
@@ -255,7 +265,7 @@ func runLint(ctx context.Context, stdout, stderr io.Writer, opts Options, cfg Co
 	var worstSeverity linter.Severity
 	var lintErr error
 	for _, path := range opts.Paths {
-		issues, err := lintPath(ctx, l, merge, path)
+		issues, err := lintPath(ctx, l, subst, merge, path)
 		for _, issue := range issues {
 			if issue.Severity > worstSeverity {
 				worstSeverity = issue.Severity
@@ -280,16 +290,21 @@ func runLint(ctx context.Context, stdout, stderr io.Writer, opts Options, cfg Co
 // mergeFn merges Feature-contributed properties into doc's tree before rules run; see lintFile.
 type mergeFn func(ctx context.Context, f discovery.ConfigFile, doc *linter.Document) error
 
+// substituteFn resolves ${...} variables in doc's tree before merge and rules run; workspaceFolder
+// is the value ${localWorkspaceFolder} resolves to. It is nil unless merging is enabled. See
+// lintFile.
+type substituteFn func(workspaceFolder string, doc *linter.Document)
+
 // lintPath lints the devcontainer directory at path. The directory is opened as an os.Root, so
 // every file the lint reads is confined to it. It is an error if path is not a directory.
-func lintPath(ctx context.Context, l *linter.Linter, merge mergeFn, path string) ([]linter.Issue, error) {
+func lintPath(ctx context.Context, l *linter.Linter, subst substituteFn, merge mergeFn, path string) ([]linter.Issue, error) {
 	root, err := os.OpenRoot(path)
 	if err != nil {
 		return nil, fmt.Errorf("resolve directory %s: %w", path, err)
 	}
 	// The root is only read from, so a close error is inconsequential.
 	defer func() { _ = root.Close() }()
-	issues, err := lintDir(ctx, l, merge, root)
+	issues, err := lintDir(ctx, l, subst, merge, root)
 	if err != nil {
 		return nil, fmt.Errorf("lint directory %s: %w", path, err)
 	}
@@ -299,10 +314,21 @@ func lintPath(ctx context.Context, l *linter.Linter, merge mergeFn, path string)
 // lintDir lints every configuration file in the devcontainer directory root is opened on. It is an
 // error if the directory contains no configuration. Issue paths are the files' locations joined
 // onto root's name.
-func lintDir(ctx context.Context, l *linter.Linter, merge mergeFn, root *os.Root) ([]linter.Issue, error) {
+func lintDir(ctx context.Context, l *linter.Linter, subst substituteFn, merge mergeFn, root *os.Root) ([]linter.Issue, error) {
 	dir := root.Name()
 	if err := ctx.Err(); err != nil {
 		return nil, fmt.Errorf("aborted %s: %w", dir, err)
+	}
+	// The linted directory is the workspace folder the real tooling would mount, even for a
+	// configuration discovered in a sub-root like .devcontainer. It is only needed for variable
+	// substitution, so it is resolved only when that runs.
+	var workspaceFolder string
+	if subst != nil {
+		abs, err := filepath.Abs(dir)
+		if err != nil {
+			return nil, fmt.Errorf("resolve workspace folder %s: %w", dir, err)
+		}
+		workspaceFolder = abs
 	}
 	var issues []linter.Issue
 	var errs []error
@@ -312,7 +338,7 @@ func lintDir(ctx context.Context, l *linter.Linter, merge mergeFn, root *os.Root
 		if err := ctx.Err(); err != nil {
 			return fmt.Errorf("aborted %s: %w", filepath.Join(f.Root.Name(), f.Path), err)
 		}
-		fileIssues, err := lintFile(ctx, l, merge, f)
+		fileIssues, err := lintFile(ctx, l, subst, merge, f, workspaceFolder)
 		if err != nil {
 			// A broken file must not stop the remaining files from being linted, so record the
 			// error and keep visiting.
@@ -333,9 +359,11 @@ func lintDir(ctx context.Context, l *linter.Linter, merge mergeFn, root *os.Root
 
 // lintFile reads and lints the single configuration file f, reporting issues under
 // filepath.Join(f.Root.Name(), f.Path). The file is read through f.Root, so its resolution cannot
-// escape that boundary. merge, if non-nil, runs on dev container configurations before rules and is
-// skipped when no rule applies to f's type, so a file with no active rules does no Feature fetches.
-func lintFile(ctx context.Context, l *linter.Linter, merge mergeFn, f discovery.ConfigFile) ([]linter.Issue, error) {
+// escape that boundary. subst, if non-nil, resolves variables in dev container configurations
+// before merge and rules run, so both see resolved values. merge, if non-nil, runs on dev container
+// configurations before rules and is skipped when no rule applies to f's type, so a file with no
+// active rules does no Feature fetches.
+func lintFile(ctx context.Context, l *linter.Linter, subst substituteFn, merge mergeFn, f discovery.ConfigFile, workspaceFolder string) ([]linter.Issue, error) {
 	display := filepath.Join(f.Root.Name(), f.Path)
 	src, err := f.Root.ReadFile(f.Path)
 	if err != nil {
@@ -344,6 +372,9 @@ func lintFile(ctx context.Context, l *linter.Linter, merge mergeFn, f discovery.
 	doc, err := linter.ParseDocument(src)
 	if err != nil {
 		return nil, fmt.Errorf("%s: %w", display, err)
+	}
+	if subst != nil && f.Type == linter.Devcontainer {
+		subst(workspaceFolder, doc)
 	}
 	if merge != nil && f.Type == linter.Devcontainer && l.HasRules(f.Type) {
 		if err := merge(ctx, f, doc); err != nil {

@@ -6,7 +6,6 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
-	"strings"
 
 	"github.com/tailscale/hujson"
 )
@@ -79,9 +78,7 @@ func baseImageContributors(ctx context.Context, f *Fetcher, fsRoot *os.Root, con
 
 // dockerfileContributors fetches the metadata the image built from the configuration's Dockerfile
 // would carry, anchored at the key declaring the Dockerfile path. declared reports whether root
-// declares a Dockerfile at all, which [baseImageContributors] uses to choose the base-image form; a
-// declared Dockerfile whose path or target cannot be resolved at lint time (a "${...}"
-// substitution) contributes nothing.
+// declares a Dockerfile at all, which [baseImageContributors] uses to choose the base-image form.
 func dockerfileContributors(ctx context.Context, f *Fetcher, fsRoot *os.Root, configDir string, root *hujson.Value) ([]*contributor, bool, error) {
 	obj, ok := root.Value.(*hujson.Object)
 	if !ok {
@@ -91,15 +88,7 @@ func dockerfileContributors(ctx context.Context, f *Fetcher, fsRoot *os.Root, co
 	if !ok {
 		return nil, false, nil
 	}
-	// Variable substitutions resolve at container creation time; linting cannot know their values,
-	// so such a Dockerfile is skipped rather than rejected.
-	if strings.Contains(path, "${") {
-		return nil, true, nil
-	}
-	args, target, ok := buildOptions(obj)
-	if !ok {
-		return nil, true, nil
-	}
+	args, target := buildOptions(obj)
 	src, err := readBounded(fsRoot, filepath.Join(configDir, path), maxDockerfileBytes)
 	if err != nil {
 		return nil, true, err
@@ -138,25 +127,22 @@ func dockerfilePath(obj *hujson.Object) (string, int, bool) {
 	return "", 0, false
 }
 
-// buildOptions extracts the "args" and "target" of the "/build" object. An arg whose value carries
-// a variable substitution cannot be known at lint time and is dropped, approximating a build where
-// the arg is unset so the Dockerfile's own ARG default applies. A target carrying one leaves the
-// built stage itself unknowable, so ok is false and the whole Dockerfile is skipped.
-func buildOptions(obj *hujson.Object) (args map[string]string, target string, ok bool) {
+// buildOptions extracts the "args" and "target" of the "/build" object.
+func buildOptions(obj *hujson.Object) (args map[string]string, target string) {
 	i := findMember(obj, "build")
 	if i < 0 {
-		return nil, "", true
+		return nil, ""
 	}
 	buildObj, isObj := obj.Members[i].Value.Value.(*hujson.Object)
 	if !isObj {
-		return nil, "", true
+		return nil, ""
 	}
 	if j := findMember(buildObj, "args"); j >= 0 {
 		if argsObj, isObj := buildObj.Members[j].Value.Value.(*hujson.Object); isObj {
 			for _, m := range argsObj.Members {
 				name, nameOK := m.Name.Value.(hujson.Literal)
 				val, valOK := m.Value.Value.(hujson.Literal)
-				if !nameOK || name.Kind() != '"' || !valOK || val.Kind() != '"' || strings.Contains(val.String(), "${") {
+				if !nameOK || name.Kind() != '"' || !valOK || val.Kind() != '"' {
 					continue
 				}
 				if args == nil {
@@ -169,12 +155,9 @@ func buildOptions(obj *hujson.Object) (args map[string]string, target string, ok
 	if j := findMember(buildObj, "target"); j >= 0 {
 		if lit, isStr := buildObj.Members[j].Value.Value.(hujson.Literal); isStr && lit.Kind() == '"' {
 			target = lit.String()
-			if strings.Contains(target, "${") {
-				return nil, "", false
-			}
 		}
 	}
-	return args, target, true
+	return args, target
 }
 
 // readBounded reads the file at path through fsRoot, so its resolution cannot escape fsRoot's
@@ -211,11 +194,6 @@ func imageContributors(ctx context.Context, f *Fetcher, root *hujson.Value) ([]*
 		return nil, nil
 	}
 	image := lit.String()
-	// Variable substitutions resolve at container creation time; linting cannot know their values,
-	// so such an image is skipped rather than rejected.
-	if strings.Contains(image, "${") {
-		return nil, nil
-	}
 	entries, err := f.FetchImageMetadata(ctx, image)
 	if err != nil {
 		return nil, err

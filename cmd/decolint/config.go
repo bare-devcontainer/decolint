@@ -27,8 +27,9 @@ type Config struct {
 	// or "github". The -format flag takes precedence.
 	Format string `json:"format"`
 	// LocalEnv maps names to the values "${localEnv:NAME}" (and "${env:NAME}") resolve to during
-	// variable substitution, which runs with Merge; see [substitute.Context.LocalEnv]. Host
-	// environment variables are never read.
+	// variable substitution, which runs with Merge; see [substitute.Context.LocalEnv]. It is also
+	// the environment Compose-file "${...}" interpolation reads. Host environment variables are
+	// never read.
 	LocalEnv map[string]string `json:"localEnv"`
 	// Categories maps a category name to the severity every rule in that category should be
 	// overridden to. Per-rule entries in Rules take precedence.

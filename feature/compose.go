@@ -8,24 +8,25 @@ import (
 	"strings"
 
 	"github.com/compose-spec/compose-go/v2/loader"
+	"github.com/compose-spec/compose-go/v2/template"
 	"github.com/compose-spec/compose-go/v2/types"
 	"github.com/tailscale/hujson"
 )
 
 // composeContributors returns the metadata contributors of the base image reached through
 // "dockerComposeFile" and "service" of root: the image the named service's "build" would produce,
-// or, absent one, the image its "image" names. declared reports whether root declares
+// or, absent one, the image its "image" names. The Compose files are interpolated with localEnv as
+// the environment (see [loadComposeService]). declared reports whether root declares
 // "dockerComposeFile" at all, which [baseImageContributors] uses to choose the base-image form. A
-// declaration that cannot be resolved at lint time (a Compose-interpolation variable in the
-// service's image, context, dockerfile, or target, or a missing "service" property, which a lint
-// rule already flags) contributes nothing.
+// declaration with a missing "service" property (which a lint rule already flags) contributes
+// nothing.
 //
 // Unlike the rest of the merge, Compose resolution reads from the real filesystem rather than
 // through fsRoot: the reference implementation runs "docker compose config", which resolves
 // "extends" and "include" against files that commonly sit outside the configuration directory (a
 // compose file named "../docker-compose.yml", or a service that extends a root-level file), so the
 // fsRoot confinement is deliberately not applied here.
-func composeContributors(ctx context.Context, f *Fetcher, fsRoot *os.Root, configDir string, root *hujson.Value) ([]*contributor, bool, error) {
+func composeContributors(ctx context.Context, f *Fetcher, fsRoot *os.Root, configDir string, localEnv map[string]string, root *hujson.Value) ([]*contributor, bool, error) {
 	obj, ok := root.Value.(*hujson.Object)
 	if !ok {
 		return nil, false, nil
@@ -44,7 +45,7 @@ func composeContributors(ctx context.Context, f *Fetcher, fsRoot *os.Root, confi
 	// The Compose files resolve relative to the referencing devcontainer.json's directory on the real
 	// filesystem, as "docker compose" itself would.
 	baseDir := filepath.Join(fsRoot.Name(), configDir)
-	svc, err := loadComposeService(ctx, baseDir, paths, service)
+	svc, err := loadComposeService(ctx, baseDir, paths, service, localEnv)
 	if err != nil {
 		return nil, true, err
 	}
@@ -101,12 +102,12 @@ func composeServiceName(obj *hujson.Object) (string, bool) {
 
 // loadComposeService reads each Compose file at baseDir and returns the named service resolved by
 // compose-go, merged across all of them per the Compose specification, with "extends" and "include"
-// resolved as "docker compose config" would. Interpolation is skipped so a "${...}" variable is
-// preserved verbatim for the caller to recognize as unresolvable at lint time; the COMPOSE_FILE
-// variable, profiles, and ".env" interpolation are likewise not applied. A missing or unparsable
-// file (including one an "extends" or "include" names), or a service found in none of them, is an
-// error.
-func loadComposeService(ctx context.Context, baseDir string, paths []string, service string) (*types.ServiceConfig, error) {
+// resolved as "docker compose config" would. "${...}" variables are interpolated from env as
+// "docker compose config" would: an unset variable resolves to its declared default ("${VAR:-def}")
+// or the empty string, and a "${VAR:?}" requirement on an unset variable is an error. The
+// COMPOSE_FILE variable, profiles, and ".env" files are not applied. A missing or unparsable file
+// (including one an "extends" or "include" names), or a service found in none of them, is an error.
+func loadComposeService(ctx context.Context, baseDir string, paths []string, service string, env map[string]string) (*types.ServiceConfig, error) {
 	files := make([]types.ConfigFile, 0, len(paths))
 	for _, p := range paths {
 		files = append(files, types.ConfigFile{Filename: filepath.Join(baseDir, p)})
@@ -114,17 +115,23 @@ func loadComposeService(ctx context.Context, baseDir string, paths []string, ser
 	project, err := loader.LoadWithContext(ctx, types.ConfigDetails{
 		WorkingDir:  filepath.Dir(filepath.Join(baseDir, paths[0])),
 		ConfigFiles: files,
-		Environment: types.Mapping{},
+		Environment: types.Mapping(env),
 	}, func(o *loader.Options) {
-		o.SkipInterpolation = true
 		o.SkipValidation = true
 		o.SkipNormalization = true
 		o.SkipConsistencyCheck = true
 		o.SkipDefaultValues = true
+		// The ".env" files docker compose reads are the only environment source decolint omits; the
+		// service "environment:" passthrough this resolves needs no lint-time value.
 		o.SkipResolveEnvironment = true
 		// Resolve a service's build context to an absolute path against the file that declares it, so
 		// a build inherited through "extends" from another directory reads its Dockerfile correctly.
 		o.ResolvePaths = true
+		// An unset variable resolves to the empty string by design; the reference implementation's
+		// per-variable warning is not decolint's output channel, so suppress it.
+		o.Interpolate.Substitute = func(s string, m template.Mapping) (string, error) {
+			return template.SubstituteWithOptions(s, m, template.WithoutLogging)
+		}
 	})
 	if err != nil {
 		return nil, fmt.Errorf("parse %s: %w", strings.Join(paths, ", "), err)
@@ -132,6 +139,13 @@ func loadComposeService(ctx context.Context, baseDir string, paths []string, ser
 	svc, ok := project.Services[service]
 	if !ok {
 		return nil, fmt.Errorf("service %q not found in %s", service, strings.Join(paths, ", "))
+	}
+	// A passthrough build arg (a bare "- NAME" with no value) takes its value from the environment,
+	// as "docker compose build" would; one absent from env stays unset so the Dockerfile's ARG
+	// default applies. Interpolation does not cover these: they are Compose environment lookups, not
+	// "${...}" substitutions.
+	if svc.Build != nil {
+		svc.Build.Args = svc.Build.Args.Resolve(types.Mapping(env).Resolve)
 	}
 	return &svc, nil
 }
@@ -145,7 +159,7 @@ func composeServiceMetadata(ctx context.Context, f *Fetcher, baseDir, firstCompo
 	if svc.Build != nil {
 		return composeBuildMetadata(ctx, f, baseDir, firstComposePath, svc.Build)
 	}
-	if svc.Image == "" || strings.Contains(svc.Image, "${") {
+	if svc.Image == "" {
 		return nil, "", nil
 	}
 	entries, err := f.FetchImageMetadata(ctx, svc.Image)
@@ -156,23 +170,16 @@ func composeServiceMetadata(ctx context.Context, f *Fetcher, baseDir, firstCompo
 // (default "Dockerfile", or the inline "dockerfile_inline" content) resolves relative to the
 // context (default: the first Compose file's directory), honoring "args" and "target". A
 // "devcontainer.metadata" entry in the build "labels" is forwarded to override the Dockerfile's own
-// (see [Fetcher.FetchDockerfileMetadata]); an unresolvable variable substitution skips the build,
-// and an arg carrying one (or an environment passthrough, which has no value in the file) is dropped
-// so the Dockerfile's ARG default applies.
+// (see [Fetcher.FetchDockerfileMetadata]). A passthrough arg still absent from the environment (see
+// [loadComposeService]) is dropped so the Dockerfile's ARG default applies.
 func composeBuildMetadata(ctx context.Context, f *Fetcher, baseDir, firstComposePath string, build *types.BuildConfig) ([]*Metadata, string, error) {
-	if strings.Contains(build.Context, "${") || strings.Contains(build.Dockerfile, "${") || strings.Contains(build.Target, "${") {
-		return nil, "", nil
-	}
 	var labels map[string]string
 	if v, ok := build.Labels[imageMetadataLabel]; ok {
-		if strings.Contains(v, "${") {
-			return nil, "", nil
-		}
 		labels = map[string]string{imageMetadataLabel: v}
 	}
 	var args map[string]string
 	for k, v := range build.Args {
-		if v == nil || strings.Contains(*v, "${") {
+		if v == nil {
 			continue
 		}
 		if args == nil {
@@ -182,9 +189,6 @@ func composeBuildMetadata(ctx context.Context, f *Fetcher, baseDir, firstCompose
 	}
 
 	if build.DockerfileInline != "" {
-		if strings.Contains(build.DockerfileInline, "${") {
-			return nil, "", nil
-		}
 		entries, err := f.FetchDockerfileMetadata(ctx, []byte(build.DockerfileInline), args, labels, build.Target)
 		if err != nil {
 			return nil, "", fmt.Errorf("build dockerfile_inline: %w", err)

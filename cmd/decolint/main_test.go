@@ -1149,6 +1149,36 @@ LABEL devcontainer.metadata='[{"privileged": true, "mounts": ["source=/var/run/d
 		}
 	})
 
+	t.Run("interpolates a Compose variable from the config localEnv", func(t *testing.T) {
+		t.Parallel()
+
+		host := ocitest.Registry(t)
+		ocitest.PushImage(t, host, "base", "1", map[string]string{
+			"devcontainer.metadata": `[{"privileged": true}]`,
+		}, false)
+
+		// The Compose file names its image through "${IMAGE}", which resolves only from the config's
+		// localEnv map: without the localEnv threaded into merge it would interpolate to empty and
+		// contribute nothing, so this run also proves the wiring.
+		dir := writeDevcontainer(t, `{"dockerComposeFile": "docker-compose.yml", "service": "app"}`)
+		writeComposeFile(t, dir, "services:\n  app:\n    image: ${IMAGE}\n")
+		config := filepath.Join(t.TempDir(), "decolint.jsonc")
+		body := fmt.Sprintf(`{"rules": {"no-privileged-container": "error"}, "localEnv": {"IMAGE": %q}}`, host+"/base:1")
+		if err := os.WriteFile(config, []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+
+		var stdout, stderr bytes.Buffer
+		args := []string{"-format=json", "-merge", "-config=" + config, dir}
+		exitCode := run(t.Context(), args, &stdout, &stderr)
+		if exitCode != 1 {
+			t.Fatalf("exit code = %d, want 1; stderr: %s", exitCode, stderr.String())
+		}
+		if !hasRule(t, stdout.Bytes(), "no-privileged-container") {
+			t.Errorf("want no-privileged-container to fire on the interpolated Compose image metadata; output: %s", stdout.String())
+		}
+	})
+
 	t.Run("merges metadata through a Compose service Dockerfile, anchored at dockerComposeFile", func(t *testing.T) {
 		t.Parallel()
 

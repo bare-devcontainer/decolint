@@ -154,10 +154,12 @@ would use:
 A few limits apply:
 
 - For Docker Compose, `extends` and `include` are resolved as `docker
-  compose config` would, and later files override earlier ones, but
-  Compose profiles, the `COMPOSE_FILE` environment variable, and `.env`
-  interpolation are not; a Compose value carrying an uninterpolated
-  `${...}` variable is skipped.
+  compose config` would, and later files override earlier ones. Compose
+  `${...}` interpolation resolves from the config file's
+  [`localEnv`](#config-file) map: an unset variable resolves to its
+  default (`${VAR:-default}`) or the empty string, and a `${VAR:?}`
+  requirement on an unset variable is an error. Compose profiles, the
+  `COMPOSE_FILE` environment variable, and `.env` files are not applied.
 - Registries are accessed anonymously, so a private image that cannot be
   pulled that way counts as a fetch failure.
 
@@ -222,7 +224,8 @@ ready to edit:
 rule in a [category](#rule-categories) at once; `rules` sets an
 individual rule's severity and takes precedence over its category.
 `localEnv` maps names to the values `${localEnv:NAME}` resolves to when
-[merging](#merging):
+[merging](#merging); it is also the environment Compose-file `${...}`
+interpolation reads:
 
 ```jsonc
 {

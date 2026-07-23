@@ -738,6 +738,13 @@ func TestMerge_ComposeResolveErrors(t *testing.T) {
 			map[string]string{"docker-compose.yml": "services:\n  app:\n    image: registry.invalid/app:${TAG:?tag required}\n"},
 		},
 		{
+			// An unset variable with no default leaves an empty tag; resolving it to ":latest" would
+			// silently lint the wrong image, so it is an error (see [parseImageRef]).
+			"image tag from unset variable",
+			`{"dockerComposeFile": "docker-compose.yml", "service": "app"}`,
+			map[string]string{"docker-compose.yml": "services:\n  app:\n    image: registry.invalid/app:${TAG}\n"},
+		},
+		{
 			"invalid interpolation format",
 			`{"dockerComposeFile": "docker-compose.yml", "service": "app"}`,
 			map[string]string{"docker-compose.yml": "services:\n  app:\n    image: registry.invalid/app:${localEnv:TAG}\n"},

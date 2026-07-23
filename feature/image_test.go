@@ -30,6 +30,8 @@ func TestParseImageRef(t *testing.T) {
 		{"loopback registry with port", "127.0.0.1:5000/x:1", "127.0.0.1:5000/x:1", false},
 		{"index.docker.io normalizes to docker.io", "index.docker.io/library/ubuntu", "docker.io/library/ubuntu:latest", false},
 		{"invalid uppercase repository", "Ubuntu", "", true},
+		{"empty tag from an unset variable", "registry.invalid/app:", "", true},
+		{"empty tag on a registry with a port", "localhost:5000/app:", "", true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

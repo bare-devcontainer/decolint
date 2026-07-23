@@ -36,6 +36,11 @@ func parseImageRef(raw string) (registry.Reference, error) {
 	if err != nil {
 		return registry.Reference{}, fmt.Errorf("invalid image reference %q: %w", raw, err)
 	}
+	// A trailing ":" with no tag parses to an empty reference the same as no tag at all, so
+	// distinguish the two from the raw text before defaulting to "latest".
+	if parsed.Reference == "" && strings.HasSuffix(remainder, ":") {
+		return registry.Reference{}, fmt.Errorf("invalid image reference %q: empty tag", raw)
+	}
 	// Resolve an untagged reference to "latest", as the container runtime would.
 	parsed.Reference = parsed.ReferenceOrDefault()
 	return parsed, nil

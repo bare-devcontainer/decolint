@@ -110,9 +110,28 @@ func TestApply(t *testing.T) {
 			`{"name": "dc-` + DevcontainerID + `"}`,
 		},
 		{
+			// ${devcontainerId} in a nested allowed property (a mounts element and a containerEnv
+			// value) still resolves.
+			"devcontainerId in nested allowed properties",
+			`{"mounts": ["source=vol-${devcontainerId},target=/d,type=volume"], "containerEnv": {"ID": "${devcontainerId}"}}`,
+			`{"mounts": ["source=vol-` + DevcontainerID + `,target=/d,type=volume"], "containerEnv": {"ID": "` + DevcontainerID + `"}}`,
+		},
+		{
+			// The spec forbids ${devcontainerId} in image-building properties, so it resolves to
+			// the empty string like an unknowable variable.
+			"devcontainerId in disallowed property resolves empty",
+			`{"image": "img-${devcontainerId}"}`,
+			`{"image": "img-"}`,
+		},
+		{
+			"devcontainerId in build args resolves empty",
+			`{"build": {"args": {"ID": "${devcontainerId}"}}}`,
+			`{"build": {"args": {"ID": ""}}}`,
+		},
+		{
 			"multiple variables in one string",
-			`{"image": "${localEnv:HOME}-${devcontainerId}-${localEnv:UNSET}"}`,
-			`{"image": "/home/user-` + DevcontainerID + `-"}`,
+			`{"postCreateCommand": "${localEnv:HOME}-${devcontainerId}-${localEnv:UNSET}"}`,
+			`{"postCreateCommand": "/home/user-` + DevcontainerID + `-"}`,
 		},
 		{
 			// The lazy pattern matches "${a${b}" (an unknown variable) and leaves the trailing

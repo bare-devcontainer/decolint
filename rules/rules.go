@@ -38,11 +38,13 @@ var categoryDefaultSeverities = map[linter.Category]linter.Severity{
 // builtinRuleList lists the built-in rules, in a deterministic order (alphabetically by rule ID).
 var builtinRuleList = []*linter.Rule{
 	ConflictingContainerDef,
+	FeatureInstallScriptNotExecutable,
 	IDDirMismatch,
 	InvalidSemver,
 	MissingBuildDockerfile,
 	MissingComposeService,
 	MissingContainerDef,
+	MissingFeatureInstallScript,
 	MissingRequiredProps,
 	MissingWorkspaceMountFolder,
 	NoAppPort,
@@ -60,6 +62,8 @@ var builtinRuleList = []*linter.Rule{
 	RequireCapDropAll,
 	RequireNoNewPrivileges,
 	RequireNonRoot,
+	UndefinedTemplateOption,
+	UnusedTemplateOption,
 }
 
 // builtinRules pairs each rule in builtinRuleList with its category's default severity.

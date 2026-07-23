@@ -196,6 +196,7 @@ func TestRun(t *testing.T) {
 			want: []firing{
 				{featureFile, "id-dir-mismatch", linter.SeverityError},
 				{featureFile, "invalid-semver", linter.SeverityError},
+				{featureFile, "missing-feature-install-script", linter.SeverityError},
 				{featureFile, "missing-required-props", linter.SeverityError},
 			},
 			wantExitCode: 1,
@@ -207,6 +208,8 @@ func TestRun(t *testing.T) {
 			args: []string{"testdata/e2e/template"},
 			want: []firing{
 				{templateFile, "id-dir-mismatch", linter.SeverityError},
+				{templateFile, "undefined-template-option", linter.SeverityError},
+				{templateFile, "unused-template-option", linter.SeverityError},
 				{templateBundledFile, "missing-container-def", linter.SeverityError},
 			},
 			wantExitCode: 1,

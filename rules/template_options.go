@@ -35,7 +35,7 @@ const maxTemplateFileBytes = 4 << 20 // 4 MB
 // Any walk or read error is returned so callers can report nothing rather than guess from a partial
 // scan.
 func templateOptionRefs(dir fs.FS) (map[string][]string, error) {
-	refs := map[string]map[string]bool{}
+	refs := map[string]map[string]struct{}{}
 	err := fs.WalkDir(dir, ".", func(p string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
@@ -68,9 +68,9 @@ func templateOptionRefs(dir fs.FS) (map[string][]string, error) {
 		for _, m := range templateOptionPattern.FindAllSubmatch(data, -1) {
 			name := string(m[1])
 			if refs[name] == nil {
-				refs[name] = map[string]bool{}
+				refs[name] = map[string]struct{}{}
 			}
-			refs[name][p] = true
+			refs[name][p] = struct{}{}
 		}
 		return nil
 	})

@@ -37,8 +37,8 @@ type Options struct {
 	// "merge": true).
 	mergeSet bool
 	// Format is the raw -format flag value ("" if not given), naming how lint issues are written to
-	// stdout: "text", "json", or "github". A non-empty value replaces the config file's "format"
-	// member; it is resolved into a Format by parseFormat in runLint.
+	// stdout: "text", "json", "github", or "sarif". A non-empty value replaces the config file's
+	// "format" member; it is resolved into a Format by parseFormat in runLint.
 	Format string
 	// Version, when set, causes the program to print its version and exit.
 	Version bool
@@ -60,7 +60,7 @@ func parseOptions(args []string, output io.Writer) (Options, error) {
 	fs.BoolVar(&opts.DenyWarnings, "deny-warnings", false, "treat warnings as failures (exit code 1); overrides the config file's \"denyWarnings\" member")
 	fs.StringVar(&opts.ConfigPath, "config", "", "path to a config file (default: auto-discover .decolint.jsonc or .decolint.json in the current directory)")
 	fs.StringVar(&platformFlag, "platform", "", "comma-separated target platforms to include in addition to \"all\" (vscode, codespaces); overrides the config file's \"platforms\" member")
-	fs.StringVar(&formatFlag, "format", "", "output format: text (default), json, or github; overrides the config file's \"format\" member")
+	fs.StringVar(&formatFlag, "format", "", "output format: text (default), json, github, or sarif; overrides the config file's \"format\" member")
 	fs.BoolVar(&opts.Merge, "merge", false, "lint the merged (effective) configuration, including referenced Features and base image metadata; overrides the config file's \"merge\" member")
 	fs.BoolVar(&opts.Version, "version", false, "print version information and exit")
 	fs.BoolVar(&opts.ListRules, "rules", false, "print the built-in rules as a Markdown table (category, target platforms, current severity), then exit")

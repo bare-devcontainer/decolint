@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/bare-devcontainer/decolint/format"
+	"github.com/google/go-cmp/cmp"
 )
 
 func TestParseFormat(t *testing.T) {
@@ -19,6 +20,7 @@ func TestParseFormat(t *testing.T) {
 		{"text", "text", format.TextFormat{}, false},
 		{"json", "json", format.JSONFormat{}, false},
 		{"github", "github", format.GitHubFormat{}, false},
+		{"sarif", "sarif", format.SARIFFormat{Version: version, Rules: sarifRules()}, false},
 		{"unknown", "bogus", nil, true},
 	}
 	for _, tt := range tests {
@@ -31,8 +33,10 @@ func TestParseFormat(t *testing.T) {
 			if err != nil {
 				return
 			}
-			if got != tt.want {
-				t.Errorf("parseFormat(%q) = %v, want %v", tt.in, got, tt.want)
+			// cmp.Diff rather than ==: SARIFFormat is not comparable, so an interface comparison
+			// would panic.
+			if diff := cmp.Diff(tt.want, got); diff != "" {
+				t.Errorf("parseFormat(%q) mismatch (-want +got):\n%s", tt.in, diff)
 			}
 		})
 	}

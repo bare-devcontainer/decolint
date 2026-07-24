@@ -24,7 +24,7 @@ type Config struct {
 	// also cause exit code 1. The -deny-warnings flag can enable it as well.
 	DenyWarnings bool `json:"denyWarnings"`
 	// Format selects how lint issues are written to stdout: "text" (the default when empty), "json",
-	// or "github". The -format flag takes precedence.
+	// "github", or "sarif". The -format flag takes precedence.
 	Format string `json:"format"`
 	// LocalEnv maps names to the values "${localEnv:NAME}" (and "${env:NAME}") resolve to during
 	// variable substitution, which runs with Merge; see [substitute.Context.LocalEnv]. It is also

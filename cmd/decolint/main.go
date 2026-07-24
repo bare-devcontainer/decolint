@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"sort"
 	"strings"
 	"syscall"
 
@@ -17,7 +18,9 @@ import (
 	"github.com/bare-devcontainer/decolint/feature"
 	"github.com/bare-devcontainer/decolint/linter"
 	"github.com/bare-devcontainer/decolint/rules"
+	"github.com/bare-devcontainer/decolint/schema"
 	"github.com/bare-devcontainer/decolint/substitute"
+	"github.com/tailscale/hujson"
 )
 
 // progName is the program name, used in the flag set, usage text, and error messages.
@@ -104,7 +107,7 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 }
 
 func versionString() string {
-	return fmt.Sprintf("%s %s (revision %s)", progName, version, revision)
+	return fmt.Sprintf("%s %s (revision %s, schema %s)", progName, version, revision, schema.Revision())
 }
 
 // severityEmoji renders a severity for the -rules table; see the legend printed above the table.
@@ -233,6 +236,15 @@ func runLint(ctx context.Context, stdout, stderr io.Writer, opts Options, cfg Co
 		return false, err
 	}
 
+	schemaName := cfg.Schema
+	if schemaName == "" {
+		schemaName = "main"
+	}
+	variant, err := schema.ParseVariant(schemaName)
+	if err != nil {
+		return false, err
+	}
+
 	threshold := failThreshold
 	if cfg.DenyWarnings {
 		threshold = linter.SeverityWarn
@@ -265,7 +277,7 @@ func runLint(ctx context.Context, stdout, stderr io.Writer, opts Options, cfg Co
 	var worstSeverity linter.Severity
 	var lintErr error
 	for _, path := range opts.Paths {
-		issues, err := lintPath(ctx, l, subst, merge, path)
+		issues, err := lintPath(ctx, l, variant, subst, merge, path)
 		for _, issue := range issues {
 			if issue.Severity > worstSeverity {
 				worstSeverity = issue.Severity
@@ -297,16 +309,18 @@ type substituteFn func(workspaceFolder string, doc *linter.Document)
 
 // lintPath lints the devcontainer directory at path. The directory is opened as an os.Root, so
 // every file the lint reads is confined to it. It is an error if path is not a directory.
-func lintPath(ctx context.Context, l *linter.Linter, subst substituteFn, merge mergeFn, path string) ([]linter.Issue, error) {
+func lintPath(ctx context.Context, l *linter.Linter, variant schema.Variant, subst substituteFn, merge mergeFn, path string) ([]linter.Issue, error) {
 	root, err := os.OpenRoot(path)
 	if err != nil {
 		return nil, fmt.Errorf("resolve directory %s: %w", path, err)
 	}
 	// The root is only read from, so a close error is inconsequential.
 	defer func() { _ = root.Close() }()
-	issues, err := lintDir(ctx, l, subst, merge, root)
+	issues, err := lintDir(ctx, l, variant, subst, merge, root)
 	if err != nil {
-		return nil, fmt.Errorf("lint directory %s: %w", path, err)
+		// issues may hold findings gathered before the error (e.g. schema validation of a file whose
+		// merge later failed), so return them alongside it.
+		return issues, fmt.Errorf("lint directory %s: %w", path, err)
 	}
 	return issues, nil
 }
@@ -314,7 +328,7 @@ func lintPath(ctx context.Context, l *linter.Linter, subst substituteFn, merge m
 // lintDir lints every configuration file in the devcontainer directory root is opened on. It is an
 // error if the directory contains no configuration. Issue paths are the files' locations joined
 // onto root's name.
-func lintDir(ctx context.Context, l *linter.Linter, subst substituteFn, merge mergeFn, root *os.Root) ([]linter.Issue, error) {
+func lintDir(ctx context.Context, l *linter.Linter, variant schema.Variant, subst substituteFn, merge mergeFn, root *os.Root) ([]linter.Issue, error) {
 	dir := root.Name()
 	if err := ctx.Err(); err != nil {
 		return nil, fmt.Errorf("aborted %s: %w", dir, err)
@@ -338,14 +352,16 @@ func lintDir(ctx context.Context, l *linter.Linter, subst substituteFn, merge me
 		if err := ctx.Err(); err != nil {
 			return fmt.Errorf("aborted %s: %w", filepath.Join(f.Root.Name(), f.Path), err)
 		}
-		fileIssues, err := lintFile(ctx, l, subst, merge, f, workspaceFolder)
+		fileIssues, err := lintFile(ctx, l, variant, subst, merge, f, workspaceFolder)
+		// fileIssues may hold schema-validation findings even when err is non-nil (e.g. a merge
+		// failure after the file itself validated), so collect them before handling the error.
+		issues = append(issues, fileIssues...)
 		if err != nil {
 			// A broken file must not stop the remaining files from being linted, so record the
 			// error and keep visiting.
 			errs = append(errs, err)
 			return nil
 		}
-		issues = append(issues, fileIssues...)
 		return nil
 	})
 	if err != nil {
@@ -362,8 +378,9 @@ func lintDir(ctx context.Context, l *linter.Linter, subst substituteFn, merge me
 // escape that boundary. subst, if non-nil, resolves variables in dev container configurations
 // before merge and rules run, so both see resolved values. merge, if non-nil, runs on dev container
 // configurations before rules and is skipped when no rule applies to f's type, so a file with no
-// active rules does no Feature fetches.
-func lintFile(ctx context.Context, l *linter.Linter, subst substituteFn, merge mergeFn, f discovery.ConfigFile, workspaceFolder string) ([]linter.Issue, error) {
+// active rules does no Feature fetches. Schema validation, unless variant is off, runs on the file
+// as written, before substitution and merging.
+func lintFile(ctx context.Context, l *linter.Linter, variant schema.Variant, subst substituteFn, merge mergeFn, f discovery.ConfigFile, workspaceFolder string) ([]linter.Issue, error) {
 	display := filepath.Join(f.Root.Name(), f.Path)
 	src, err := f.Root.ReadFile(f.Path)
 	if err != nil {
@@ -373,13 +390,88 @@ func lintFile(ctx context.Context, l *linter.Linter, subst substituteFn, merge m
 	if err != nil {
 		return nil, fmt.Errorf("%s: %w", display, err)
 	}
+	// Schema validation reads the document as authored: variable substitution and Feature merging
+	// mutate the tree, so both run only afterward.
+	schemaIssues, err := validateSchema(variant, f, display, src, doc)
+	if err != nil {
+		return nil, err
+	}
 	if subst != nil && f.Type == linter.Devcontainer {
 		subst(workspaceFolder, doc)
 	}
 	if merge != nil && f.Type == linter.Devcontainer && l.HasRules(f.Type) {
 		if err := merge(ctx, f, doc); err != nil {
-			return nil, fmt.Errorf("merge features %s: %w", display, err)
+			// Schema validation already ran on the file as written, so its findings are valid
+			// regardless of the merge outcome; return them alongside the error rather than dropping
+			// them.
+			return schemaIssues, fmt.Errorf("merge features %s: %w", display, err)
 		}
 	}
-	return l.LintDocument(display, f.Type, doc), nil
+	issues := append(schemaIssues, l.LintDocument(display, f.Type, doc)...)
+	sortIssues(issues)
+	return issues, nil
+}
+
+// schemaRuleID is the diagnostic ID reported for schema-validation findings. Unlike rule findings,
+// these are independent of the rule engine: always errors, not configurable via the config file's
+// "rules"/"categories" members, and not suppressible via ignore comments. Only "schema": "off"
+// disables them.
+const schemaRuleID = "schema-validation"
+
+// validateSchema validates f against the selected schema variant and returns its findings as issues.
+// It returns nil for templates, which have no official schema, and for the off variant.
+func validateSchema(variant schema.Variant, f discovery.ConfigFile, display string, src []byte, doc *linter.Document) ([]linter.Issue, error) {
+	kind, ok := schemaKind(f.Type)
+	if !ok {
+		return nil, nil
+	}
+	std, err := hujson.Standardize(src)
+	if err != nil {
+		return nil, fmt.Errorf("standardize %s: %w", display, err)
+	}
+	diags, err := schema.Validate(variant, kind, std, doc.OffsetAt)
+	if err != nil {
+		return nil, fmt.Errorf("schema validation %s: %w", display, err)
+	}
+	issues := make([]linter.Issue, 0, len(diags))
+	for _, d := range diags {
+		line, col := doc.Position(d.Offset)
+		issues = append(issues, linter.Issue{
+			Path:     display,
+			Line:     line,
+			Col:      col,
+			RuleID:   schemaRuleID,
+			Message:  d.Message,
+			Severity: linter.SeverityError,
+		})
+	}
+	return issues, nil
+}
+
+// schemaKind maps a file type to the schema kind that validates it. Templates have no official
+// schema, so they map to false.
+func schemaKind(t linter.FileType) (schema.Kind, bool) {
+	switch t {
+	case linter.Devcontainer:
+		return schema.KindDevcontainer, true
+	case linter.Feature:
+		return schema.KindFeature, true
+	default:
+		return 0, false
+	}
+}
+
+// sortIssues orders issues by position, then rule ID, so schema-validation findings interleave with
+// rule findings the way LintDocument already orders its own.
+func sortIssues(issues []linter.Issue) {
+	sort.Slice(issues, func(i, j int) bool {
+		a, b := issues[i], issues[j]
+		if a.Line != b.Line {
+			return a.Line < b.Line
+		}
+		if a.Col != b.Col {
+			return a.Col < b.Col
+		}
+		return a.RuleID < b.RuleID
+	})
 }

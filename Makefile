@@ -37,6 +37,10 @@ coverage: ## Run tests and open an HTML coverage report
 lint: ## Run all lint rules
 	go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@$(GOLANGCI_LINT_VERSION) run
 
+.PHONY: update-schemas
+update-schemas: ## Refresh the vendored Dev Container schemas from upstream
+	go run ./internal/updateschemas
+
 .PHONY: clean
 clean: ## Remove build artifacts
 	rm -rf bin coverage.out coverage.html

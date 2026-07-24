@@ -17,6 +17,7 @@ import (
 	"github.com/bare-devcontainer/decolint/linter"
 	"github.com/bare-devcontainer/decolint/ocitest"
 	"github.com/bare-devcontainer/decolint/rules"
+	"github.com/bare-devcontainer/decolint/schema"
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 )
@@ -202,12 +203,15 @@ func TestRun(t *testing.T) {
 		},
 		{
 			// A Template directory is linted both for its devcontainer-template.json and for the dev
-			// container configuration it bundles, so findings appear at both files.
+			// container configuration it bundles, so findings appear at both files. The bundled
+			// configuration defines no container source, which trips both the missing-container-def
+			// rule and schema validation (the schema's container branches all require a source).
 			name: "template directory",
 			args: []string{"testdata/e2e/template"},
 			want: []firing{
 				{templateFile, "id-dir-mismatch", linter.SeverityError},
 				{templateBundledFile, "missing-container-def", linter.SeverityError},
+				{templateBundledFile, "schema-validation", linter.SeverityError},
 			},
 			wantExitCode: 1,
 		},
@@ -263,6 +267,89 @@ func TestRun(t *testing.T) {
 	}
 }
 
+// TestRun_Schema exercises the schema-validation pass through run(): its default-on behavior, the
+// variant selection, and that it is neither configurable via rule severities nor suppressible.
+func TestRun_Schema(t *testing.T) {
+	t.Parallel()
+
+	// schemaFindings runs decolint with the given extra args and returns the schema-validation
+	// messages reported for the single devcontainer.json body.
+	schemaFindings := func(t *testing.T, body string, extra ...string) []string {
+		t.Helper()
+		dir := writeDevcontainer(t, body)
+		args := append([]string{"-format=json"}, extra...)
+		args = append(args, dir)
+		var stdout, stderr bytes.Buffer
+		run(t.Context(), args, &stdout, &stderr)
+		if stderr.String() != "" {
+			t.Fatalf("stderr = %q, want empty", stderr.String())
+		}
+		var issues []linter.Issue
+		if err := json.Unmarshal(stdout.Bytes(), &issues); err != nil {
+			t.Fatalf("output is not a JSON issue array: %v\noutput: %s", err, stdout.String())
+		}
+		var msgs []string
+		for _, issue := range issues {
+			if issue.RuleID == "schema-validation" {
+				msgs = append(msgs, issue.Message)
+			}
+		}
+		return msgs
+	}
+
+	t.Run("default main reports a misspelled property", func(t *testing.T) {
+		t.Parallel()
+		got := schemaFindings(t, `{"image": "ubuntu", "forwardPort": [3000]}`)
+		want := []string{`unknown property "forwardPort"; did you mean "forwardPorts"?`}
+		if diff := cmp.Diff(want, got); diff != "" {
+			t.Errorf("schema findings mismatch (-want +got):\n%s", diff)
+		}
+	})
+
+	t.Run("-schema=off disables validation", func(t *testing.T) {
+		t.Parallel()
+		if got := schemaFindings(t, `{"image": "ubuntu", "forwardPort": [3000]}`, "-schema=off"); got != nil {
+			t.Errorf("schema findings = %v, want none", got)
+		}
+	})
+
+	t.Run("base rejects a VS Code property that main accepts", func(t *testing.T) {
+		t.Parallel()
+		body := `{"image": "ubuntu", "extensions": []}`
+		if got := schemaFindings(t, body, "-schema=main"); got != nil {
+			t.Errorf("main schema findings = %v, want none", got)
+		}
+		want := []string{`unknown property "extensions"`}
+		if got := schemaFindings(t, body, "-schema=base"); cmp.Diff(want, got) != "" {
+			t.Errorf("base schema findings = %v, want %v", got, want)
+		}
+	})
+
+	t.Run("an invalid variant is a usage error", func(t *testing.T) {
+		t.Parallel()
+		var stdout, stderr bytes.Buffer
+		exitCode := run(t.Context(), []string{"-schema=bogus", "."}, &stdout, &stderr)
+		if exitCode != exitCodeError {
+			t.Errorf("exit code = %d, want %d", exitCode, exitCodeError)
+		}
+		if !strings.Contains(stderr.String(), "schema variant") {
+			t.Errorf("stderr = %q, want it to mention the invalid schema variant", stderr.String())
+		}
+	})
+
+	t.Run("ignore comments do not suppress schema findings", func(t *testing.T) {
+		t.Parallel()
+		// A file-wide ignore directive silences rules but must not reach schema validation.
+		body := "{\n" +
+			`  // decolint-ignore-file` + "\n" +
+			`  "image": "ubuntu",` + "\n" +
+			`  "forwardPort": [3000]` + "\n}"
+		if got := schemaFindings(t, body); len(got) != 1 {
+			t.Errorf("schema findings = %v, want the unknown-property finding to survive the ignore directive", got)
+		}
+	})
+}
+
 func TestRun_Flags(t *testing.T) {
 	t.Parallel()
 
@@ -279,6 +366,9 @@ func TestRun_Flags(t *testing.T) {
 		}
 		if !strings.Contains(stdout.String(), "decolint") {
 			t.Errorf("stdout = %q, want it to mention decolint", stdout.String())
+		}
+		if !strings.Contains(stdout.String(), "schema") {
+			t.Errorf("stdout = %q, want it to report the schema revision", stdout.String())
 		}
 	})
 
@@ -1133,7 +1223,7 @@ LABEL devcontainer.metadata='[{"privileged": true, "mounts": ["source=/var/run/d
 			"devcontainer.metadata": `[{"privileged": true, "mounts": ["source=/var/run/docker.sock,target=/var/run/docker.sock,type=bind"]}]`,
 		}, false)
 
-		dir := writeDevcontainer(t, `{"dockerComposeFile": "docker-compose.yml", "service": "app"}`)
+		dir := writeDevcontainer(t, `{"dockerComposeFile": "docker-compose.yml", "service": "app", "workspaceFolder": "/workspace"}`)
 		writeComposeFile(t, dir, fmt.Sprintf("services:\n  app:\n    image: %s/base:1\n", host))
 
 		var stdout, stderr bytes.Buffer
@@ -1160,7 +1250,7 @@ LABEL devcontainer.metadata='[{"privileged": true, "mounts": ["source=/var/run/d
 		// The Compose file names its image through "${IMAGE}", which resolves only from the config's
 		// localEnv map: without the localEnv threaded into merge it would interpolate to empty and
 		// contribute nothing, so this run also proves the wiring.
-		dir := writeDevcontainer(t, `{"dockerComposeFile": "docker-compose.yml", "service": "app"}`)
+		dir := writeDevcontainer(t, `{"dockerComposeFile": "docker-compose.yml", "service": "app", "workspaceFolder": "/workspace"}`)
 		writeComposeFile(t, dir, "services:\n  app:\n    image: ${IMAGE}\n")
 		config := filepath.Join(t.TempDir(), "decolint.jsonc")
 		body := fmt.Sprintf(`{"rules": {"no-privileged-container": "error"}, "localEnv": {"IMAGE": %q}}`, host+"/base:1")
@@ -1184,7 +1274,8 @@ LABEL devcontainer.metadata='[{"privileged": true, "mounts": ["source=/var/run/d
 
 		body := "{\n" +
 			`  "dockerComposeFile": "docker-compose.yml",` + "\n" +
-			`  "service": "app"` + "\n}"
+			`  "service": "app",` + "\n" +
+			`  "workspaceFolder": "/workspace"` + "\n}"
 		dir := writeDevcontainer(t, body)
 		writeComposeFile(t, dir, "services:\n  app:\n    build:\n      context: .\n")
 		writeDockerfile(t, dir, `FROM scratch
@@ -1219,7 +1310,7 @@ LABEL devcontainer.metadata='[{"privileged": true, "mounts": ["source=/var/run/d
 		t.Parallel()
 		// The service names an image that never resolves, so fetching its metadata fails and the
 		// failure must surface as exit code 2 rather than a lint result.
-		dir := writeDevcontainer(t, `{"dockerComposeFile": "docker-compose.yml", "service": "app"}`)
+		dir := writeDevcontainer(t, `{"dockerComposeFile": "docker-compose.yml", "service": "app", "workspaceFolder": "/workspace"}`)
 		writeComposeFile(t, dir, "services:\n  app:\n    image: registry.invalid/base:1\n")
 
 		var stdout, stderr bytes.Buffer
@@ -1266,7 +1357,7 @@ func TestLintPath(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		issues, err := lintPath(t.Context(), newLinter(), noSubst, nil, dir)
+		issues, err := lintPath(t.Context(), newLinter(), schema.VariantOff, noSubst, nil, dir)
 		if err != nil {
 			t.Fatalf("lintPath: %v", err)
 		}
@@ -1298,7 +1389,7 @@ func TestLintPath(t *testing.T) {
 			t.Fatal(err)
 		}
 		defer func() { _ = root.Close() }()
-		issues, err := lintDir(t.Context(), newLinter(), noSubst, nil, root)
+		issues, err := lintDir(t.Context(), newLinter(), schema.VariantOff, noSubst, nil, root)
 		if err == nil {
 			t.Fatal("got nil error, want a parse error for the broken config")
 		}
@@ -1313,7 +1404,7 @@ func TestLintPath(t *testing.T) {
 
 	t.Run("directory without config", func(t *testing.T) {
 		t.Parallel()
-		_, err := lintPath(t.Context(), newLinter(), noSubst, nil, t.TempDir())
+		_, err := lintPath(t.Context(), newLinter(), schema.VariantOff, noSubst, nil, t.TempDir())
 		if err == nil || !strings.Contains(err.Error(), "no devcontainer configuration found") {
 			t.Errorf("err = %v, want 'no devcontainer configuration found'", err)
 		}
@@ -1325,7 +1416,7 @@ func TestLintPath(t *testing.T) {
 		wantErr := errors.New("fetch failed")
 		merge := func(context.Context, discovery.ConfigFile, *linter.Document) error { return wantErr }
 
-		if _, err := lintPath(t.Context(), newLinter(), noSubst, merge, dir); !errors.Is(err, wantErr) {
+		if _, err := lintPath(t.Context(), newLinter(), schema.VariantOff, noSubst, merge, dir); !errors.Is(err, wantErr) {
 			t.Errorf("lintPath error = %v, want %v", err, wantErr)
 		}
 	})
@@ -1339,7 +1430,7 @@ func TestLintPath(t *testing.T) {
 			return nil
 		}
 
-		if _, err := lintPath(t.Context(), linter.New(), noSubst, merge, dir); err != nil {
+		if _, err := lintPath(t.Context(), linter.New(), schema.VariantOff, noSubst, merge, dir); err != nil {
 			t.Fatalf("lintPath: %v", err)
 		}
 		if called {
@@ -1369,7 +1460,7 @@ func TestLintPath(t *testing.T) {
 		}
 		subst := func(string, *linter.Document) {}
 
-		if _, err := lintPath(t.Context(), l, subst, merge, dir); err != nil {
+		if _, err := lintPath(t.Context(), l, schema.VariantOff, subst, merge, dir); err != nil {
 			t.Fatalf("lintPath: %v", err)
 		}
 		if called {
@@ -1395,7 +1486,7 @@ func TestLintDir_WorkspaceFolderError(t *testing.T) {
 	}
 
 	subst := func(string, *linter.Document) {}
-	if _, err := lintDir(t.Context(), linter.New(), subst, nil, root); err == nil ||
+	if _, err := lintDir(t.Context(), linter.New(), schema.VariantOff, subst, nil, root); err == nil ||
 		!strings.Contains(err.Error(), "resolve workspace folder") {
 		t.Errorf("err = %v, want a workspace folder resolution error", err)
 	}

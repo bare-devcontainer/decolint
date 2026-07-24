@@ -26,6 +26,10 @@ type Config struct {
 	// Format selects how lint issues are written to stdout: "text" (the default when empty), "json",
 	// or "github". The -format flag takes precedence.
 	Format string `json:"format"`
+	// Schema selects the schema-validation variant: "main" (the default when empty), "base", or
+	// "off". "main" allows the VS Code and Codespaces extensions to devcontainer.json, "base"
+	// rejects them, and "off" disables schema validation. The -schema flag takes precedence.
+	Schema string `json:"schema"`
 	// LocalEnv maps names to the values "${localEnv:NAME}" (and "${env:NAME}") resolve to during
 	// variable substitution, which runs with Merge; see [substitute.Context.LocalEnv]. It is also
 	// the environment Compose-file "${...}" interpolation reads. Host environment variables are
@@ -75,6 +79,14 @@ func (cfg Config) MarshalJSONTo(enc *jsontext.Encoder) error {
 			return fmt.Errorf("encode config: %w", err)
 		}
 		if err := enc.WriteToken(jsontext.String(cfg.Format)); err != nil {
+			return fmt.Errorf("encode config: %w", err)
+		}
+	}
+	if cfg.Schema != "" {
+		if err := enc.WriteToken(jsontext.String("schema")); err != nil {
+			return fmt.Errorf("encode config: %w", err)
+		}
+		if err := enc.WriteToken(jsontext.String(cfg.Schema)); err != nil {
 			return fmt.Errorf("encode config: %w", err)
 		}
 	}
@@ -129,8 +141,8 @@ func writeSortedMap[V any](enc *jsontext.Encoder, m map[string]V) error {
 // -platform replaces the config file's Platforms (an empty -platform defers to the config file
 // rather than clearing it). -merge and -deny-warnings, when explicitly given, override Merge and
 // DenyWarnings in either direction (e.g. "-merge=false" disables merging even if the config file
-// sets "merge": true). A non-empty -format replaces the config file's Format. LocalEnv, Categories,
-// and Rules are config-file only.
+// sets "merge": true). A non-empty -format replaces the config file's Format, and a non-empty
+// -schema replaces its Schema. LocalEnv, Categories, and Rules are config-file only.
 func mergeConfig(opts Options, cfg Config) Config {
 	if len(opts.Platforms) > 0 {
 		cfg.Platforms = opts.Platforms
@@ -143,6 +155,9 @@ func mergeConfig(opts Options, cfg Config) Config {
 	}
 	if opts.Format != "" {
 		cfg.Format = opts.Format
+	}
+	if opts.Schema != "" {
+		cfg.Schema = opts.Schema
 	}
 	return cfg
 }

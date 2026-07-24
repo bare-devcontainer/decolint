@@ -40,6 +40,10 @@ type Options struct {
 	// stdout: "text", "json", or "github". A non-empty value replaces the config file's "format"
 	// member; it is resolved into a Format by parseFormat in runLint.
 	Format string
+	// Schema is the raw -schema flag value ("" if not given), naming the schema-validation variant:
+	// "base", "main", or "off". A non-empty value replaces the config file's "schema" member; it is
+	// resolved into a schema.Variant in runLint.
+	Schema string
 	// Version, when set, causes the program to print its version and exit.
 	Version bool
 	// ListRules, when set, causes the program to print the built-in rules and exit.
@@ -54,6 +58,7 @@ func parseOptions(args []string, output io.Writer) (Options, error) {
 	var opts Options
 	var platformFlag string
 	var formatFlag string
+	var schemaFlag string
 
 	fs := flag.NewFlagSet(progName, flag.ContinueOnError)
 	fs.SetOutput(output)
@@ -61,6 +66,7 @@ func parseOptions(args []string, output io.Writer) (Options, error) {
 	fs.StringVar(&opts.ConfigPath, "config", "", "path to a config file (default: auto-discover .decolint.jsonc or .decolint.json in the current directory)")
 	fs.StringVar(&platformFlag, "platform", "", "comma-separated target platforms to include in addition to \"all\" (vscode, codespaces); overrides the config file's \"platforms\" member")
 	fs.StringVar(&formatFlag, "format", "", "output format: text (default), json, or github; overrides the config file's \"format\" member")
+	fs.StringVar(&schemaFlag, "schema", "", "validate against the official Dev Container schema: main (default), base, or off; overrides the config file's \"schema\" member")
 	fs.BoolVar(&opts.Merge, "merge", false, "lint the merged (effective) configuration, including referenced Features and base image metadata; overrides the config file's \"merge\" member")
 	fs.BoolVar(&opts.Version, "version", false, "print version information and exit")
 	fs.BoolVar(&opts.ListRules, "rules", false, "print the built-in rules as a Markdown table (category, target platforms, current severity), then exit")
@@ -87,6 +93,10 @@ func parseOptions(args []string, output io.Writer) (Options, error) {
 	// The raw name is validated and resolved into a Format by parseFormat in runLint, after the
 	// config file's "format" member is merged in, so both sources go through one validation path.
 	opts.Format = formatFlag
+
+	// Likewise, the raw name is resolved into a schema.Variant in runLint after the config file's
+	// "schema" member is merged in, so both sources go through one validation path.
+	opts.Schema = schemaFlag
 
 	opts.Paths = fs.Args()
 	if len(opts.Paths) == 0 {

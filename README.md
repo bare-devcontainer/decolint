@@ -67,13 +67,14 @@ With no arguments, the current directory is linted.
 ### Configuration
 
 Every linting setting can be declared in the [config file](#config-file).
-The four scalar settings additionally have a command-line flag, which
+The five scalar settings additionally have a command-line flag, which
 overrides the config file when given:
 
 | Setting | Config member | Flag |
 | --- | --- | --- |
 | [Target platforms](#target-platforms) | `platforms` | `-platform` |
 | [Merge features](#merging) | `merge` | `-merge` |
+| [Schema validation](#schema-validation) | `schema` | `-schema` |
 | [Deny warnings](#exit-codes) | `denyWarnings` | `-deny-warnings` |
 | [Output format](#output-formats) | `format` | `-format` |
 | [Category severities](#rule-categories) | `categories` | — |
@@ -164,6 +165,39 @@ A few limits apply:
 - Registries are accessed anonymously, so a private image that cannot be
   pulled that way counts as a fetch failure.
 
+### Schema validation
+
+Alongside the rules, decolint validates each file against the official
+[Dev Container JSON Schema](https://containers.dev/implementors/json_reference/):
+`devcontainer.json` and Feature (`devcontainer-feature.json`) files are
+checked for the things the rules do not — misspelled or unknown property
+names, wrong value types, and out-of-range enum values:
+
+```
+.devcontainer/devcontainer.json:8:3: error: unknown property "forwardPort"; did you mean "forwardPorts"? (schema-validation)
+```
+
+Schema findings are always reported as errors under the rule ID
+`schema-validation`. They are not affected by category or rule severity
+overrides, and [ignore comments](#suppressing-findings) do not suppress
+them; choose the variant, or turn validation off entirely, instead:
+
+- `main` (default) — validates `devcontainer.json` against the schema
+  including the Visual Studio Code and GitHub Codespaces extensions, so
+  their properties (such as `customizations.vscode`) are accepted.
+- `base` — validates against the specification's base schema only, so
+  editor-specific properties are reported as unknown.
+- `off` — disables schema validation.
+
+```console
+decolint -schema=base
+```
+
+The file is validated as written, before any [merging](#merging) or
+variable substitution, so `${...}` placeholders in string values never
+trip it. Templates are not schema-validated, but the `devcontainer.json`
+a template ships is.
+
 ### Output formats
 
 By default, findings are printed one per line, with the rule's
@@ -235,8 +269,8 @@ interpolation reads (note the differing [syntax](#merging)):
 ```
 
 The remaining members mirror their flags: `platforms`, `merge`,
-`denyWarnings`, and `format` (see the [Configuration](#configuration)
-table).
+`schema`, `denyWarnings`, and `format` (see the
+[Configuration](#configuration) table).
 
 For the strictest configuration, enable every category:
 

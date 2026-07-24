@@ -46,6 +46,10 @@ func initConfigFile(output io.Writer) error {
 // "format" selects the output format ("text", "json", or "github"); the
 // -format flag takes precedence, e.g.:
 //   "format": "github"
+// "schema" selects the Dev Container schema variant ("main", "base", or
+// "off"); "base" rejects VS Code/Codespaces properties, "off" disables
+// schema validation; the -schema flag takes precedence, e.g.:
+//   "schema": "base"
 // "localEnv" supplies the values ${localEnv:NAME} resolves to when merging,
 // and the environment Compose-file interpolation reads; environment
 // variables are never read, e.g.:

@@ -251,8 +251,7 @@ type Rule struct {
 	ID string
 	// Description is a short human-readable description of what the rule checks.
 	Description string
-	// Category classifies the kind of problem this rule reports. Every rule must declare exactly
-	// one category; the severity of all rules in a category can be adjusted at once.
+	// Category is the [Category] this rule reports; every rule must declare exactly one.
 	Category Category
 	// FileTypes are the kinds of configuration files this rule applies to.
 	FileTypes []FileType

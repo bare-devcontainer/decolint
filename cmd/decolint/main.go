@@ -109,7 +109,7 @@ func versionString() string {
 	return fmt.Sprintf("%s %s (revision %s)", progName, version, revision)
 }
 
-// severityEmoji renders a severity for the -rules table; see the legend printed above the table.
+// severityEmoji renders a severity for the -rules table.
 var severityEmoji = map[linter.Severity]string{
 	linter.SeverityOff:   "",
 	linter.SeverityWarn:  "🟡 WARN",

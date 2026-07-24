@@ -83,7 +83,7 @@ func TestRegisterRules_PlatformFilter(t *testing.T) {
 			if err := rules.RegisterRules(l, tt.platforms, rules.Overrides{}); err != nil {
 				t.Fatalf("RegisterRules: %v", err)
 			}
-			issues := lintSource(t, l, "devcontainer.json", linter.Devcontainer, src)
+			issues := lintSource(t, l, "devcontainer.json", linter.Devcontainer, src, nil)
 			fired := ruleFired(issues, "no-bind-mount")
 			if fired != tt.wantFired {
 				t.Errorf("no-bind-mount fired = %v, want %v (issues: %v)", fired, tt.wantFired, issues)
@@ -103,7 +103,7 @@ func TestRegisterRules_DefaultOffRule(t *testing.T) {
 	if err := rules.RegisterRules(l, nil, rules.Overrides{}); err != nil {
 		t.Fatalf("RegisterRules: %v", err)
 	}
-	issues := lintSource(t, l, "devcontainer.json", linter.Devcontainer, src)
+	issues := lintSource(t, l, "devcontainer.json", linter.Devcontainer, src, nil)
 	if ruleFired(issues, "no-seccomp-override") {
 		t.Errorf("no-seccomp-override fired despite being off by default: %v", issues)
 	}
@@ -119,7 +119,7 @@ func TestRegisterRules_OverrideEnablesOffDefaultRule(t *testing.T) {
 	if err := rules.RegisterRules(l, nil, overrides); err != nil {
 		t.Fatalf("RegisterRules: %v", err)
 	}
-	issues := lintSource(t, l, "devcontainer.json", linter.Devcontainer, src)
+	issues := lintSource(t, l, "devcontainer.json", linter.Devcontainer, src, nil)
 	if !ruleFired(issues, "no-seccomp-override") {
 		t.Errorf("no-seccomp-override did not fire despite being overridden to error: %v", issues)
 	}
@@ -173,7 +173,7 @@ func TestRegisterRules_SeverityOverride(t *testing.T) {
 			if err := rules.RegisterRules(l, nil, rules.Overrides{Rules: tt.overrides}); err != nil {
 				t.Fatalf("RegisterRules: %v", err)
 			}
-			got := lintSource(t, l, "devcontainer.json", linter.Devcontainer, src)
+			got := lintSource(t, l, "devcontainer.json", linter.Devcontainer, src, nil)
 			if diff := cmp.Diff(tt.want, got); diff != "" {
 				t.Errorf("issues mismatch (-want +got):\n%s", diff)
 			}

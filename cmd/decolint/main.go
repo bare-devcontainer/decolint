@@ -7,8 +7,10 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"io/fs"
 	"os"
 	"os/signal"
+	"path"
 	"path/filepath"
 	"strings"
 	"syscall"
@@ -381,5 +383,11 @@ func lintFile(ctx context.Context, l *linter.Linter, subst substituteFn, merge m
 			return nil, fmt.Errorf("merge features %s: %w", display, err)
 		}
 	}
-	return l.LintDocument(display, f.Type, doc), nil
+	// Give rules read access to the config file's directory, confined to the discovery root so
+	// resolution cannot escape it (see Context.Dir).
+	dir, err := fs.Sub(f.Root.FS(), path.Dir(filepath.ToSlash(f.Path)))
+	if err != nil {
+		return nil, fmt.Errorf("open config dir %s: %w", display, err)
+	}
+	return l.LintDocument(display, f.Type, doc, dir), nil
 }

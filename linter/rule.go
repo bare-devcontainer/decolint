@@ -3,6 +3,7 @@ package linter
 import (
 	"encoding/json/jsontext"
 	"fmt"
+	"io/fs"
 	"strings"
 
 	"github.com/tailscale/hujson"
@@ -144,6 +145,10 @@ type Context struct {
 	// Root is the HuJSON syntax tree of the file. It preserves comments and byte offsets into the
 	// original source.
 	Root *hujson.Value
+	// Dir gives read access to the directory containing the file being linted, confined to the lint
+	// root. It is nil when the caller has no backing filesystem (e.g. an in-memory document); a rule
+	// that inspects sibling files must return no findings when it is nil.
+	Dir fs.FS
 }
 
 // Severity indicates how a finding should be treated: whether it's reported as an error or a

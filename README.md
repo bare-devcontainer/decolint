@@ -188,6 +188,12 @@ Select a different output format to change this:
   ::warning file=.devcontainer/devcontainer.json,line=4,col=12,title=no-image-latest::image "ubuntu:latest" uses the "latest" tag; pin a specific version
   ```
 
+Findings are reported under the directory as you named it on the
+command line, so naming it relatively keeps the paths relative. The
+`github` format instead reports every path relative to the directory
+`decolint` runs in, which is where GitHub looks for the file to
+annotate.
+
 ### Exit codes
 
 - `0` — no `error`-severity findings (there may still be `warn`

@@ -267,6 +267,52 @@ func TestRun(t *testing.T) {
 	}
 }
 
+// TestRun_IDDirMismatchNamesTheDirectory checks that id-dir-mismatch judges a Feature by the
+// directory it sits in rather than by how that directory was named on the command line. Naming it
+// from inside, which is what the default lint target does, leaves the reported path with no
+// directory component, and the rule must still name the directory the Feature is in.
+func TestRun_IDDirMismatchNamesTheDirectory(t *testing.T) {
+	// Uses t.Chdir, which cannot be combined with t.Parallel.
+
+	// The fixture's id deliberately does not match its directory, so the rule fires in every run and
+	// the message it fires with is what distinguishes the runs.
+	const want = `id "wrong-id" does not match containing directory "feature"`
+	abs, err := filepath.Abs("testdata/e2e/feature")
+	if err != nil {
+		t.Fatalf("Abs: %v", err)
+	}
+
+	tests := []struct {
+		name string
+		args []string
+	}{
+		{"named from outside", []string{abs}},
+		{"named as the working directory", []string{"."}},
+		{"not named at all", nil},
+	}
+	t.Chdir(abs)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var stdout, stderr bytes.Buffer
+			run(t.Context(), append([]string{"-format=json"}, tt.args...), &stdout, &stderr)
+
+			var issues []linter.Issue
+			if err := json.Unmarshal(stdout.Bytes(), &issues); err != nil {
+				t.Fatalf("output is not a JSON issue array: %v\noutput: %s", err, stdout.String())
+			}
+			var got []string
+			for _, issue := range issues {
+				if issue.RuleID == "id-dir-mismatch" {
+					got = append(got, issue.Message)
+				}
+			}
+			if diff := cmp.Diff([]string{want}, got); diff != "" {
+				t.Errorf("id-dir-mismatch messages mismatch (-want +got):\n%s", diff)
+			}
+		})
+	}
+}
+
 func TestRun_Flags(t *testing.T) {
 	t.Parallel()
 
@@ -1323,6 +1369,15 @@ func TestLintPath(t *testing.T) {
 		}
 	})
 
+	t.Run("a configuration file is not a directory", func(t *testing.T) {
+		t.Parallel()
+		file := filepath.Join(writeDevcontainer(t, body), ".devcontainer", "devcontainer.json")
+		_, err := lintPath(t.Context(), newLinter(), noSubst, nil, file)
+		if err == nil || !strings.Contains(err.Error(), "is not a directory; pass the directory") {
+			t.Errorf("err = %v, want the error to say a directory is expected", err)
+		}
+	})
+
 	t.Run("merge error aborts the file", func(t *testing.T) {
 		t.Parallel()
 		dir := writeDevcontainer(t, body)
@@ -1382,11 +1437,64 @@ func TestLintPath(t *testing.T) {
 	})
 }
 
-func TestLintDir_WorkspaceFolderError(t *testing.T) {
+func TestConfigDirName(t *testing.T) {
+	t.Parallel()
+
+	abs := filepath.Join(string(filepath.Separator), "work", "my-feature")
+	tests := []struct {
+		name    string
+		root    lintRoot
+		display string
+		want    string
+	}{
+		{
+			"lint root named as the working directory",
+			lintRoot{name: ".", abs: abs},
+			"devcontainer-feature.json",
+			"my-feature",
+		},
+		{
+			"lint root named relatively",
+			lintRoot{name: "my-feature", abs: abs},
+			filepath.Join("my-feature", "devcontainer-feature.json"),
+			"my-feature",
+		},
+		{
+			"lint root named absolutely",
+			lintRoot{name: abs, abs: abs},
+			filepath.Join(abs, "devcontainer-feature.json"),
+			"my-feature",
+		},
+		{
+			"configuration in a sub-directory of the lint root",
+			lintRoot{name: ".", abs: abs},
+			filepath.Join(".devcontainer", "devcontainer.json"),
+			".devcontainer",
+		},
+		{
+			// The lint root and the reported path are always named the same way, so this cannot arise
+			// from a real lint; naming nothing beats naming the wrong directory.
+			"path unrelatable to the lint root",
+			lintRoot{name: "my-feature", abs: abs},
+			filepath.Join(abs, "devcontainer-feature.json"),
+			"",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			if got := configDirName(tt.root, tt.display); got != tt.want {
+				t.Errorf("configDirName(%+v, %q) = %q, want %q", tt.root, tt.display, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestLintDir_LocationError(t *testing.T) {
 	// Uses t.Chdir, which cannot be combined with t.Parallel.
 
-	// A relative root name resolves against the working directory; deleting it makes the
-	// workspace folder unresolvable, which must surface as an error.
+	// A relative root name resolves against the working directory; deleting it leaves the linted
+	// directory with no location to resolve names from, which must surface as an error.
 	dir := t.TempDir()
 	t.Chdir(dir)
 	root, err := os.OpenRoot(".")
@@ -1400,8 +1508,8 @@ func TestLintDir_WorkspaceFolderError(t *testing.T) {
 
 	subst := func(string, *linter.Document) {}
 	if _, err := lintDir(t.Context(), linter.New(), subst, nil, root); err == nil ||
-		!strings.Contains(err.Error(), "resolve workspace folder") {
-		t.Errorf("err = %v, want a workspace folder resolution error", err)
+		!strings.Contains(err.Error(), "resolve directory") {
+		t.Errorf("err = %v, want a directory resolution error", err)
 	}
 }
 

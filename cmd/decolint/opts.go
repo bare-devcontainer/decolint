@@ -4,6 +4,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"path/filepath"
 	"strings"
 
 	"github.com/bare-devcontainer/decolint/linter"
@@ -88,12 +89,32 @@ func parseOptions(args []string, output io.Writer) (Options, error) {
 	// config file's "format" member is merged in, so both sources go through one validation path.
 	opts.Format = formatFlag
 
-	opts.Paths = fs.Args()
+	opts.Paths = dedupePaths(fs.Args())
 	if len(opts.Paths) == 0 {
 		opts.Paths = []string{"."}
 	}
 
 	return opts, nil
+}
+
+// dedupePaths drops arguments naming a directory an earlier argument already names, so that passing
+// e.g. both "." and its absolute path lints it once rather than reporting every finding twice. The
+// spelling kept is the first one given, since that is the one the findings are reported under. An
+// argument whose location cannot be resolved is kept as given, leaving it for the lint to reject.
+func dedupePaths(paths []string) []string {
+	seen := make(map[string]bool, len(paths))
+	kept := make([]string, 0, len(paths))
+	for _, p := range paths {
+		abs, err := filepath.Abs(p)
+		if err == nil {
+			if seen[abs] {
+				continue
+			}
+			seen[abs] = true
+		}
+		kept = append(kept, p)
+	}
+	return kept
 }
 
 // parsePlatforms parses a comma-separated list of platform names into a slice of linter.Platform.

@@ -30,7 +30,7 @@ func TestMissingFeatureInstallScript(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			assertIssuesInDir(t, rules.MissingFeatureInstallScript, linter.SeverityError, path, linter.Feature, src, tt.dir, tt.want)
+			assertIssuesInDir(t, rules.MissingFeatureInstallScript, linter.SeverityError, path, linter.Feature, src, linter.Dir{FS: tt.dir}, tt.want)
 		})
 	}
 
@@ -41,6 +41,6 @@ func TestMissingFeatureInstallScript(t *testing.T) {
 
 	t.Run("unreadable directory reports nothing", func(t *testing.T) {
 		t.Parallel()
-		assertIssuesInDir(t, rules.MissingFeatureInstallScript, linter.SeverityError, path, linter.Feature, src, errFS{}, nil)
+		assertIssuesInDir(t, rules.MissingFeatureInstallScript, linter.SeverityError, path, linter.Feature, src, linter.Dir{FS: errFS{}}, nil)
 	})
 }

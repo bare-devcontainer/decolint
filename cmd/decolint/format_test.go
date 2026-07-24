@@ -1,6 +1,7 @@
 package main
 
 import (
+	"os"
 	"testing"
 
 	"github.com/bare-devcontainer/decolint/format"
@@ -8,6 +9,12 @@ import (
 
 func TestParseFormat(t *testing.T) {
 	t.Parallel()
+
+	// The github format is handed the working directory it reports absolute issue paths relative to.
+	wd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("Getwd: %v", err)
+	}
 
 	tests := []struct {
 		name    string
@@ -18,7 +25,7 @@ func TestParseFormat(t *testing.T) {
 		{"empty", "", format.TextFormat{}, false},
 		{"text", "text", format.TextFormat{}, false},
 		{"json", "json", format.JSONFormat{}, false},
-		{"github", "github", format.GitHubFormat{}, false},
+		{"github", "github", format.GitHubFormat{BaseDir: wd}, false},
 		{"unknown", "bogus", nil, true},
 	}
 	for _, tt := range tests {

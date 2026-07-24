@@ -43,8 +43,13 @@ func composeContributors(ctx context.Context, f *Fetcher, fsRoot *os.Root, confi
 		return nil, true, nil
 	}
 	// The Compose files resolve relative to the referencing devcontainer.json's directory on the real
-	// filesystem, as "docker compose" itself would.
-	baseDir := filepath.Join(fsRoot.Name(), configDir)
+	// filesystem, as "docker compose" itself would. The directory is resolved to an absolute path so
+	// that compose-go resolves the build context to one too (see composeBuildMetadata), which the
+	// display of a Dockerfile reached through it depends on (see composeDisplayRef).
+	baseDir, err := filepath.Abs(filepath.Join(fsRoot.Name(), configDir))
+	if err != nil {
+		return nil, true, fmt.Errorf("resolve %s: %w", configDir, err)
+	}
 	svc, err := loadComposeService(ctx, baseDir, paths, service, localEnv)
 	if err != nil {
 		return nil, true, err

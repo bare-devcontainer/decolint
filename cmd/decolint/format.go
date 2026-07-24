@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"io"
+	"os"
 	"strings"
 
 	"github.com/bare-devcontainer/decolint/format"
@@ -24,7 +25,10 @@ func parseFormat(name string) (Format, error) {
 	case "json":
 		return format.JSONFormat{}, nil
 	case "github":
-		return format.GitHubFormat{}, nil
+		// A workflow runs decolint from the checkout, so the working directory is what GitHub
+		// resolves annotation paths against. An unobtainable one just leaves absolute paths alone.
+		wd, _ := os.Getwd()
+		return format.GitHubFormat{BaseDir: wd}, nil
 	default:
 		return nil, fmt.Errorf("unknown format %q (want one of: text, json, github)", name)
 	}

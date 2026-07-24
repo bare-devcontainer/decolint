@@ -302,45 +302,52 @@ type substituteFn func(workspaceFolder string, doc *linter.Document)
 func lintPath(ctx context.Context, l *linter.Linter, subst substituteFn, merge mergeFn, path string) ([]linter.Issue, error) {
 	root, err := os.OpenRoot(path)
 	if err != nil {
-		return nil, fmt.Errorf("resolve directory %s: %w", path, err)
+		// Pointing decolint straight at a devcontainer.json is a natural mistake; the open error
+		// alone ("not a directory") does not say what to pass instead.
+		if info, statErr := os.Stat(path); statErr == nil && !info.IsDir() {
+			return nil, fmt.Errorf("%s is not a directory; pass the directory that contains the devcontainer configuration", filepath.Clean(path))
+		}
+		// The wrapped error names the path itself, so repeating it here would only make the message
+		// longer.
+		return nil, fmt.Errorf("lint directory: %w", err)
 	}
 	// The root is only read from, so a close error is inconsequential.
 	defer func() { _ = root.Close() }()
-	issues, err := lintDir(ctx, l, subst, merge, root)
-	if err != nil {
-		return nil, fmt.Errorf("lint directory %s: %w", path, err)
-	}
-	return issues, nil
+	return lintDir(ctx, l, subst, merge, root)
+}
+
+// lintRoot is the devcontainer directory a lint runs on, in the two forms the lint needs it in.
+type lintRoot struct {
+	// name is the directory as it was named on the command line. Every reported path is a file's
+	// location joined onto it, so findings read back the way the user asked for them.
+	name string
+	// abs is where the directory actually is. Values that must mean the same thing however the
+	// directory was named are resolved from it rather than from name: the workspace folder variables
+	// substitute to, and the directory names rules compare against.
+	abs string
 }
 
 // lintDir lints every configuration file in the devcontainer directory root is opened on. It is an
-// error if the directory contains no configuration. Issue paths are the files' locations joined
-// onto root's name.
+// error if the directory contains no configuration.
 func lintDir(ctx context.Context, l *linter.Linter, subst substituteFn, merge mergeFn, root *os.Root) ([]linter.Issue, error) {
-	dir := root.Name()
+	dir := filepath.Clean(root.Name())
 	if err := ctx.Err(); err != nil {
 		return nil, fmt.Errorf("aborted %s: %w", dir, err)
 	}
-	// The linted directory is the workspace folder the real tooling would mount, even for a
-	// configuration discovered in a sub-root like .devcontainer. It is only needed for variable
-	// substitution, so it is resolved only when that runs.
-	var workspaceFolder string
-	if subst != nil {
-		abs, err := filepath.Abs(dir)
-		if err != nil {
-			return nil, fmt.Errorf("resolve workspace folder %s: %w", dir, err)
-		}
-		workspaceFolder = abs
+	abs, err := filepath.Abs(dir)
+	if err != nil {
+		return nil, fmt.Errorf("resolve directory %s: %w", dir, err)
 	}
+	lr := lintRoot{name: dir, abs: abs}
 	var issues []linter.Issue
 	var errs []error
 	found := false
-	err := discovery.VisitConfigs(root, func(f discovery.ConfigFile) error {
+	err = discovery.VisitConfigs(root, func(f discovery.ConfigFile) error {
 		found = true
 		if err := ctx.Err(); err != nil {
 			return fmt.Errorf("aborted %s: %w", filepath.Join(f.Root.Name(), f.Path), err)
 		}
-		fileIssues, err := lintFile(ctx, l, subst, merge, f, workspaceFolder)
+		fileIssues, err := lintFile(ctx, l, subst, merge, f, lr)
 		if err != nil {
 			// A broken file must not stop the remaining files from being linted, so record the
 			// error and keep visiting.
@@ -359,13 +366,13 @@ func lintDir(ctx context.Context, l *linter.Linter, subst substituteFn, merge me
 	return issues, errors.Join(errs...)
 }
 
-// lintFile reads and lints the single configuration file f, reporting issues under
-// filepath.Join(f.Root.Name(), f.Path). The file is read through f.Root, so its resolution cannot
-// escape that boundary. subst, if non-nil, resolves variables in dev container configurations
-// before merge and rules run, so both see resolved values. merge, if non-nil, runs on dev container
-// configurations before rules and is skipped when no rule applies to f's type, so a file with no
-// active rules does no Feature fetches.
-func lintFile(ctx context.Context, l *linter.Linter, subst substituteFn, merge mergeFn, f discovery.ConfigFile, workspaceFolder string) ([]linter.Issue, error) {
+// lintFile reads and lints the single configuration file f, found under the lint root root and
+// reported under filepath.Join(f.Root.Name(), f.Path). The file is read through f.Root, so its
+// resolution cannot escape that boundary. subst, if non-nil, resolves variables in dev container
+// configurations before merge and rules run, so both see resolved values. merge, if non-nil, runs on
+// dev container configurations before rules and is skipped when no rule applies to f's type, so a
+// file with no active rules does no Feature fetches.
+func lintFile(ctx context.Context, l *linter.Linter, subst substituteFn, merge mergeFn, f discovery.ConfigFile, root lintRoot) ([]linter.Issue, error) {
 	display := filepath.Join(f.Root.Name(), f.Path)
 	src, err := f.Root.ReadFile(f.Path)
 	if err != nil {
@@ -376,7 +383,9 @@ func lintFile(ctx context.Context, l *linter.Linter, subst substituteFn, merge m
 		return nil, fmt.Errorf("%s: %w", display, err)
 	}
 	if subst != nil && f.Type == linter.Devcontainer {
-		subst(workspaceFolder, doc)
+		// The lint root is the workspace folder the real tooling would mount, even for a
+		// configuration discovered in a sub-root like .devcontainer.
+		subst(root.abs, doc)
 	}
 	if merge != nil && f.Type == linter.Devcontainer && l.HasRules(f.Type) {
 		if err := merge(ctx, f, doc); err != nil {
@@ -384,10 +393,21 @@ func lintFile(ctx context.Context, l *linter.Linter, subst substituteFn, merge m
 		}
 	}
 	// Give rules read access to the config file's directory, confined to the discovery root so
-	// resolution cannot escape it (see Context.Dir).
-	dir, err := fs.Sub(f.Root.FS(), path.Dir(filepath.ToSlash(f.Path)))
+	// resolution cannot escape it (see linter.Dir).
+	sub, err := fs.Sub(f.Root.FS(), path.Dir(filepath.ToSlash(f.Path)))
 	if err != nil {
 		return nil, fmt.Errorf("open config dir %s: %w", display, err)
 	}
-	return l.LintDocument(display, f.Type, doc, dir), nil
+	return l.LintDocument(display, f.Type, doc, linter.Dir{FS: sub, Name: configDirName(root, display)}), nil
+}
+
+// configDirName returns the name of the directory holding the configuration file reported at
+// display. The name is taken from the lint root's absolute location, because display carries none of
+// its own when the file sits directly in a root named "." — the default lint target.
+func configDirName(root lintRoot, display string) string {
+	rel, err := filepath.Rel(root.name, filepath.Dir(display))
+	if err != nil {
+		return ""
+	}
+	return filepath.Base(filepath.Join(root.abs, rel))
 }

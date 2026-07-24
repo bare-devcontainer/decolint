@@ -6,7 +6,6 @@ package linter
 
 import (
 	"fmt"
-	"io/fs"
 	"sort"
 )
 
@@ -55,11 +54,11 @@ func (l *Linter) HasRules(t FileType) bool {
 }
 
 // LintDocument applies the linter's rules to doc, a configuration file of the given type, and
-// returns the findings sorted by position. path is used only for reporting. dir, if non-nil, gives
-// rules read access to the directory containing the file (see Context.Dir); it may be nil for an
-// in-memory document. It reads the document as given; any mutation of its tree (see Document.Tree)
-// must happen before calling it.
-func (l *Linter) LintDocument(path string, fileType FileType, doc *Document, dir fs.FS) []Issue {
+// returns the findings sorted by position. path is used only for reporting, and dir describes the
+// directory containing the file; both are handed to the rules as [Context.Path] and [Context.Dir],
+// and dir may be left zero for an in-memory document. It reads the document as given; any mutation
+// of its tree (see Document.Tree) must happen before calling it.
+func (l *Linter) LintDocument(path string, fileType FileType, doc *Document, dir Dir) []Issue {
 	patterns := l.patterns[fileType]
 	if len(patterns) == 0 {
 		return nil

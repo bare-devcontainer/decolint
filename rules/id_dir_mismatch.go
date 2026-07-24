@@ -2,7 +2,6 @@ package rules
 
 import (
 	"fmt"
-	"path/filepath"
 
 	"github.com/bare-devcontainer/decolint/linter"
 	"github.com/tailscale/hujson"
@@ -24,13 +23,15 @@ func checkIDDirMismatch(ctx *linter.Context, node *linter.Node) []linter.Finding
 	if !ok || lit.Kind() != '"' {
 		return nil
 	}
+	if ctx.Dir.Name == "" {
+		return nil
+	}
 	id := lit.String()
-	dir := filepath.Base(filepath.Dir(ctx.Path))
-	if id == dir {
+	if id == ctx.Dir.Name {
 		return nil
 	}
 	return []linter.Finding{{
-		Message: fmt.Sprintf("id %q does not match containing directory %q", id, dir),
+		Message: fmt.Sprintf("id %q does not match containing directory %q", id, ctx.Dir.Name),
 		Offset:  node.Value.StartOffset,
 	}}
 }

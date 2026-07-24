@@ -76,13 +76,13 @@ func TestUndefinedTemplateOption(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			assertIssuesInDir(t, rules.UndefinedTemplateOption, linter.SeverityError, path, linter.Template, tt.src, tt.dir, tt.want)
+			assertIssuesInDir(t, rules.UndefinedTemplateOption, linter.SeverityError, path, linter.Template, tt.src, linter.Dir{FS: tt.dir}, tt.want)
 		})
 	}
 
 	t.Run("unreadable directory reports nothing", func(t *testing.T) {
 		t.Parallel()
-		assertIssuesInDir(t, rules.UndefinedTemplateOption, linter.SeverityError, path, linter.Template, withOptions, errFS{}, nil)
+		assertIssuesInDir(t, rules.UndefinedTemplateOption, linter.SeverityError, path, linter.Template, withOptions, linter.Dir{FS: errFS{}}, nil)
 	})
 
 	t.Run("nil directory", func(t *testing.T) {

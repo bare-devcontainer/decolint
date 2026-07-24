@@ -3,16 +3,21 @@ package format
 import (
 	"fmt"
 	"io"
+	"path/filepath"
 	"strings"
 
 	"github.com/bare-devcontainer/decolint/linter"
 )
 
 // GitHubFormat prints one GitHub Actions workflow command (::error/::warning) per issue.
-type GitHubFormat struct{}
+type GitHubFormat struct {
+	// BaseDir is the directory absolute issue paths are made relative to; see [annotationPath]. It
+	// may be empty, leaving such paths as they are.
+	BaseDir string
+}
 
 // WriteIssues writes issues to w as GitHub Actions workflow commands.
-func (GitHubFormat) WriteIssues(w io.Writer, issues []linter.Issue) error {
+func (f GitHubFormat) WriteIssues(w io.Writer, issues []linter.Issue) error {
 	for _, issue := range issues {
 		command := "error"
 		if issue.Severity == linter.SeverityWarn {
@@ -22,7 +27,7 @@ func (GitHubFormat) WriteIssues(w io.Writer, issues []linter.Issue) error {
 			w,
 			"::%s file=%s,line=%d,col=%d,title=%s::%s\n",
 			command,
-			escapeGitHubProperty(issue.Path),
+			escapeGitHubProperty(annotationPath(issue.Path, f.BaseDir)),
 			issue.Line,
 			issue.Col,
 			escapeGitHubProperty(issue.RuleID),
@@ -33,6 +38,20 @@ func (GitHubFormat) WriteIssues(w io.Writer, issues []linter.Issue) error {
 		}
 	}
 	return nil
+}
+
+// annotationPath renders path for a workflow command's "file" property. GitHub places an annotation
+// by resolving that property against the repository checkout, so an absolute path lands nowhere: one
+// inside baseDir is rewritten relative to it, and separators are normalized to "/", which is what
+// GitHub matches on every runner. A path outside baseDir is written as is, since there is nothing
+// better to say about it.
+func annotationPath(path, baseDir string) string {
+	if baseDir != "" && filepath.IsAbs(path) {
+		if rel, err := filepath.Rel(baseDir, path); err == nil && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+			path = rel
+		}
+	}
+	return filepath.ToSlash(path)
 }
 
 // githubDataReplacer escapes the data (message) portion of a GitHub Actions workflow command, per

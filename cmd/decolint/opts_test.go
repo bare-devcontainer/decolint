@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"io"
+	"path/filepath"
 	"testing"
 
 	"github.com/bare-devcontainer/decolint/linter"
@@ -230,5 +231,41 @@ func TestParseOptions_Paths(t *testing.T) {
 	}
 	if diff := cmp.Diff([]string{"."}, opts.Paths); diff != "" {
 		t.Errorf("Paths mismatch (-want +got):\n%s", diff)
+	}
+}
+
+func TestParseOptions_PathsDeduped(t *testing.T) {
+	// Uses t.Chdir, which cannot be combined with t.Parallel.
+
+	dir := t.TempDir()
+	t.Chdir(dir)
+	// t.TempDir can hand back a path through a symlink (/var on macOS), which resolves to the same
+	// directory as "." but not to the same absolute path; ask for the one deduplication compares.
+	abs, err := filepath.Abs(".")
+	if err != nil {
+		t.Fatalf("Abs: %v", err)
+	}
+
+	tests := []struct {
+		name string
+		args []string
+		want []string
+	}{
+		{"the same directory spelled two ways", []string{".", abs}, []string{"."}},
+		{"the first spelling is the one kept", []string{abs, "."}, []string{abs}},
+		{"repeated argument", []string{abs, abs}, []string{abs}},
+		{"trailing separator", []string{".", "." + string(filepath.Separator)}, []string{"."}},
+		{"distinct directories are all kept", []string{".", filepath.Join(abs, "sub")}, []string{".", filepath.Join(abs, "sub")}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			opts, err := parseOptions(tt.args, io.Discard)
+			if err != nil {
+				t.Fatalf("parseOptions: %v", err)
+			}
+			if diff := cmp.Diff(tt.want, opts.Paths); diff != "" {
+				t.Errorf("Paths mismatch (-want +got):\n%s", diff)
+			}
+		})
 	}
 }

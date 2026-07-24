@@ -2,7 +2,6 @@ package linter
 
 import (
 	"fmt"
-	"io/fs"
 	"slices"
 	"strings"
 	"testing"
@@ -46,7 +45,7 @@ func lintSource(t *testing.T, l *Linter, path string, fileType FileType, src str
 	if err != nil {
 		t.Fatalf("ParseDocument: %v", err)
 	}
-	return l.LintDocument(path, fileType, doc, nil)
+	return l.LintDocument(path, fileType, doc, Dir{})
 }
 
 func TestLintDocument_Position(t *testing.T) {
@@ -109,7 +108,7 @@ func TestLintDocument_TreeMutation(t *testing.T) {
 
 	l := New()
 	l.RegisterRule(flagRule, SeverityWarn)
-	issues := l.LintDocument("devcontainer.json", Devcontainer, doc, nil)
+	issues := l.LintDocument("devcontainer.json", Devcontainer, doc, Dir{})
 	if len(issues) != 1 {
 		t.Fatalf("got %d issues %v, want 1", len(issues), issues)
 	}
@@ -122,8 +121,8 @@ func TestLintDocument_ContextDir(t *testing.T) {
 	t.Parallel()
 
 	// A stub rule records the Dir it is handed so we can assert LintDocument passes it through
-	// unchanged, including the nil case for an in-memory document.
-	var got fs.FS
+	// unchanged, including the zero case for an in-memory document.
+	var got Dir
 	dirRule := &Rule{
 		ID:        "dir-rule",
 		FileTypes: []FileType{Devcontainer},
@@ -134,13 +133,13 @@ func TestLintDocument_ContextDir(t *testing.T) {
 		},
 	}
 
-	want := fstest.MapFS{"install.sh": {Data: []byte("#!/bin/sh\n")}}
+	want := Dir{FS: fstest.MapFS{"install.sh": {Data: []byte("#!/bin/sh\n")}}, Name: "my-feature"}
 	for _, tt := range []struct {
 		name string
-		dir  fs.FS
+		dir  Dir
 	}{
 		{"with directory", want},
-		{"nil directory", nil},
+		{"zero directory", Dir{}},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			doc, err := ParseDocument([]byte(`{"name": "test"}`))
@@ -149,13 +148,13 @@ func TestLintDocument_ContextDir(t *testing.T) {
 			}
 			l := New()
 			l.RegisterRule(dirRule, SeverityWarn)
-			got = nil
+			got = Dir{}
 			l.LintDocument("devcontainer.json", Devcontainer, doc, tt.dir)
-			if got == nil && tt.dir != nil {
-				t.Fatalf("ctx.Dir = nil, want the passed filesystem")
+			if got.Name != tt.dir.Name {
+				t.Errorf("ctx.Dir.Name = %q, want %q", got.Name, tt.dir.Name)
 			}
-			if tt.dir == nil && got != nil {
-				t.Fatalf("ctx.Dir = %v, want nil", got)
+			if (got.FS == nil) != (tt.dir.FS == nil) {
+				t.Errorf("ctx.Dir.FS = %v, want %v", got.FS, tt.dir.FS)
 			}
 		})
 	}

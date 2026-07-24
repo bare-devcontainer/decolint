@@ -138,17 +138,29 @@ func ParseCategory(name string) (Category, error) {
 
 // Context carries everything a rule needs to inspect a single configuration file.
 type Context struct {
-	// Path is the path of the file being linted.
+	// Path is the path of the file being linted. It is meant for reporting: its spelling follows
+	// whatever the caller named the file, so a rule must not read anything into its shape (see
+	// [Dir] for the containing directory).
 	Path string
 	// Type is the kind of configuration file being linted.
 	Type FileType
 	// Root is the HuJSON syntax tree of the file. It preserves comments and byte offsets into the
 	// original source.
 	Root *hujson.Value
-	// Dir gives read access to the directory containing the file being linted, confined to the lint
-	// root. It is nil when the caller has no backing filesystem (e.g. an in-memory document); a rule
-	// that inspects sibling files must return no findings when it is nil.
-	Dir fs.FS
+	// Dir describes the directory containing the file being linted.
+	Dir Dir
+}
+
+// Dir is the directory a configuration file is linted in. Each field is independently optional, and
+// a rule that needs one must return no findings when it is unset.
+type Dir struct {
+	// FS gives read access to the directory's contents, confined to the lint root. It is nil when
+	// the caller has no backing filesystem, e.g. an in-memory document.
+	FS fs.FS
+	// Name is the directory's own name, resolved from where the directory actually is. It is not
+	// derived from [Context.Path], which carries no name of its own when the caller names the file
+	// relative to the directory itself. It is empty when the caller has no directory to name.
+	Name string
 }
 
 // Severity indicates how a finding should be treated: whether it's reported as an error or a

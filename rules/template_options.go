@@ -16,10 +16,10 @@ var templateOptionPattern = regexp.MustCompile(`\$\{templateOption:\s*(\w+?)\s*\
 // templateOptionExcludedFiles are the root-level files the reference implementation never
 // substitutes template options into when applying a template, so a reference in one of them does not
 // count as a use.
-var templateOptionExcludedFiles = map[string]bool{
-	"devcontainer-template.json": true,
-	"README.md":                  true,
-	"NOTES.md":                   true,
+var templateOptionExcludedFiles = map[string]struct{}{
+	"devcontainer-template.json": {},
+	"README.md":                  {},
+	"NOTES.md":                   {},
 }
 
 // maxTemplateFileBytes caps a template file scanned for option references, mirroring the Feature
@@ -49,8 +49,10 @@ func templateOptionRefs(dir fs.FS) (map[string][]string, error) {
 		if !d.Type().IsRegular() {
 			return nil
 		}
-		if base := path.Base(p); path.Dir(p) == "." && templateOptionExcludedFiles[base] {
-			return nil
+		if base := path.Base(p); path.Dir(p) == "." {
+			if _, excluded := templateOptionExcludedFiles[base]; excluded {
+				return nil
+			}
 		}
 		info, err := d.Info()
 		if err != nil {

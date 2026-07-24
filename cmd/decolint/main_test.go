@@ -460,6 +460,45 @@ func TestRun_Flags(t *testing.T) {
 	})
 }
 
+// The sarif* types decode the structural subset of a SARIF log the "sarif log" test asserts. The
+// message texts and rule descriptions the format carries are left out on purpose: they are owned by
+// the rule tests and the format package's own tests.
+type (
+	sarifLog struct {
+		Version string     `json:"version"`
+		Runs    []sarifRun `json:"runs"`
+	}
+	sarifRun struct {
+		Tool    sarifTool     `json:"tool"`
+		Results []sarifResult `json:"results"`
+	}
+	sarifTool struct {
+		Driver sarifDriver `json:"driver"`
+	}
+	sarifDriver struct {
+		Name  string      `json:"name"`
+		Rules []sarifRule `json:"rules"`
+	}
+	sarifRule struct {
+		ID string `json:"id"`
+	}
+	sarifResult struct {
+		RuleID    string          `json:"ruleId"`
+		RuleIndex int             `json:"ruleIndex"`
+		Level     string          `json:"level"`
+		Locations []sarifLocation `json:"locations"`
+	}
+	sarifLocation struct {
+		PhysicalLocation sarifPhysicalLocation `json:"physicalLocation"`
+	}
+	sarifPhysicalLocation struct {
+		ArtifactLocation sarifArtifactLocation `json:"artifactLocation"`
+	}
+	sarifArtifactLocation struct {
+		URI string `json:"uri"`
+	}
+)
+
 func TestRun_OutputFormat(t *testing.T) {
 	t.Parallel()
 
@@ -518,68 +557,34 @@ func TestRun_OutputFormat(t *testing.T) {
 			t.Fatalf("exit code = %d, want 1; stderr: %s", exitCode, stderr.String())
 		}
 
-		// Decoded structurally rather than compared as a golden string: message texts and rule
-		// descriptions are owned by the rule tests and the format package's own tests.
-		var log struct {
-			Version string `json:"version"`
-			Runs    []struct {
-				Tool struct {
-					Driver struct {
-						Name  string `json:"name"`
-						Rules []struct {
-							ID string `json:"id"`
-						} `json:"rules"`
-					} `json:"driver"`
-				} `json:"tool"`
-				Results []struct {
-					RuleID    string `json:"ruleId"`
-					RuleIndex int    `json:"ruleIndex"`
-					Level     string `json:"level"`
-					Locations []struct {
-						PhysicalLocation struct {
-							ArtifactLocation struct {
-								URI string `json:"uri"`
-							} `json:"artifactLocation"`
-						} `json:"physicalLocation"`
-					} `json:"locations"`
-				} `json:"results"`
-			} `json:"runs"`
-		}
+		var log sarifLog
 		if err := json.Unmarshal(stdout.Bytes(), &log); err != nil {
 			t.Fatalf("output is not a SARIF log: %v\noutput: %s", err, stdout.String())
 		}
-		if log.Version != "2.1.0" {
-			t.Errorf("version = %q, want %q", log.Version, "2.1.0")
-		}
-		if len(log.Runs) != 1 {
-			t.Fatalf("runs = %d, want 1", len(log.Runs))
-		}
-		run := log.Runs[0]
-		if run.Tool.Driver.Name != "decolint" {
-			t.Errorf("driver name = %q, want %q", run.Tool.Driver.Name, "decolint")
-		}
 
-		var got []string
-		for _, result := range run.Results {
-			got = append(got, result.RuleID)
-			if result.Level != "error" {
-				t.Errorf("result %s level = %q, want %q", result.RuleID, result.Level, "error")
-			}
-			if result.RuleIndex < 0 || result.RuleIndex >= len(run.Tool.Driver.Rules) {
-				t.Errorf("result %s ruleIndex = %d, out of range", result.RuleID, result.RuleIndex)
-			} else if id := run.Tool.Driver.Rules[result.RuleIndex].ID; id != result.RuleID {
-				t.Errorf("result %s ruleIndex points at rule %q", result.RuleID, id)
-			}
-			if len(result.Locations) != 1 {
-				t.Fatalf("result %s locations = %d, want 1", result.RuleID, len(result.Locations))
-			}
-			if uri := result.Locations[0].PhysicalLocation.ArtifactLocation.URI; uri != violationsFile {
-				t.Errorf("result %s uri = %q, want %q", result.RuleID, uri, violationsFile)
-			}
+		locAt := func(uri string) []sarifLocation {
+			return []sarifLocation{{PhysicalLocation: sarifPhysicalLocation{
+				ArtifactLocation: sarifArtifactLocation{URI: uri},
+			}}}
 		}
-		want := []string{"no-bind-mount", "no-host-port-format"}
-		if diff := cmp.Diff(want, got, cmpopts.SortSlices(func(a, b string) bool { return a < b })); diff != "" {
-			t.Errorf("fired rules mismatch (-want +got):\n%s", diff)
+		// The catalog lists only referenced rules, sorted by ID, so each result's ruleIndex points at
+		// its like-named catalog entry.
+		want := sarifLog{
+			Version: "2.1.0",
+			Runs: []sarifRun{{
+				Tool: sarifTool{Driver: sarifDriver{
+					Name:  "decolint",
+					Rules: []sarifRule{{ID: "no-bind-mount"}, {ID: "no-host-port-format"}},
+				}},
+				Results: []sarifResult{
+					{RuleID: "no-bind-mount", RuleIndex: 0, Level: "error", Locations: locAt(violationsFile)},
+					{RuleID: "no-host-port-format", RuleIndex: 1, Level: "error", Locations: locAt(violationsFile)},
+				},
+			}},
+		}
+		sortResults := cmpopts.SortSlices(func(a, b sarifResult) bool { return a.RuleID < b.RuleID })
+		if diff := cmp.Diff(want, log, sortResults); diff != "" {
+			t.Errorf("sarif log mismatch (-want +got):\n%s", diff)
 		}
 	})
 

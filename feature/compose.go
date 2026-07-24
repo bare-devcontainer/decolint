@@ -230,6 +230,10 @@ func composeBuildMetadata(ctx context.Context, f *Fetcher, baseDir, firstCompose
 // composeDisplayRef renders a Dockerfile path for display: relative to the configuration directory
 // when it lies within it, and absolute otherwise (a build context reached through "extends" or a
 // "../" Compose file may sit outside it).
+//
+// The configuration directory, rather than the working directory decolint reports findings against,
+// is what this is relative to: the reference identifies a contributor within the merged
+// configuration (see [contributor.displayID]), so it must not depend on where decolint was run from.
 func composeDisplayRef(baseDir, path string) string {
 	if rel, err := filepath.Rel(baseDir, path); err == nil && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
 		return rel

@@ -313,6 +313,58 @@ func TestRun_IDDirMismatchNamesTheDirectory(t *testing.T) {
 	}
 }
 
+// TestRun_ReportedPathsAreWorkingDirectoryRelative checks that findings name files the same way
+// however the lint target was named, and that a target outside the working directory — which has no
+// relative form to name it by — is named absolutely.
+func TestRun_ReportedPathsAreWorkingDirectoryRelative(t *testing.T) {
+	// Uses t.Chdir, which cannot be combined with t.Parallel.
+
+	const fixture = "testdata/e2e/violations"
+	abs, err := filepath.Abs(fixture)
+	if err != nil {
+		t.Fatalf("Abs: %v", err)
+	}
+	reportedPaths := func(t *testing.T, target string) []string {
+		t.Helper()
+		var stdout, stderr bytes.Buffer
+		run(t.Context(), []string{"-format=json", "-platform=codespaces", target}, &stdout, &stderr)
+		var issues []linter.Issue
+		if err := json.Unmarshal(stdout.Bytes(), &issues); err != nil {
+			t.Fatalf("output is not a JSON issue array: %v\noutput: %s", err, stdout.String())
+		}
+		if len(issues) == 0 {
+			t.Fatalf("no findings for %s; the fixture is expected to trip codespaces rules", target)
+		}
+		var paths []string
+		for _, issue := range issues {
+			paths = append(paths, issue.Path)
+		}
+		return paths
+	}
+
+	t.Run("a target inside the working directory is named relative to it", func(t *testing.T) {
+		want := reportedPaths(t, fixture)
+		if diff := cmp.Diff(want, reportedPaths(t, abs)); diff != "" {
+			t.Errorf("paths from the absolute target differ from the relative one (-relative +absolute):\n%s", diff)
+		}
+		for _, p := range want {
+			if !strings.HasPrefix(p, fixture) {
+				t.Errorf("path = %q, want it under %q", p, fixture)
+			}
+		}
+	})
+
+	t.Run("a target outside the working directory is named absolutely", func(t *testing.T) {
+		// Uses t.Chdir, which cannot be combined with t.Parallel.
+		t.Chdir(t.TempDir())
+		for _, p := range reportedPaths(t, abs) {
+			if !filepath.IsAbs(p) {
+				t.Errorf("path = %q, want an absolute path", p)
+			}
+		}
+	})
+}
+
 func TestRun_Flags(t *testing.T) {
 	t.Parallel()
 
@@ -1437,77 +1489,67 @@ func TestLintPath(t *testing.T) {
 	})
 }
 
-func TestConfigDirName(t *testing.T) {
-	t.Parallel()
+func TestAbsPathString(t *testing.T) {
+	// Uses t.Chdir, which cannot be combined with t.Parallel.
 
-	abs := filepath.Join(string(filepath.Separator), "work", "my-feature")
+	wd := t.TempDir()
+	// t.TempDir can hand back a path through a symlink (/var on macOS), which is not the path the
+	// process reports as its working directory; ask for the one absPath renders against.
+	t.Chdir(wd)
+	wd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("Getwd: %v", err)
+	}
+
 	tests := []struct {
-		name    string
-		root    lintRoot
-		display string
-		want    string
+		name string
+		path absPath
+		want string
 	}{
-		{
-			"lint root named as the working directory",
-			lintRoot{name: ".", abs: abs},
-			"devcontainer-feature.json",
-			"my-feature",
-		},
-		{
-			"lint root named relatively",
-			lintRoot{name: "my-feature", abs: abs},
-			filepath.Join("my-feature", "devcontainer-feature.json"),
-			"my-feature",
-		},
-		{
-			"lint root named absolutely",
-			lintRoot{name: abs, abs: abs},
-			filepath.Join(abs, "devcontainer-feature.json"),
-			"my-feature",
-		},
-		{
-			"configuration in a sub-directory of the lint root",
-			lintRoot{name: ".", abs: abs},
-			filepath.Join(".devcontainer", "devcontainer.json"),
-			".devcontainer",
-		},
-		{
-			// The lint root and the reported path are always named the same way, so this cannot arise
-			// from a real lint; naming nothing beats naming the wrong directory.
-			"path unrelatable to the lint root",
-			lintRoot{name: "my-feature", abs: abs},
-			filepath.Join(abs, "devcontainer-feature.json"),
-			"",
-		},
+		{"inside the working directory", absPath(filepath.Join(wd, ".devcontainer", "devcontainer.json")), filepath.Join(".devcontainer", "devcontainer.json")},
+		{"the working directory itself", absPath(wd), "."},
+		{"the parent of the working directory", absPath(filepath.Dir(wd)), filepath.Dir(wd)},
+		{"a sibling of the working directory", absPath(filepath.Join(filepath.Dir(wd), "elsewhere")), filepath.Join(filepath.Dir(wd), "elsewhere")},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-			if got := configDirName(tt.root, tt.display); got != tt.want {
-				t.Errorf("configDirName(%+v, %q) = %q, want %q", tt.root, tt.display, got, tt.want)
+			if got := tt.path.String(); got != tt.want {
+				t.Errorf("absPath(%q).String() = %q, want %q", string(tt.path), got, tt.want)
 			}
 		})
 	}
 }
 
-func TestLintDir_LocationError(t *testing.T) {
+func TestAbsPathString_NoWorkingDirectory(t *testing.T) {
 	// Uses t.Chdir, which cannot be combined with t.Parallel.
 
-	// A relative root name resolves against the working directory; deleting it leaves the linted
-	// directory with no location to resolve names from, which must surface as an error.
+	// With the working directory gone there is nothing to render against, so the path stays absolute
+	// rather than being dropped from the message it appears in.
 	dir := t.TempDir()
 	t.Chdir(dir)
-	root, err := os.OpenRoot(".")
-	if err != nil {
+	if err := os.Remove(dir); err != nil {
 		t.Fatal(err)
 	}
-	defer func() { _ = root.Close() }()
+
+	p := absPath(filepath.Join(dir, "devcontainer.json"))
+	if got := p.String(); got != string(p) {
+		t.Errorf("absPath(%q).String() = %q, want it unchanged", string(p), got)
+	}
+}
+
+func TestLintPath_LocationError(t *testing.T) {
+	// Uses t.Chdir, which cannot be combined with t.Parallel.
+
+	// A relative target resolves against the working directory; deleting it leaves the target with
+	// no location to resolve, which must surface as an error.
+	dir := t.TempDir()
+	t.Chdir(dir)
 	if err := os.Remove(dir); err != nil {
 		t.Fatal(err)
 	}
 
 	subst := func(string, *linter.Document) {}
-	if _, err := lintDir(t.Context(), linter.New(), subst, nil, root); err == nil ||
+	if _, err := lintPath(t.Context(), linter.New(), subst, nil, "."); err == nil ||
 		!strings.Contains(err.Error(), "resolve directory") {
 		t.Errorf("err = %v, want a directory resolution error", err)
 	}

@@ -102,15 +102,15 @@ func parseOptions(args []string, output io.Writer) (Options, error) {
 // spelling kept is the first one given, since that is the one the findings are reported under. An
 // argument whose location cannot be resolved is kept as given, leaving it for the lint to reject.
 func dedupePaths(paths []string) []string {
-	seen := make(map[string]bool, len(paths))
+	seen := make(map[string]struct{}, len(paths))
 	kept := make([]string, 0, len(paths))
 	for _, p := range paths {
 		abs, err := filepath.Abs(p)
 		if err == nil {
-			if seen[abs] {
+			if _, ok := seen[abs]; ok {
 				continue
 			}
-			seen[abs] = true
+			seen[abs] = struct{}{}
 		}
 		kept = append(kept, p)
 	}

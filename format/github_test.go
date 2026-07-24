@@ -23,48 +23,20 @@ func TestGitHubWriteIssues(t *testing.T) {
 	}
 }
 
-func TestAnnotationPath(t *testing.T) {
+// TestGitHubWriteIssues_PathSeparators checks that a path built with the host's separators is
+// written with "/" ones, which is what GitHub matches an annotation against.
+func TestGitHubWriteIssues_PathSeparators(t *testing.T) {
 	t.Parallel()
 
-	base := filepath.Join(string(filepath.Separator), "work", "repo")
-	tests := []struct {
-		name    string
-		path    string
-		baseDir string
-		want    string
-	}{
-		{"relative path is left alone", ".devcontainer/devcontainer.json", base, ".devcontainer/devcontainer.json"},
-		{"absolute path inside the base directory", filepath.Join(base, ".devcontainer", "devcontainer.json"), base, ".devcontainer/devcontainer.json"},
-		{"the base directory itself", filepath.Join(base, "devcontainer.json"), base, "devcontainer.json"},
-		{"absolute path outside the base directory", filepath.Join(string(filepath.Separator), "elsewhere", "devcontainer.json"), base, "/elsewhere/devcontainer.json"},
-		{"no base directory", filepath.Join(base, "devcontainer.json"), "", filepath.ToSlash(filepath.Join(base, "devcontainer.json"))},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-			if got := annotationPath(tt.path, tt.baseDir); got != tt.want {
-				t.Errorf("annotationPath(%q, %q) = %q, want %q", tt.path, tt.baseDir, got, tt.want)
-			}
-		})
-	}
-}
-
-func TestGitHubWriteIssues_AbsolutePath(t *testing.T) {
-	t.Parallel()
-
-	base := filepath.Join(string(filepath.Separator), "work", "repo")
-	issues := testIssues()
-	for i := range issues {
-		issues[i].Path = filepath.Join(base, filepath.FromSlash(issues[i].Path))
-	}
+	issues := testIssues()[:1]
+	issues[0].Path = filepath.Join(".devcontainer", "go", "devcontainer.json")
 
 	var sb strings.Builder
-	if err := (GitHubFormat{BaseDir: base}).WriteIssues(&sb, issues); err != nil {
+	if err := (GitHubFormat{}).WriteIssues(&sb, issues); err != nil {
 		t.Fatalf("WriteIssues: %v", err)
 	}
 
-	want := `::warning file=.devcontainer/devcontainer.json,line=4,col=12,title=no-image-latest::image "ubuntu:latest" uses the "latest" tag; pin a specific version
-::error file=.devcontainer/devcontainer.json,line=8,col=3,title=some-error-rule::something is broken
+	want := `::warning file=.devcontainer/go/devcontainer.json,line=4,col=12,title=no-image-latest::image "ubuntu:latest" uses the "latest" tag; pin a specific version
 `
 	if sb.String() != want {
 		t.Errorf("WriteIssues github = %q, want %q", sb.String(), want)

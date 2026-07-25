@@ -12,7 +12,7 @@ import (
 // Options holds the parsed command-line arguments. It is purely the CLI's view of the world; see
 // Config for the on-disk config file's shape, and mergeConfig for how the two are reconciled.
 type Options struct {
-	// Paths are the directories to lint.
+	// Paths are the directories to lint, as named on the command line; runLint resolves them.
 	Paths []string
 	// DenyWarnings mirrors [Config.DenyWarnings]. When -deny-warnings is explicitly given it takes
 	// precedence over the config file's "denyWarnings" member, in either direction (see
@@ -37,8 +37,8 @@ type Options struct {
 	// "merge": true).
 	mergeSet bool
 	// Format is the raw -format flag value ("" if not given), naming how lint issues are written to
-	// stdout: "text", "json", or "github". A non-empty value replaces the config file's "format"
-	// member; it is resolved into a Format by parseFormat in runLint.
+	// stdout: "text", "json", "github", or "sarif". A non-empty value replaces the config file's
+	// "format" member; it is resolved into a Format by parseFormat in runLint.
 	Format string
 	// Schema is the raw -schema flag value ("" if not given), naming the schema-validation variant:
 	// "base", "main", or "off". A non-empty value replaces the config file's "schema" member; it is
@@ -65,7 +65,7 @@ func parseOptions(args []string, output io.Writer) (Options, error) {
 	fs.BoolVar(&opts.DenyWarnings, "deny-warnings", false, "treat warnings as failures (exit code 1); overrides the config file's \"denyWarnings\" member")
 	fs.StringVar(&opts.ConfigPath, "config", "", "path to a config file (default: auto-discover .decolint.jsonc or .decolint.json in the current directory)")
 	fs.StringVar(&platformFlag, "platform", "", "comma-separated target platforms to include in addition to \"all\" (vscode, codespaces); overrides the config file's \"platforms\" member")
-	fs.StringVar(&formatFlag, "format", "", "output format: text (default), json, or github; overrides the config file's \"format\" member")
+	fs.StringVar(&formatFlag, "format", "", "output format: text (default), json, github, or sarif; overrides the config file's \"format\" member")
 	fs.StringVar(&schemaFlag, "schema", "", "validate against the official Dev Container schema: main (default), base, or off; overrides the config file's \"schema\" member")
 	fs.BoolVar(&opts.Merge, "merge", false, "lint the merged (effective) configuration, including referenced Features and base image metadata; overrides the config file's \"merge\" member")
 	fs.BoolVar(&opts.Version, "version", false, "print version information and exit")

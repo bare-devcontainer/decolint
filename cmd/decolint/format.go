@@ -7,6 +7,7 @@ import (
 
 	"github.com/bare-devcontainer/decolint/format"
 	"github.com/bare-devcontainer/decolint/linter"
+	"github.com/bare-devcontainer/decolint/rules"
 )
 
 // Format identifies how lint issues are written to stdout.
@@ -25,7 +26,24 @@ func parseFormat(name string) (Format, error) {
 		return format.JSONFormat{}, nil
 	case "github":
 		return format.GitHubFormat{}, nil
+	case "sarif":
+		return format.SARIFFormat{Version: version, Rules: sarifRules()}, nil
 	default:
-		return nil, fmt.Errorf("unknown format %q (want one of: text, json, github)", name)
+		return nil, fmt.Errorf("unknown format %q (want one of: text, json, github, sarif)", name)
 	}
+}
+
+// sarifRules adapts the built-in rule catalog into the shape [format.SARIFFormat] consumes, so the
+// format package does not depend on the rules package.
+func sarifRules() []format.SARIFRule {
+	regs := rules.Builtin()
+	out := make([]format.SARIFRule, len(regs))
+	for i, reg := range regs {
+		out[i] = format.SARIFRule{
+			ID:          reg.Rule.ID,
+			Description: reg.Rule.Description,
+			Category:    reg.Rule.Category.String(),
+		}
+	}
+	return out
 }

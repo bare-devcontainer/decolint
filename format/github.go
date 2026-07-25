@@ -3,6 +3,7 @@ package format
 import (
 	"fmt"
 	"io"
+	"path/filepath"
 	"strings"
 
 	"github.com/bare-devcontainer/decolint/linter"
@@ -11,7 +12,8 @@ import (
 // GitHubFormat prints one GitHub Actions workflow command (::error/::warning) per issue.
 type GitHubFormat struct{}
 
-// WriteIssues writes issues to w as GitHub Actions workflow commands.
+// WriteIssues writes issues to w as GitHub Actions workflow commands. Paths are written with "/"
+// separators, which is what GitHub matches an annotation against.
 func (GitHubFormat) WriteIssues(w io.Writer, issues []linter.Issue) error {
 	for _, issue := range issues {
 		command := "error"
@@ -22,7 +24,7 @@ func (GitHubFormat) WriteIssues(w io.Writer, issues []linter.Issue) error {
 			w,
 			"::%s file=%s,line=%d,col=%d,title=%s::%s\n",
 			command,
-			escapeGitHubProperty(issue.Path),
+			escapeGitHubProperty(filepath.ToSlash(issue.Path)),
 			issue.Line,
 			issue.Col,
 			escapeGitHubProperty(issue.RuleID),

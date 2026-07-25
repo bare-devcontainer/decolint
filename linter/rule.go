@@ -3,6 +3,7 @@ package linter
 import (
 	"encoding/json/jsontext"
 	"fmt"
+	"io/fs"
 	"strings"
 
 	"github.com/tailscale/hujson"
@@ -137,13 +138,28 @@ func ParseCategory(name string) (Category, error) {
 
 // Context carries everything a rule needs to inspect a single configuration file.
 type Context struct {
-	// Path is the path of the file being linted.
+	// Path is the path of the file being linted, for reporting only: it is spelled however the
+	// caller named the file, so a rule must not read anything into its shape. Use [Dir] for the
+	// containing directory.
 	Path string
 	// Type is the kind of configuration file being linted.
 	Type FileType
 	// Root is the HuJSON syntax tree of the file. It preserves comments and byte offsets into the
 	// original source.
 	Root *hujson.Value
+	// Dir describes the directory containing the file being linted.
+	Dir Dir
+}
+
+// Dir is the directory a configuration file is linted in. Each field is independently optional, and
+// a rule that needs one must return no findings when it is unset.
+type Dir struct {
+	// FS gives read access to the directory's contents, confined to the lint root. It is nil when
+	// the caller has no backing filesystem, e.g. an in-memory document.
+	FS fs.FS
+	// Name is the directory's own name, taken from where the directory actually is rather than from
+	// [Context.Path]. It is empty when the caller has no directory to name.
+	Name string
 }
 
 // Severity indicates how a finding should be treated: whether it's reported as an error or a
@@ -246,8 +262,7 @@ type Rule struct {
 	ID string
 	// Description is a short human-readable description of what the rule checks.
 	Description string
-	// Category classifies the kind of problem this rule reports. Every rule must declare exactly
-	// one category; the severity of all rules in a category can be adjusted at once.
+	// Category is the [Category] this rule reports; every rule must declare exactly one.
 	Category Category
 	// FileTypes are the kinds of configuration files this rule applies to.
 	FileTypes []FileType

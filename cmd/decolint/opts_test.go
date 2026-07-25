@@ -224,11 +224,26 @@ func TestParseOptions_Config(t *testing.T) {
 func TestParseOptions_Paths(t *testing.T) {
 	t.Parallel()
 
-	opts, err := parseOptions(nil, io.Discard)
-	if err != nil {
-		t.Fatalf("parseOptions: %v", err)
+	// Arguments are taken as given; resolving and deduplicating them is runLint's job (see
+	// TestRunLint_DeduplicatesTargets).
+	tests := []struct {
+		name string
+		args []string
+		want []string
+	}{
+		{"no arguments lint the working directory", nil, []string{"."}},
+		{"arguments are kept as named", []string{".", "/work/repo", "."}, []string{".", "/work/repo", "."}},
 	}
-	if diff := cmp.Diff([]string{"."}, opts.Paths); diff != "" {
-		t.Errorf("Paths mismatch (-want +got):\n%s", diff)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			opts, err := parseOptions(tt.args, io.Discard)
+			if err != nil {
+				t.Fatalf("parseOptions: %v", err)
+			}
+			if diff := cmp.Diff(tt.want, opts.Paths); diff != "" {
+				t.Errorf("Paths mismatch (-want +got):\n%s", diff)
+			}
+		})
 	}
 }

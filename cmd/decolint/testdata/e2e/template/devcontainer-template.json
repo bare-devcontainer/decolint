@@ -3,5 +3,17 @@
 	// Template metadata itself, while the bundled .devcontainer/devcontainer.json is linted separately.
 	"id": "wrong-template",
 	"version": "1.0.0",
-	"name": "Example Template"
+	"name": "Example Template",
+	"options": {
+		// imageVariant is referenced by the bundled configuration, so it is used; unusedOption is
+		// referenced nowhere, so unused-template-option fires on it.
+		"imageVariant": {
+			"type": "string",
+			"default": "bookworm"
+		},
+		"unusedOption": {
+			"type": "string",
+			"default": "off"
+		}
+	}
 }

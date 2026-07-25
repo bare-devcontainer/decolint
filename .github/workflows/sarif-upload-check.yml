@@ -1,0 +1,132 @@
+name: SARIF Upload Check
+
+# Uploads a real decolint SARIF log to code scanning to prove GitHub accepts it and resolves the
+# reported paths to files in the repository, then deletes the analysis so the Security tab is left
+# as it was found. Runs on demand, and on a pull request that edits this workflow, since a workflow
+# nothing triggers automatically is otherwise only proven broken the next time someone runs it.
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - .github/workflows/sarif-upload-check.yml
+
+permissions: {}
+
+env:
+  # A category of its own puts this check in an analysis set of its own, so it can neither replace
+  # nor be replaced by a real analysis, and the cleanup can target it exactly.
+  CATEGORY: decolint-sarif-upload-check
+  TOOL_NAME: decolint
+  FIXTURE: cmd/decolint/testdata/e2e/violations
+
+jobs:
+  upload-check:
+    runs-on: ubuntu-latest
+    # A pull request from a fork is given a read-only token however this workflow declares its
+    # permissions, so the upload could only fail. Skip it rather than report a failure.
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
+        with:
+          go-version-file: go.mod
+      - run: make build
+
+      - name: Generate a SARIF log
+        # decolint exits 1 when it reports findings, which is what this check wants; any other
+        # non-zero status is a real failure. It runs from the repository root so that the reported
+        # paths are relative to it, which is how code scanning resolves them. Merging is off so the
+        # run needs no registry access and cannot fail for reasons unrelated to the upload.
+        run: ./bin/decolint -format=sarif -merge=false "$FIXTURE" > decolint.sarif || [ "$?" -eq 1 ]
+
+      - name: Upload the SARIF log
+        id: upload
+        # wait-for-processing defaults to true, so this step fails if code scanning rejects the log.
+        uses: github/codeql-action/upload-sarif@99df26d4f13ea111d4ec1a7dddef6063f76b97e9 # v4.37.0
+        with:
+          sarif_file: decolint.sarif
+          category: ${{ env.CATEGORY }}
+
+      - name: Check the analysis
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SARIF_ID: ${{ steps.upload.outputs.sarif-id }}
+        run: |
+          analyses=$(gh api "repos/$GITHUB_REPOSITORY/code-scanning/analyses?sarif_id=$SARIF_ID")
+          echo "$analyses" | jq .
+          # The category is stored as the automation id, which carries a trailing slash.
+          echo "$analyses" | jq -e --arg tool "$TOOL_NAME" --arg category "$CATEGORY" '
+            length == 1
+              and .[0].tool.name == $tool
+              and (.[0].category // "" | rtrimstr("/")) == $category
+              and .[0].results_count > 0
+          ' > /dev/null
+          # The upload picks the ref the analysis lands on, which for a pull request is a refs/pull
+          # ref rather than GITHUB_REF, so take it from the analysis instead of assuming it.
+          echo "ANALYSIS_REF=$(echo "$analyses" | jq -r '.[0].ref')" >> "$GITHUB_ENV"
+
+      - name: Check the findings resolve to repository files
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          want=$(jq -nc --arg path "$FIXTURE/.devcontainer/devcontainer.json" '[$path]')
+          # Alerts can lag the analysis, so give them a bounded chance to appear.
+          for _ in $(seq 1 10); do
+            got=$(gh api "repos/$GITHUB_REPOSITORY/code-scanning/alerts?tool_name=$TOOL_NAME&ref=$ANALYSIS_REF&per_page=100" 2>/dev/null || echo '[]')
+            got=$(printf '%s' "$got" | jq -c '[.[] | .most_recent_instance.location.path] | unique')
+            if [ "$got" = "$want" ]; then
+              echo "alerts on $ANALYSIS_REF resolve to $got"
+              exit 0
+            fi
+            sleep 5
+          done
+          echo "::error::alert paths are $got, want $want"
+          exit 1
+
+      - name: Delete the uploaded analysis
+        # Runs even when a check above failed, so a failure never leaves an analysis behind.
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          ref="${ANALYSIS_REF:-$GITHUB_REF}"
+          api() { gh api "repos/$GITHUB_REPOSITORY/$1" 2>/dev/null || echo '[]'; }
+          # Not filtered by ref: the category belongs to this workflow alone, so an analysis carrying
+          # it is one of ours whichever ref it landed on, including one an earlier run left behind.
+          analyses() {
+            api "code-scanning/analyses?tool_name=$TOOL_NAME&per_page=100" \
+              | jq -c --arg category "$CATEGORY" '[.[] | select((.category // "" | rtrimstr("/")) == $category)]'
+          }
+          # The alerts endpoint cannot filter by category, so this sweeps every decolint alert on the
+          # ref. That is exact while this workflow is decolint's only uploader; should a real
+          # decolint analysis ever be added, narrow it, or it will report that alert as left behind.
+          alerts() { api "code-scanning/alerts?tool_name=$TOOL_NAME&ref=$ref&per_page=100"; }
+
+          # Only the most recent analysis of a set is deletable, so deleting a set takes one request
+          # per analysis. confirm_delete is required for the last one, which also discards its
+          # alerts. The loop is bounded so an analysis that refuses to go cannot hang the job.
+          for _ in $(seq 1 20); do
+            id=$(analyses | jq -r '[.[] | select(.deletable)] | .[0].id // empty')
+            if [ -z "$id" ]; then
+              break
+            fi
+            echo "deleting analysis $id"
+            gh api --method DELETE "repos/$GITHUB_REPOSITORY/code-scanning/analyses/$id?confirm_delete=true" --silent
+          done
+
+          for _ in $(seq 1 10); do
+            left_analyses=$(analyses | jq 'length')
+            left_alerts=$(alerts | jq 'length')
+            if [ "$left_analyses" -eq 0 ] && [ "$left_alerts" -eq 0 ]; then
+              echo "nothing was left behind"
+              exit 0
+            fi
+            sleep 3
+          done
+          echo "::error::$left_analyses analyses and $left_alerts alerts were left behind"
+          exit 1

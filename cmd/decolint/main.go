@@ -7,8 +7,10 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"io/fs"
 	"os"
 	"os/signal"
+	"path"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -110,7 +112,7 @@ func versionString() string {
 	return fmt.Sprintf("%s %s (revision %s, schema %s)", progName, version, revision, schema.Revision())
 }
 
-// severityEmoji renders a severity for the -rules table; see the legend printed above the table.
+// severityEmoji renders a severity for the -rules table.
 var severityEmoji = map[linter.Severity]string{
 	linter.SeverityOff:   "",
 	linter.SeverityWarn:  "🟡 WARN",
@@ -276,8 +278,21 @@ func runLint(ctx context.Context, stdout, stderr io.Writer, opts Options, cfg Co
 	var allIssues []linter.Issue
 	var worstSeverity linter.Severity
 	var lintErr error
-	for _, path := range opts.Paths {
-		issues, err := lintPath(ctx, l, variant, subst, merge, path)
+	// A directory named more than once is linted once, so its findings are not reported twice.
+	seen := make(map[absPath]struct{}, len(opts.Paths))
+	for _, target := range opts.Paths {
+		abs, err := filepath.Abs(target)
+		if err != nil {
+			lintErr = errors.Join(lintErr, fmt.Errorf("resolve directory %s: %w", target, err))
+			continue
+		}
+		dir := absPath(abs)
+		if _, ok := seen[dir]; ok {
+			continue
+		}
+		seen[dir] = struct{}{}
+
+		issues, err := lintPath(ctx, l, variant, subst, merge, dir)
 		for _, issue := range issues {
 			if issue.Severity > worstSeverity {
 				worstSeverity = issue.Severity
@@ -307,42 +322,51 @@ type mergeFn func(ctx context.Context, f discovery.ConfigFile, doc *linter.Docum
 // lintFile.
 type substituteFn func(workspaceFolder string, doc *linter.Document)
 
-// lintPath lints the devcontainer directory at path. The directory is opened as an os.Root, so
-// every file the lint reads is confined to it. It is an error if path is not a directory.
-func lintPath(ctx context.Context, l *linter.Linter, variant schema.Variant, subst substituteFn, merge mergeFn, path string) ([]linter.Issue, error) {
-	root, err := os.OpenRoot(path)
+// absPath is the location of a file or directory, always absolute so that it means the same thing
+// however the lint target was named on the command line. Printing it does not yield that absolute
+// form; see [absPath.String].
+type absPath string
+
+// String renders p the way findings and error messages name it: relative to the working directory
+// when it is inside it, absolute otherwise — a path reached by climbing out of the working directory
+// reads no better than its own location.
+func (p absPath) String() string {
+	wd, err := os.Getwd()
 	if err != nil {
-		return nil, fmt.Errorf("resolve directory %s: %w", path, err)
+		return string(p)
+	}
+	rel, err := filepath.Rel(wd, string(p))
+	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return string(p)
+	}
+	return rel
+}
+
+// lintPath lints the devcontainer directory dir. It is opened as an os.Root, so every file the lint
+// reads is confined to it; because dir is absolute, so is every path derived from it. It is an error
+// if dir is not a directory.
+func lintPath(ctx context.Context, l *linter.Linter, variant schema.Variant, subst substituteFn, merge mergeFn, dir absPath) ([]linter.Issue, error) {
+	root, err := os.OpenRoot(string(dir))
+	if err != nil {
+		// Pointing decolint straight at a devcontainer.json is a natural mistake, and "not a
+		// directory" alone does not say what to pass instead.
+		if info, statErr := os.Stat(string(dir)); statErr == nil && !info.IsDir() {
+			return nil, fmt.Errorf("%s is not a directory; pass the directory that contains the devcontainer configuration", dir)
+		}
+		// os.OpenRoot's error already names the path.
+		return nil, fmt.Errorf("lint directory: %w", err)
 	}
 	// The root is only read from, so a close error is inconsequential.
 	defer func() { _ = root.Close() }()
-	issues, err := lintDir(ctx, l, variant, subst, merge, root)
-	if err != nil {
-		// issues may hold findings gathered before the error (e.g. schema validation of a file whose
-		// merge later failed), so return them alongside it.
-		return issues, fmt.Errorf("lint directory %s: %w", path, err)
-	}
-	return issues, nil
+	return lintDir(ctx, l, variant, subst, merge, root)
 }
 
 // lintDir lints every configuration file in the devcontainer directory root is opened on. It is an
-// error if the directory contains no configuration. Issue paths are the files' locations joined
-// onto root's name.
+// error if the directory contains no configuration.
 func lintDir(ctx context.Context, l *linter.Linter, variant schema.Variant, subst substituteFn, merge mergeFn, root *os.Root) ([]linter.Issue, error) {
-	dir := root.Name()
+	dir := absPath(root.Name())
 	if err := ctx.Err(); err != nil {
 		return nil, fmt.Errorf("aborted %s: %w", dir, err)
-	}
-	// The linted directory is the workspace folder the real tooling would mount, even for a
-	// configuration discovered in a sub-root like .devcontainer. It is only needed for variable
-	// substitution, so it is resolved only when that runs.
-	var workspaceFolder string
-	if subst != nil {
-		abs, err := filepath.Abs(dir)
-		if err != nil {
-			return nil, fmt.Errorf("resolve workspace folder %s: %w", dir, err)
-		}
-		workspaceFolder = abs
 	}
 	var issues []linter.Issue
 	var errs []error
@@ -350,9 +374,9 @@ func lintDir(ctx context.Context, l *linter.Linter, variant schema.Variant, subs
 	err := discovery.VisitConfigs(root, func(f discovery.ConfigFile) error {
 		found = true
 		if err := ctx.Err(); err != nil {
-			return fmt.Errorf("aborted %s: %w", filepath.Join(f.Root.Name(), f.Path), err)
+			return fmt.Errorf("aborted %s: %w", configPath(f), err)
 		}
-		fileIssues, err := lintFile(ctx, l, variant, subst, merge, f, workspaceFolder)
+		fileIssues, err := lintFile(ctx, l, variant, subst, merge, f, dir)
 		// fileIssues may hold schema-validation findings even when err is non-nil (e.g. a merge
 		// failure after the file itself validated), so collect them before handling the error.
 		issues = append(issues, fileIssues...)
@@ -373,41 +397,58 @@ func lintDir(ctx context.Context, l *linter.Linter, variant schema.Variant, subs
 	return issues, errors.Join(errs...)
 }
 
-// lintFile reads and lints the single configuration file f, reporting issues under
-// filepath.Join(f.Root.Name(), f.Path). The file is read through f.Root, so its resolution cannot
-// escape that boundary. subst, if non-nil, resolves variables in dev container configurations
-// before merge and rules run, so both see resolved values. merge, if non-nil, runs on dev container
-// configurations before rules and is skipped when no rule applies to f's type, so a file with no
-// active rules does no Feature fetches. Schema validation, unless variant is off, runs on the file
-// as written, before substitution and merging.
-func lintFile(ctx context.Context, l *linter.Linter, variant schema.Variant, subst substituteFn, merge mergeFn, f discovery.ConfigFile, workspaceFolder string) ([]linter.Issue, error) {
-	display := filepath.Join(f.Root.Name(), f.Path)
+// configPath returns the location of the configuration file f. It is absolute because f.Root is the
+// lint root or a sub-root of it, both opened on an absolute path (see lintPath).
+func configPath(f discovery.ConfigFile) absPath {
+	return absPath(filepath.Join(f.Root.Name(), f.Path))
+}
+
+// lintFile reads and lints the single configuration file f, found in the devcontainer directory dir.
+// The file is read through f.Root, so its resolution cannot escape that boundary. subst, if non-nil,
+// resolves variables in dev container configurations before merge and rules run, so both see
+// resolved values. merge, if non-nil, runs on dev container configurations before rules and is
+// skipped when no rule applies to f's type, so a file with no active rules does no Feature fetches.
+// Schema validation, unless variant is off, runs on the file as written, before substitution and
+// merging.
+func lintFile(ctx context.Context, l *linter.Linter, variant schema.Variant, subst substituteFn, merge mergeFn, f discovery.ConfigFile, dir absPath) ([]linter.Issue, error) {
+	location := configPath(f)
 	src, err := f.Root.ReadFile(f.Path)
 	if err != nil {
-		return nil, fmt.Errorf("read config %s: %w", display, err)
+		return nil, fmt.Errorf("read config %s: %w", location, err)
 	}
 	doc, err := linter.ParseDocument(src)
 	if err != nil {
-		return nil, fmt.Errorf("%s: %w", display, err)
+		return nil, fmt.Errorf("%s: %w", location, err)
 	}
 	// Schema validation reads the document as authored: variable substitution and Feature merging
 	// mutate the tree, so both run only afterward.
-	schemaIssues, err := validateSchema(variant, f, display, src, doc)
+	schemaIssues, err := validateSchema(variant, f, location, src, doc)
 	if err != nil {
 		return nil, err
 	}
 	if subst != nil && f.Type == linter.Devcontainer {
-		subst(workspaceFolder, doc)
+		// The linted directory is the workspace folder the real tooling would mount, even for a
+		// configuration discovered in a sub-root like .devcontainer.
+		subst(string(dir), doc)
 	}
 	if merge != nil && f.Type == linter.Devcontainer && l.HasRules(f.Type) {
 		if err := merge(ctx, f, doc); err != nil {
 			// Schema validation already ran on the file as written, so its findings are valid
 			// regardless of the merge outcome; return them alongside the error rather than dropping
 			// them.
-			return schemaIssues, fmt.Errorf("merge features %s: %w", display, err)
+			return schemaIssues, fmt.Errorf("merge features %s: %w", location, err)
 		}
 	}
-	issues := append(schemaIssues, l.LintDocument(display, f.Type, doc)...)
+	// Give rules read access to the config file's directory, confined to the discovery root so
+	// resolution cannot escape it (see linter.Dir).
+	sub, err := fs.Sub(f.Root.FS(), path.Dir(filepath.ToSlash(f.Path)))
+	if err != nil {
+		return schemaIssues, fmt.Errorf("open config dir %s: %w", location, err)
+	}
+	// The reported path can be relative to the containing directory itself, naming no directory at
+	// all, so the name comes from the absolute location.
+	name := filepath.Base(filepath.Dir(string(location)))
+	issues := append(schemaIssues, l.LintDocument(location.String(), f.Type, doc, linter.Dir{FS: sub, Name: name})...)
 	sortIssues(issues)
 	return issues, nil
 }
@@ -420,24 +461,24 @@ const schemaRuleID = "schema-validation"
 
 // validateSchema validates f against the selected schema variant and returns its findings as issues.
 // It returns nil for templates, which have no official schema, and for the off variant.
-func validateSchema(variant schema.Variant, f discovery.ConfigFile, display string, src []byte, doc *linter.Document) ([]linter.Issue, error) {
+func validateSchema(variant schema.Variant, f discovery.ConfigFile, location absPath, src []byte, doc *linter.Document) ([]linter.Issue, error) {
 	kind, ok := schemaKind(f.Type)
 	if !ok {
 		return nil, nil
 	}
 	std, err := hujson.Standardize(src)
 	if err != nil {
-		return nil, fmt.Errorf("standardize %s: %w", display, err)
+		return nil, fmt.Errorf("standardize %s: %w", location, err)
 	}
 	diags, err := schema.Validate(variant, kind, std, doc.OffsetAt)
 	if err != nil {
-		return nil, fmt.Errorf("schema validation %s: %w", display, err)
+		return nil, fmt.Errorf("schema validation %s: %w", location, err)
 	}
 	issues := make([]linter.Issue, 0, len(diags))
 	for _, d := range diags {
 		line, col := doc.Position(d.Offset)
 		issues = append(issues, linter.Issue{
-			Path:     display,
+			Path:     location.String(),
 			Line:     line,
 			Col:      col,
 			RuleID:   schemaRuleID,

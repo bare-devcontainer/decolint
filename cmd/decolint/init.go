@@ -43,8 +43,8 @@ func initConfigFile(output io.Writer) error {
 // "denyWarnings", when true, treats warnings as failures (exit code 1);
 // the -deny-warnings flag takes precedence, e.g.:
 //   "denyWarnings": true
-// "format" selects the output format ("text", "json", or "github"); the
-// -format flag takes precedence, e.g.:
+// "format" selects the output format ("text", "json", "github", or
+// "sarif"); the -format flag takes precedence, e.g.:
 //   "format": "github"
 // "schema" selects the Dev Container schema variant ("main", "base", or
 // "off"); "base" rejects VS Code/Codespaces properties, "off" disables

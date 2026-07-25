@@ -24,7 +24,7 @@ type Config struct {
 	// also cause exit code 1. The -deny-warnings flag can enable it as well.
 	DenyWarnings bool `json:"denyWarnings"`
 	// Format selects how lint issues are written to stdout: "text" (the default when empty), "json",
-	// or "github". The -format flag takes precedence.
+	// "github", or "sarif". The -format flag takes precedence.
 	Format string `json:"format"`
 	// Schema selects the schema-validation variant: "main" (the default when empty), "base", or
 	// "off". "main" allows the VS Code and Codespaces extensions to devcontainer.json, "base"

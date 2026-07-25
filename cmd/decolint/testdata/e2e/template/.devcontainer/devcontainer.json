@@ -1,5 +1,9 @@
 {
 	// A Template's bundled dev container configuration is discovered and linted alongside the
 	// Template metadata. This one defines no container source, so missing-container-def fires here.
-	"name": "e2e-template"
+	//
+	// It references ${templateOption:imageVariant}, declared in devcontainer-template.json, and
+	// ${templateOption:undeclaredOption}, which is not declared, so undefined-template-option fires
+	// on the Template metadata.
+	"name": "e2e-template-${templateOption:imageVariant}-${templateOption:undeclaredOption}"
 }

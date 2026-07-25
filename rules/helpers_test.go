@@ -20,9 +20,8 @@ var errUnreadable = errors.New("unreadable filesystem")
 
 // lintSource parses src and applies l's registered rules to it as a file at the given path and of
 // the given type, failing the test on any error. dir is the directory the file is linted in (see
-// [linter.Context.Dir]); it is nil for the in-memory documents most rule tests use in place of a
-// real directory.
-func lintSource(t *testing.T, l *linter.Linter, path string, fileType linter.FileType, src string, dir fs.FS) []linter.Issue {
+// [linter.Dir]).
+func lintSource(t *testing.T, l *linter.Linter, path string, fileType linter.FileType, src string, dir linter.Dir) []linter.Issue {
 	t.Helper()
 	doc, err := linter.ParseDocument([]byte(src))
 	if err != nil {
@@ -42,16 +41,16 @@ func assertIssues(t *testing.T, r *linter.Rule, severity linter.Severity, src st
 
 // assertIssuesAt is like assertIssues but lets the caller control the path and file type src is
 // linted as, e.g. to exercise rules that apply only to Features or Templates. The linted file has
-// no backing directory; use assertIssuesInDir for rules that inspect sibling files.
+// no backing directory; use assertIssuesInDir for rules that inspect the directory they are in.
 func assertIssuesAt(t *testing.T, r *linter.Rule, severity linter.Severity, path string, fileType linter.FileType, src string, want []linter.Issue) {
 	t.Helper()
-	assertIssuesInDir(t, r, severity, path, fileType, src, nil, want)
+	assertIssuesInDir(t, r, severity, path, fileType, src, linter.Dir{}, want)
 }
 
 // assertIssuesInDir is like assertIssuesAt but lets the caller supply the directory the file is
-// linted in (see [linter.Context.Dir]), so rules that inspect sibling files can be exercised
-// against a fake filesystem (e.g. a [testing/fstest.MapFS]).
-func assertIssuesInDir(t *testing.T, r *linter.Rule, severity linter.Severity, path string, fileType linter.FileType, src string, dir fs.FS, want []linter.Issue) {
+// linted in (see [linter.Dir]): a fake filesystem (e.g. a [testing/fstest.MapFS]) for rules that
+// inspect sibling files, and a directory name for rules that read it.
+func assertIssuesInDir(t *testing.T, r *linter.Rule, severity linter.Severity, path string, fileType linter.FileType, src string, dir linter.Dir, want []linter.Issue) {
 	t.Helper()
 
 	l := linter.New()

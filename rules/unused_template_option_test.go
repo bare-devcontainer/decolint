@@ -59,25 +59,25 @@ func TestUnusedTemplateOption(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			assertIssuesInDir(t, rules.UnusedTemplateOption, linter.SeverityError, path, linter.Template, src, tt.dir, tt.want)
+			assertIssuesInDir(t, rules.UnusedTemplateOption, linter.SeverityError, path, linter.Template, src, linter.Dir{FS: tt.dir}, tt.want)
 		})
 	}
 
 	t.Run("no options member", func(t *testing.T) {
 		t.Parallel()
 		dir := fstest.MapFS{".devcontainer/devcontainer.json": {Data: []byte("${templateOption:used}")}}
-		assertIssuesInDir(t, rules.UnusedTemplateOption, linter.SeverityError, path, linter.Template, `{"id": "my-template"}`, dir, nil)
+		assertIssuesInDir(t, rules.UnusedTemplateOption, linter.SeverityError, path, linter.Template, `{"id": "my-template"}`, linter.Dir{FS: dir}, nil)
 	})
 
 	t.Run("options is not an object", func(t *testing.T) {
 		t.Parallel()
 		dir := fstest.MapFS{".devcontainer/devcontainer.json": {Data: []byte("${templateOption:used}")}}
-		assertIssuesInDir(t, rules.UnusedTemplateOption, linter.SeverityError, path, linter.Template, `{"options": "nope"}`, dir, nil)
+		assertIssuesInDir(t, rules.UnusedTemplateOption, linter.SeverityError, path, linter.Template, `{"options": "nope"}`, linter.Dir{FS: dir}, nil)
 	})
 
 	t.Run("unreadable directory reports nothing", func(t *testing.T) {
 		t.Parallel()
-		assertIssuesInDir(t, rules.UnusedTemplateOption, linter.SeverityError, path, linter.Template, src, errFS{}, nil)
+		assertIssuesInDir(t, rules.UnusedTemplateOption, linter.SeverityError, path, linter.Template, src, linter.Dir{FS: errFS{}}, nil)
 	})
 
 	t.Run("nil directory", func(t *testing.T) {

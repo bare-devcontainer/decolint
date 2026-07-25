@@ -23,10 +23,10 @@ var FeatureInstallScriptNotExecutable = &linter.Rule{
 func checkFeatureInstallScriptNotExecutable(ctx *linter.Context, node *linter.Node) []linter.Finding {
 	// Windows working trees carry no executable bits (git does not set them there), so the check
 	// would report every install.sh as non-executable. Skip it rather than emit false positives.
-	if ctx.Dir == nil || runtime.GOOS == "windows" {
+	if ctx.Dir.FS == nil || runtime.GOOS == "windows" {
 		return nil
 	}
-	info, err := fs.Stat(ctx.Dir, installScriptName)
+	info, err := fs.Stat(ctx.Dir.FS, installScriptName)
 	if err != nil || info.IsDir() {
 		return nil
 	}

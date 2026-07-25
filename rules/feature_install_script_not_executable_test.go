@@ -35,7 +35,7 @@ func TestFeatureInstallScriptNotExecutable(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			assertIssuesInDir(t, rules.FeatureInstallScriptNotExecutable, linter.SeverityError, path, linter.Feature, src, tt.dir, tt.want)
+			assertIssuesInDir(t, rules.FeatureInstallScriptNotExecutable, linter.SeverityError, path, linter.Feature, src, linter.Dir{FS: tt.dir}, tt.want)
 		})
 	}
 

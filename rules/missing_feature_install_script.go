@@ -23,10 +23,10 @@ var MissingFeatureInstallScript = &linter.Rule{
 }
 
 func checkMissingFeatureInstallScript(ctx *linter.Context, node *linter.Node) []linter.Finding {
-	if ctx.Dir == nil {
+	if ctx.Dir.FS == nil {
 		return nil
 	}
-	info, err := fs.Stat(ctx.Dir, installScriptName)
+	info, err := fs.Stat(ctx.Dir.FS, installScriptName)
 	switch {
 	case err == nil && !info.IsDir():
 		return nil

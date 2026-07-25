@@ -12,7 +12,7 @@ import (
 // Options holds the parsed command-line arguments. It is purely the CLI's view of the world; see
 // Config for the on-disk config file's shape, and mergeConfig for how the two are reconciled.
 type Options struct {
-	// Paths are the directories to lint.
+	// Paths are the directories to lint, as named on the command line; runLint resolves them.
 	Paths []string
 	// DenyWarnings mirrors [Config.DenyWarnings]. When -deny-warnings is explicitly given it takes
 	// precedence over the config file's "denyWarnings" member, in either direction (see

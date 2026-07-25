@@ -188,6 +188,10 @@ Select a different output format to change this:
   ::warning file=.devcontainer/devcontainer.json,line=4,col=12,title=no-image-latest::image "ubuntu:latest" uses the "latest" tag; pin a specific version
   ```
 
+Every format reports paths relative to the directory `decolint` runs in,
+whichever way the linted directory was named on the command line. A file
+outside that directory is reported with its absolute path.
+
 ### Exit codes
 
 - `0` — no `error`-severity findings (there may still be `warn`

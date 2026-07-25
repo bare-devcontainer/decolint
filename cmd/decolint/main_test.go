@@ -267,6 +267,58 @@ func TestRun(t *testing.T) {
 	}
 }
 
+// TestRun_ReportedPathsAreWorkingDirectoryRelative checks that findings name files the same way
+// however the lint target was named, and that a target outside the working directory is named
+// absolutely.
+func TestRun_ReportedPathsAreWorkingDirectoryRelative(t *testing.T) {
+	// Uses t.Chdir, which cannot be combined with t.Parallel.
+
+	const fixture = "testdata/e2e/violations"
+	abs, err := filepath.Abs(fixture)
+	if err != nil {
+		t.Fatalf("Abs: %v", err)
+	}
+	reportedPaths := func(t *testing.T, target string) []string {
+		t.Helper()
+		var stdout, stderr bytes.Buffer
+		run(t.Context(), []string{"-format=json", "-platform=codespaces", target}, &stdout, &stderr)
+		var issues []linter.Issue
+		if err := json.Unmarshal(stdout.Bytes(), &issues); err != nil {
+			t.Fatalf("output is not a JSON issue array: %v\noutput: %s", err, stdout.String())
+		}
+		if len(issues) == 0 {
+			t.Fatalf("no findings for %s; the fixture is expected to trip codespaces rules", target)
+		}
+		var paths []string
+		for _, issue := range issues {
+			paths = append(paths, issue.Path)
+		}
+		return paths
+	}
+
+	t.Run("a target inside the working directory is named relative to it", func(t *testing.T) {
+		want := reportedPaths(t, fixture)
+		if diff := cmp.Diff(want, reportedPaths(t, abs)); diff != "" {
+			t.Errorf("paths from the absolute target differ from the relative one (-relative +absolute):\n%s", diff)
+		}
+		for _, p := range want {
+			if !strings.HasPrefix(p, fixture) {
+				t.Errorf("path = %q, want it under %q", p, fixture)
+			}
+		}
+	})
+
+	t.Run("a target outside the working directory is named absolutely", func(t *testing.T) {
+		// Uses t.Chdir, which cannot be combined with t.Parallel.
+		t.Chdir(t.TempDir())
+		for _, p := range reportedPaths(t, abs) {
+			if !filepath.IsAbs(p) {
+				t.Errorf("path = %q, want an absolute path", p)
+			}
+		}
+	})
+}
+
 func TestRun_Flags(t *testing.T) {
 	t.Parallel()
 
@@ -702,6 +754,61 @@ func TestRun_Init(t *testing.T) {
 			t.Errorf("stderr = %q, want it to mention the file already exists", stderr.String())
 		}
 	})
+}
+
+func TestRunLint_DeduplicatesTargets(t *testing.T) {
+	t.Parallel()
+
+	dir := writeDevcontainer(t, `{"image": "ubuntu:latest"}`)
+	cfg := Config{
+		Format: "json",
+		Rules:  map[string]linter.Severity{"no-image-latest": linter.SeverityError},
+	}
+
+	lint := func(t *testing.T, paths []string) int {
+		t.Helper()
+		var stdout bytes.Buffer
+		if _, err := runLint(t.Context(), &stdout, io.Discard, Options{Paths: paths}, cfg); err != nil {
+			t.Fatalf("runLint: %v", err)
+		}
+		var issues []linter.Issue
+		if err := json.Unmarshal(stdout.Bytes(), &issues); err != nil {
+			t.Fatalf("output is not a JSON issue array: %v\noutput: %s", err, stdout.String())
+		}
+		return len(issues)
+	}
+
+	want := lint(t, []string{dir})
+	if want == 0 {
+		t.Fatal("no findings for the fixture; the test cannot tell deduplication from a silent lint")
+	}
+	if got := lint(t, []string{dir, dir + string(filepath.Separator)}); got != want {
+		t.Errorf("findings for the directory named twice = %d, want %d", got, want)
+	}
+}
+
+func TestRunLint_UnresolvableTarget(t *testing.T) {
+	// Uses t.Chdir, which cannot be combined with t.Parallel.
+
+	// A target whose location cannot be resolved is recorded like any other per-target failure, so
+	// the findings collected so far are still written.
+	dir := t.TempDir()
+	t.Chdir(dir)
+	if err := os.Remove(dir); err != nil {
+		t.Fatal(err)
+	}
+
+	var stdout bytes.Buffer
+	hasIssue, err := runLint(t.Context(), &stdout, io.Discard, Options{Paths: []string{"."}}, Config{Format: "json"})
+	if err == nil || !strings.Contains(err.Error(), "resolve directory") {
+		t.Errorf("err = %v, want a directory resolution error", err)
+	}
+	if hasIssue {
+		t.Error("hasIssue = true, want false")
+	}
+	if got := strings.TrimSpace(stdout.String()); got != "[]" {
+		t.Errorf("stdout = %q, want an empty JSON issue array", got)
+	}
 }
 
 func TestRunLint(t *testing.T) {
@@ -1270,7 +1377,7 @@ func TestLintPath(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		issues, err := lintPath(t.Context(), newLinter(), noSubst, nil, dir)
+		issues, err := lintPath(t.Context(), newLinter(), noSubst, nil, absPath(dir))
 		if err != nil {
 			t.Fatalf("lintPath: %v", err)
 		}
@@ -1317,9 +1424,18 @@ func TestLintPath(t *testing.T) {
 
 	t.Run("directory without config", func(t *testing.T) {
 		t.Parallel()
-		_, err := lintPath(t.Context(), newLinter(), noSubst, nil, t.TempDir())
+		_, err := lintPath(t.Context(), newLinter(), noSubst, nil, absPath(t.TempDir()))
 		if err == nil || !strings.Contains(err.Error(), "no devcontainer configuration found") {
 			t.Errorf("err = %v, want 'no devcontainer configuration found'", err)
+		}
+	})
+
+	t.Run("a configuration file is not a directory", func(t *testing.T) {
+		t.Parallel()
+		file := filepath.Join(writeDevcontainer(t, body), ".devcontainer", "devcontainer.json")
+		_, err := lintPath(t.Context(), newLinter(), noSubst, nil, absPath(file))
+		if err == nil || !strings.Contains(err.Error(), "is not a directory; pass the directory") {
+			t.Errorf("err = %v, want the error to say a directory is expected", err)
 		}
 	})
 
@@ -1329,7 +1445,7 @@ func TestLintPath(t *testing.T) {
 		wantErr := errors.New("fetch failed")
 		merge := func(context.Context, discovery.ConfigFile, *linter.Document) error { return wantErr }
 
-		if _, err := lintPath(t.Context(), newLinter(), noSubst, merge, dir); !errors.Is(err, wantErr) {
+		if _, err := lintPath(t.Context(), newLinter(), noSubst, merge, absPath(dir)); !errors.Is(err, wantErr) {
 			t.Errorf("lintPath error = %v, want %v", err, wantErr)
 		}
 	})
@@ -1343,7 +1459,7 @@ func TestLintPath(t *testing.T) {
 			return nil
 		}
 
-		if _, err := lintPath(t.Context(), linter.New(), noSubst, merge, dir); err != nil {
+		if _, err := lintPath(t.Context(), linter.New(), noSubst, merge, absPath(dir)); err != nil {
 			t.Fatalf("lintPath: %v", err)
 		}
 		if called {
@@ -1373,7 +1489,7 @@ func TestLintPath(t *testing.T) {
 		}
 		subst := func(string, *linter.Document) {}
 
-		if _, err := lintPath(t.Context(), l, subst, merge, dir); err != nil {
+		if _, err := lintPath(t.Context(), l, subst, merge, absPath(dir)); err != nil {
 			t.Fatalf("lintPath: %v", err)
 		}
 		if called {
@@ -1382,26 +1498,120 @@ func TestLintPath(t *testing.T) {
 	})
 }
 
-func TestLintDir_WorkspaceFolderError(t *testing.T) {
+// dirNameRule is a stub rule that reports the name of the directory the linted file sits in, used to
+// observe the [linter.Dir] a lint hands to rules without depending on a rule that reads it.
+var dirNameRule = &linter.Rule{
+	ID:          "test-dir-name",
+	Description: "reports the containing directory's name",
+	FileTypes:   []linter.FileType{linter.Feature},
+	Paths:       []string{"/id"},
+	Check: func(ctx *linter.Context, node *linter.Node) []linter.Finding {
+		return []linter.Finding{{Message: ctx.Dir.Name, Offset: node.Value.StartOffset}}
+	},
+}
+
+// TestLintPath_DirName checks that rules are handed the name of the directory the configuration file
+// sits in wherever the lint runs from, while the path the finding is reported at follows the working
+// directory. Linting a directory from inside it leaves that path with no directory component, so the
+// name cannot be taken from there.
+func TestLintPath_DirName(t *testing.T) {
 	// Uses t.Chdir, which cannot be combined with t.Parallel.
 
-	// A relative root name resolves against the working directory; deleting it makes the
-	// workspace folder unresolvable, which must surface as an error.
-	dir := t.TempDir()
-	t.Chdir(dir)
-	root, err := os.OpenRoot(".")
+	parent := t.TempDir()
+	// t.TempDir can hand back a path through a symlink (/var on macOS), which is not the path the
+	// process reports as its working directory; ask for the one findings are reported against.
+	t.Chdir(parent)
+	parent, err := os.Getwd()
 	if err != nil {
+		t.Fatalf("Getwd: %v", err)
+	}
+	target := filepath.Join(parent, "my-feature")
+	sibling := filepath.Join(parent, "elsewhere")
+	for _, dir := range []string{target, sibling} {
+		if err := os.Mkdir(dir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.WriteFile(filepath.Join(target, "devcontainer-feature.json"), []byte(`{"id": "my-feature"}`), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	defer func() { _ = root.Close() }()
+
+	tests := []struct {
+		name     string
+		wd       string
+		wantPath string
+	}{
+		{"from the directory itself", target, "devcontainer-feature.json"},
+		{"from its parent", parent, filepath.Join("my-feature", "devcontainer-feature.json")},
+		{"from outside", sibling, filepath.Join(target, "devcontainer-feature.json")},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Chdir(tt.wd)
+			l := linter.New()
+			l.RegisterRule(dirNameRule, linter.SeverityWarn)
+
+			issues, err := lintPath(t.Context(), l, nil, nil, absPath(target))
+			if err != nil {
+				t.Fatalf("lintPath: %v", err)
+			}
+			if len(issues) != 1 {
+				t.Fatalf("got %d issues %v, want 1", len(issues), issues)
+			}
+			if issues[0].Message != "my-feature" {
+				t.Errorf("ctx.Dir.Name = %q, want %q", issues[0].Message, "my-feature")
+			}
+			if issues[0].Path != tt.wantPath {
+				t.Errorf("Path = %q, want %q", issues[0].Path, tt.wantPath)
+			}
+		})
+	}
+}
+
+func TestAbsPathString(t *testing.T) {
+	// Uses t.Chdir, which cannot be combined with t.Parallel.
+
+	wd := t.TempDir()
+	// t.TempDir can hand back a path through a symlink (/var on macOS), which is not the path the
+	// process reports as its working directory; ask for the one absPath renders against.
+	t.Chdir(wd)
+	wd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("Getwd: %v", err)
+	}
+
+	tests := []struct {
+		name string
+		path absPath
+		want string
+	}{
+		{"inside the working directory", absPath(filepath.Join(wd, ".devcontainer", "devcontainer.json")), filepath.Join(".devcontainer", "devcontainer.json")},
+		{"the working directory itself", absPath(wd), "."},
+		{"the parent of the working directory", absPath(filepath.Dir(wd)), filepath.Dir(wd)},
+		{"a sibling of the working directory", absPath(filepath.Join(filepath.Dir(wd), "elsewhere")), filepath.Join(filepath.Dir(wd), "elsewhere")},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := tt.path.String(); got != tt.want {
+				t.Errorf("absPath(%q).String() = %q, want %q", string(tt.path), got, tt.want)
+			}
+		})
+	}
+}
+
+func TestAbsPathString_NoWorkingDirectory(t *testing.T) {
+	// Uses t.Chdir, which cannot be combined with t.Parallel.
+
+	// With the working directory gone there is nothing to render against, so the path stays absolute.
+	dir := t.TempDir()
+	t.Chdir(dir)
 	if err := os.Remove(dir); err != nil {
 		t.Fatal(err)
 	}
 
-	subst := func(string, *linter.Document) {}
-	if _, err := lintDir(t.Context(), linter.New(), subst, nil, root); err == nil ||
-		!strings.Contains(err.Error(), "resolve workspace folder") {
-		t.Errorf("err = %v, want a workspace folder resolution error", err)
+	p := absPath(filepath.Join(dir, "devcontainer.json"))
+	if got := p.String(); got != string(p) {
+		t.Errorf("absPath(%q).String() = %q, want it unchanged", string(p), got)
 	}
 }
 

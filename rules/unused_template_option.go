@@ -20,14 +20,14 @@ var UnusedTemplateOption = &linter.Rule{
 }
 
 func checkUnusedTemplateOption(ctx *linter.Context, node *linter.Node) []linter.Finding {
-	if ctx.Dir == nil {
+	if ctx.Dir.FS == nil {
 		return nil
 	}
 	obj, ok := node.Value.Value.(*hujson.Object)
 	if !ok {
 		return nil
 	}
-	refs, err := templateOptionRefs(ctx.Dir)
+	refs, err := templateOptionRefs(ctx.Dir.FS)
 	if err != nil {
 		return nil
 	}

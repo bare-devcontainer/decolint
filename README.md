@@ -187,6 +187,19 @@ Select a different output format to change this:
   ```
   ::warning file=.devcontainer/devcontainer.json,line=4,col=12,title=no-image-latest::image "ubuntu:latest" uses the "latest" tag; pin a specific version
   ```
+- `sarif` — a [SARIF 2.1.0](https://docs.oasis-open.org/sarif/sarif/v2.1.0/sarif-v2.1.0.html)
+  log, for upload to [GitHub Code
+  Scanning](https://docs.github.com/en/code-security/code-scanning/integrating-with-code-scanning/uploading-a-sarif-file-to-github)
+  so findings appear as alerts in the repository's Security tab:
+  ```yaml
+  - run: decolint -merge -format=sarif . > decolint.sarif
+    continue-on-error: true # decolint exits 1 on findings; the upload must still run
+  - uses: github/codeql-action/upload-sarif@v3
+    with:
+      sarif_file: decolint.sarif
+  ```
+  Run `decolint` from the repository root, so that the paths in the log
+  resolve to files in the repository.
 
 Every format reports paths relative to the directory `decolint` runs in,
 whichever way the linted directory was named on the command line. A file

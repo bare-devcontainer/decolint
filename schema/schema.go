@@ -38,7 +38,7 @@ func ParseVariant(s string) (Variant, error) {
 	case "main":
 		return VariantMain, nil
 	default:
-		return VariantOff, fmt.Errorf("invalid schema variant %q: want base, main, or off", s)
+		return VariantOff, fmt.Errorf("unknown variant %q (want one of: base, main, off)", s)
 	}
 }
 

@@ -244,7 +244,7 @@ func runLint(ctx context.Context, stdout, stderr io.Writer, opts Options, cfg Co
 	}
 	variant, err := schema.ParseVariant(schemaName)
 	if err != nil {
-		return false, err
+		return false, fmt.Errorf("schema: %w", err)
 	}
 
 	threshold := failThreshold

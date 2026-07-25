@@ -389,8 +389,8 @@ func TestRun_Schema(t *testing.T) {
 		if exitCode != exitCodeError {
 			t.Errorf("exit code = %d, want %d", exitCode, exitCodeError)
 		}
-		if !strings.Contains(stderr.String(), "schema variant") {
-			t.Errorf("stderr = %q, want it to mention the invalid schema variant", stderr.String())
+		if !strings.Contains(stderr.String(), `unknown variant "bogus"`) {
+			t.Errorf("stderr = %q, want it to name the invalid schema variant", stderr.String())
 		}
 	})
 

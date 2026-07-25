@@ -2,9 +2,13 @@ name: SARIF Upload Check
 
 # Uploads a real decolint SARIF log to code scanning to prove GitHub accepts it and resolves the
 # reported paths to files in the repository, then deletes the analysis so the Security tab is left
-# as it was found. Manual only: a pull request from a fork never receives security-events: write.
+# as it was found. Runs on demand, and on a pull request that edits this workflow, since a workflow
+# nothing triggers automatically is otherwise only proven broken the next time someone runs it.
 on:
   workflow_dispatch:
+  pull_request:
+    paths:
+      - .github/workflows/sarif-upload-check.yml
 
 permissions: {}
 
@@ -18,6 +22,9 @@ env:
 jobs:
   upload-check:
     runs-on: ubuntu-latest
+    # A pull request from a fork is given a read-only token however this workflow declares its
+    # permissions, so the upload could only fail. Skip it rather than report a failure.
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     permissions:
       contents: read
       security-events: write
@@ -59,6 +66,9 @@ jobs:
               and (.[0].category // "" | rtrimstr("/")) == $category
               and .[0].results_count > 0
           ' > /dev/null
+          # The upload picks the ref the analysis lands on, which for a pull request is a refs/pull
+          # ref rather than GITHUB_REF, so take it from the analysis instead of assuming it.
+          echo "ANALYSIS_REF=$(echo "$analyses" | jq -r '.[0].ref')" >> "$GITHUB_ENV"
 
       - name: Check the findings resolve to repository files
         env:
@@ -67,10 +77,10 @@ jobs:
           want=$(jq -nc --arg path "$FIXTURE/.devcontainer/devcontainer.json" '[$path]')
           # Alerts can lag the analysis, so give them a bounded chance to appear.
           for _ in $(seq 1 10); do
-            got=$(gh api "repos/$GITHUB_REPOSITORY/code-scanning/alerts?tool_name=$TOOL_NAME&ref=$GITHUB_REF" 2>/dev/null || echo '[]')
+            got=$(gh api "repos/$GITHUB_REPOSITORY/code-scanning/alerts?tool_name=$TOOL_NAME&ref=$ANALYSIS_REF&per_page=100" 2>/dev/null || echo '[]')
             got=$(printf '%s' "$got" | jq -c '[.[] | .most_recent_instance.location.path] | unique')
             if [ "$got" = "$want" ]; then
-              echo "alerts resolve to $got"
+              echo "alerts on $ANALYSIS_REF resolve to $got"
               exit 0
             fi
             sleep 5
@@ -84,17 +94,18 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          ref="${ANALYSIS_REF:-$GITHUB_REF}"
           api() { gh api "repos/$GITHUB_REPOSITORY/$1" 2>/dev/null || echo '[]'; }
-          # Swept by tool and category rather than by the id of this upload, so that anything an
-          # earlier failed run left behind is collected too.
+          # Not filtered by ref: the category belongs to this workflow alone, so an analysis carrying
+          # it is one of ours whichever ref it landed on, including one an earlier run left behind.
           analyses() {
-            api "code-scanning/analyses?tool_name=$TOOL_NAME&ref=$GITHUB_REF" \
+            api "code-scanning/analyses?tool_name=$TOOL_NAME&per_page=100" \
               | jq -c --arg category "$CATEGORY" '[.[] | select((.category // "" | rtrimstr("/")) == $category)]'
           }
           # The alerts endpoint cannot filter by category, so this sweeps every decolint alert on the
           # ref. That is exact while this workflow is decolint's only uploader; should a real
           # decolint analysis ever be added, narrow it, or it will report that alert as left behind.
-          alerts() { api "code-scanning/alerts?tool_name=$TOOL_NAME&ref=$GITHUB_REF"; }
+          alerts() { api "code-scanning/alerts?tool_name=$TOOL_NAME&ref=$ref&per_page=100"; }
 
           # Only the most recent analysis of a set is deletable, so deleting a set takes one request
           # per analysis. confirm_delete is required for the last one, which also discards its

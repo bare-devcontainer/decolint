@@ -5,7 +5,7 @@ import (
 	"io"
 	"strings"
 
-	"github.com/bare-devcontainer/decolint/format"
+	"github.com/bare-devcontainer/decolint/cmd/decolint/format"
 	"github.com/bare-devcontainer/decolint/linter"
 	"github.com/bare-devcontainer/decolint/rules"
 )

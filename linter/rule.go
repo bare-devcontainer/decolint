@@ -262,6 +262,13 @@ type Rule struct {
 	ID string
 	// Description is a short human-readable description of what the rule checks.
 	Description string
+	// LongDescription explains why the rule exists: what goes wrong in the configuration it
+	// reports, and what to do instead. It is prose, wrapped as written, and is shown alongside
+	// References wherever a rule is documented rather than merely named.
+	LongDescription string
+	// References are URLs to the specification, documentation, or implementation that justify the
+	// rule, most authoritative first.
+	References []string
 	// Category is the [Category] this rule reports; every rule must declare exactly one.
 	Category Category
 	// FileTypes are the kinds of configuration files this rule applies to.

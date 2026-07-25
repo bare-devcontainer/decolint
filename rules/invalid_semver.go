@@ -13,10 +13,17 @@ import (
 var InvalidSemver = &linter.Rule{
 	ID:          "invalid-semver",
 	Description: `disallow a Feature's or Template's "version" that is not a valid semantic version`,
-	Category:    linter.CategoryCorrectness,
-	FileTypes:   []linter.FileType{linter.Feature, linter.Template},
-	Paths:       []string{"/version"},
-	Check:       checkInvalidSemver,
+	LongDescription: `Publishing a Feature or Template pushes it under tags derived from the "version" components: the full
+version, "major.minor", and "major", so consumers can pin as loosely or as tightly as they want. A value
+that is not valid semver has no such components, leaving nothing to derive those tags from.`,
+	References: []string{
+		"https://containers.dev/implementors/features-distribution/#versioning",
+		"https://semver.org/",
+	},
+	Category:  linter.CategoryCorrectness,
+	FileTypes: []linter.FileType{linter.Feature, linter.Template},
+	Paths:     []string{"/version"},
+	Check:     checkInvalidSemver,
 }
 
 // semverPattern is the official semantic version regular expression published at

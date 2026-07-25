@@ -434,6 +434,50 @@ func TestRun_Flags(t *testing.T) {
 		}
 	})
 
+	t.Run("-explain", func(t *testing.T) {
+		t.Parallel()
+
+		var stdout, stderr bytes.Buffer
+		exitCode := run(t.Context(), []string{"-explain=no-bind-mount"}, &stdout, &stderr)
+		if exitCode != 0 {
+			t.Errorf("exit code = %d, want 0", exitCode)
+		}
+		if stderr.String() != "" {
+			t.Errorf("stderr = %q, want empty", stderr.String())
+		}
+		out := stdout.String()
+		rule := builtinRule(t, "no-bind-mount")
+		for _, want := range []string{
+			rule.ID,
+			rule.Category.String(),
+			// The rule targets Codespaces, so the platform it is scoped to is named rather than "(all)".
+			"codespaces",
+			rule.Description,
+			rule.LongDescription,
+			rule.References[0],
+		} {
+			if !strings.Contains(out, want) {
+				t.Errorf("stdout = %q, want it to contain %q", out, want)
+			}
+		}
+	})
+
+	t.Run("-explain unknown rule", func(t *testing.T) {
+		t.Parallel()
+
+		var stdout, stderr bytes.Buffer
+		exitCode := run(t.Context(), []string{"-explain=no-such-rule"}, &stdout, &stderr)
+		if exitCode != 2 {
+			t.Errorf("exit code = %d, want 2", exitCode)
+		}
+		if stdout.String() != "" {
+			t.Errorf("stdout = %q, want empty", stdout.String())
+		}
+		if !strings.Contains(stderr.String(), "no-such-rule") {
+			t.Errorf("stderr = %q, want it to mention the unknown rule ID", stderr.String())
+		}
+	})
+
 	t.Run("-help", func(t *testing.T) {
 		t.Parallel()
 
@@ -1828,6 +1872,18 @@ func mdTableRow(t *testing.T, out, key string) []string {
 		}
 	}
 	t.Fatalf("no table row starting with %q in:\n%s", key, out)
+	return nil
+}
+
+// builtinRule returns the built-in rule with the given ID, failing the test if there is none.
+func builtinRule(t *testing.T, id string) *linter.Rule {
+	t.Helper()
+	for _, reg := range rules.Builtin() {
+		if reg.Rule.ID == id {
+			return reg.Rule
+		}
+	}
+	t.Fatalf("no built-in rule with ID %q", id)
 	return nil
 }
 

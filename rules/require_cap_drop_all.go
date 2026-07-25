@@ -12,10 +12,18 @@ import (
 var RequireCapDropAll = &linter.Rule{
 	ID:          "require-cap-drop-all",
 	Description: `require a "--cap-drop=ALL" entry in a devcontainer.json's "runArgs", dropping every Linux capability`,
-	Category:    linter.CategorySecurity,
-	FileTypes:   []linter.FileType{linter.Devcontainer},
-	Paths:       []string{""},
-	Check:       checkRequireCapDropAll,
+	LongDescription: `Container runtimes grant a default set of capabilities that a dev container almost never uses: raw network
+access, changing file ownership, or binding privileged ports. Dropping all of them and adding back only
+what the workload needs ("capAdd") means a process that is compromised inherits no privilege the project
+never asked for.`,
+	References: []string{
+		"https://containers.dev/implementors/json_reference/#general-devcontainerjson-properties",
+		"https://docs.docker.com/engine/security/#linux-kernel-capabilities",
+	},
+	Category:  linter.CategorySecurity,
+	FileTypes: []linter.FileType{linter.Devcontainer},
+	Paths:     []string{""},
+	Check:     checkRequireCapDropAll,
 }
 
 func checkRequireCapDropAll(_ *linter.Context, node *linter.Node) []linter.Finding {

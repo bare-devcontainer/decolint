@@ -12,6 +12,7 @@ import (
 	"os/signal"
 	"path"
 	"path/filepath"
+	"slices"
 	"strings"
 	"syscall"
 
@@ -79,6 +80,14 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 		return exitCodeSuccess
 	}
 
+	if opts.Explain != "" {
+		if err := explainRule(stdout, opts.Explain); err != nil {
+			_, _ = fmt.Fprintln(stderr, progName+":", err)
+			return exitCodeError
+		}
+		return exitCodeSuccess
+	}
+
 	cfg, err := loadConfig(opts.ConfigPath)
 	if err != nil {
 		_, _ = fmt.Fprintln(stderr, progName+":", err)
@@ -128,18 +137,10 @@ func listRules(output io.Writer, cfg Config) error {
 	overrides := rules.Overrides{Categories: cfg.Categories, Rules: cfg.Rules}
 	rows := [][]string{rulesTableHeader}
 	for _, reg := range rules.Builtin() {
-		platforms := "(all)"
-		if len(reg.Rule.Platforms) > 0 {
-			names := make([]string, len(reg.Rule.Platforms))
-			for i, p := range reg.Rule.Platforms {
-				names[i] = p.String()
-			}
-			platforms = strings.Join(names, ",")
-		}
 		rows = append(rows, []string{
 			reg.Rule.ID,
 			reg.Rule.Category.String(),
-			platforms,
+			platformNames(reg.Rule.Platforms, ","),
 			severityEmoji[overrides.SeverityFor(reg)],
 		})
 	}
@@ -159,6 +160,48 @@ func listRules(output io.Writer, cfg Config) error {
 		if err := writeTableRow(output, row, widths); err != nil {
 			return err
 		}
+	}
+	return nil
+}
+
+// platformNames renders the platforms a rule targets, separated by sep. A rule that targets none
+// applies to every platform, which is shown as "(all)".
+func platformNames(platforms []linter.Platform, sep string) string {
+	if len(platforms) == 0 {
+		return "(all)"
+	}
+	names := make([]string, len(platforms))
+	for i, p := range platforms {
+		names[i] = p.String()
+	}
+	return strings.Join(names, sep)
+}
+
+// explainRule writes everything decolint documents about the rule with the given ID to output: what
+// it checks, why, and the references that justify it. It returns an error if no built-in rule has
+// that ID. The rule's severity is left to [listRules], which reports it for every rule at once.
+func explainRule(output io.Writer, id string) error {
+	builtin := rules.Builtin()
+	i := slices.IndexFunc(builtin, func(reg rules.Registration) bool { return reg.Rule.ID == id })
+	if i < 0 {
+		return fmt.Errorf("unknown rule ID %q; run with -rules to list the built-in rules", id)
+	}
+	rule := builtin[i].Rule
+
+	sections := []string{
+		fmt.Sprintf("%s (%s)\nPlatform: %s", rule.ID, rule.Category, platformNames(rule.Platforms, ", ")),
+		rule.Description,
+		rule.LongDescription,
+	}
+	if len(rule.References) > 0 {
+		refs := "References:"
+		for _, ref := range rule.References {
+			refs += "\n  " + ref
+		}
+		sections = append(sections, refs)
+	}
+	if _, err := fmt.Fprintln(output, strings.Join(sections, "\n\n")); err != nil {
+		return fmt.Errorf("write rule documentation: %w", err)
 	}
 	return nil
 }

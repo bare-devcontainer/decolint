@@ -21,10 +21,18 @@ var digestSuffix = regexp.MustCompile(`@[a-z0-9]+(?:[+._-][a-z0-9]+)*:[a-zA-Z0-9
 var PinImageDigest = &linter.Rule{
 	ID:          "pin-image-digest",
 	Description: `disallow an "image" property that does not pin the image by content digest (e.g. "image@sha256:...")`,
-	Category:    linter.CategoryReproducibility,
-	FileTypes:   []linter.FileType{linter.Devcontainer},
-	Paths:       []string{"/image"},
-	Check:       checkPinImageDigest,
+	LongDescription: `A tag is a mutable pointer: the publisher can move even a fully specified one to different bits, and a
+registry can serve a different image for the same tag on a different day. A digest names the content
+itself, so "image@sha256:..." always resolves to the exact image the project was tested with, and the
+client verifies what it pulled against it.`,
+	References: []string{
+		"https://containers.dev/implementors/json_reference/#image-or-dockerfile-specific-properties",
+		"https://github.com/opencontainers/image-spec/blob/main/descriptor.md#digests",
+	},
+	Category:  linter.CategoryReproducibility,
+	FileTypes: []linter.FileType{linter.Devcontainer},
+	Paths:     []string{"/image"},
+	Check:     checkPinImageDigest,
 }
 
 func checkPinImageDigest(_ *linter.Context, node *linter.Node) []linter.Finding {

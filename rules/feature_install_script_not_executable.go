@@ -14,10 +14,16 @@ import (
 var FeatureInstallScriptNotExecutable = &linter.Rule{
 	ID:          "feature-install-script-not-executable",
 	Description: "disallow a Feature's `install.sh` that lacks executable permission bits",
-	Category:    linter.CategoryCorrectness,
-	FileTypes:   []linter.FileType{linter.Feature},
-	Paths:       []string{""},
-	Check:       checkFeatureInstallScriptNotExecutable,
+	LongDescription: `The specification has the installing tool invoke "install.sh" directly rather than through a shell, so
+that the script's own shebang selects the interpreter. That requires the execute bit: without it the
+Feature fails to install when a container is built. Run "chmod +x install.sh" and commit the mode change.`,
+	References: []string{
+		"https://containers.dev/implementors/features/#invoking-installsh",
+	},
+	Category:  linter.CategoryCorrectness,
+	FileTypes: []linter.FileType{linter.Feature},
+	Paths:     []string{""},
+	Check:     checkFeatureInstallScriptNotExecutable,
 }
 
 func checkFeatureInstallScriptNotExecutable(ctx *linter.Context, node *linter.Node) []linter.Finding {

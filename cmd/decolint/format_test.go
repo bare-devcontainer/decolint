@@ -4,8 +4,43 @@ import (
 	"testing"
 
 	"github.com/bare-devcontainer/decolint/format"
+	"github.com/bare-devcontainer/decolint/rules"
 	"github.com/google/go-cmp/cmp"
 )
+
+// TestSARIFRules checks that the adapter carries every documented field of a built-in rule into the
+// SARIF catalog, so an alert can be traced back to what the rule checks and why.
+func TestSARIFRules(t *testing.T) {
+	t.Parallel()
+
+	var reg rules.Registration
+	for _, r := range rules.Builtin() {
+		if r.Rule.ID == "no-image-latest" {
+			reg = r
+		}
+	}
+	if reg.Rule == nil {
+		t.Fatal("built-in rule no-image-latest not found")
+	}
+
+	var got format.SARIFRule
+	for _, r := range sarifRules() {
+		if r.ID == reg.Rule.ID {
+			got = r
+		}
+	}
+
+	want := format.SARIFRule{
+		ID:              reg.Rule.ID,
+		Description:     reg.Rule.Description,
+		LongDescription: reg.Rule.LongDescription,
+		References:      reg.Rule.References,
+		Category:        reg.Rule.Category.String(),
+	}
+	if diff := cmp.Diff(want, got); diff != "" {
+		t.Errorf("sarifRules() entry mismatch (-want +got):\n%s", diff)
+	}
+}
 
 func TestParseFormat(t *testing.T) {
 	t.Parallel()

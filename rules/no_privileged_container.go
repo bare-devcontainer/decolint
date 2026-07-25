@@ -12,10 +12,19 @@ import (
 var NoPrivilegedContainer = &linter.Rule{
 	ID:          "no-privileged-container",
 	Description: `disallow running the container in privileged mode via the "privileged" property or a "--privileged" entry in "runArgs"`,
-	Category:    linter.CategorySecurity,
-	FileTypes:   []linter.FileType{linter.Devcontainer, linter.Feature},
-	Paths:       []string{"/privileged", "/runArgs/*"},
-	Check:       checkNoPrivilegedContainer,
+	LongDescription: `A privileged container gets every Linux capability, unconfined seccomp and LSM profiles, and access to all
+host devices. That removes essentially every boundary between the container and the host, so any code
+running in it — including a compromised dependency pulled in by the project's own build — can take over
+the machine. Docker-in-Docker is the usual reason it is set; a Feature that provides it, or the specific
+capabilities and devices the workload needs, is a far narrower grant.`,
+	References: []string{
+		"https://containers.dev/implementors/json_reference/#general-devcontainerjson-properties",
+		"https://docs.docker.com/engine/security/#docker-daemon-attack-surface",
+	},
+	Category:  linter.CategorySecurity,
+	FileTypes: []linter.FileType{linter.Devcontainer, linter.Feature},
+	Paths:     []string{"/privileged", "/runArgs/*"},
+	Check:     checkNoPrivilegedContainer,
 }
 
 func checkNoPrivilegedContainer(ctx *linter.Context, node *linter.Node) []linter.Finding {

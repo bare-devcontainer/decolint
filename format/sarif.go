@@ -17,9 +17,11 @@ import (
 // SARIFRule describes one rule for the SARIF rule catalog. It mirrors the [linter.Rule] fields the
 // SARIF output needs, so this package does not depend on the rules package.
 type SARIFRule struct {
-	ID          string
-	Description string
-	Category    string
+	ID              string
+	Description     string
+	LongDescription string
+	References      []string
+	Category        string
 }
 
 // SARIFFormat prints a SARIF 2.1.0 log, suitable for upload to GitHub Code Scanning.
@@ -62,9 +64,11 @@ type sarifDriver struct {
 }
 
 type sarifRuleDescriptor struct {
-	ID               string          `json:"id"`
-	ShortDescription sarifMessage    `json:"shortDescription,omitzero"`
-	Properties       sarifProperties `json:"properties,omitzero"`
+	ID               string                  `json:"id"`
+	ShortDescription sarifMessage            `json:"shortDescription,omitzero"`
+	FullDescription  sarifMessage            `json:"fullDescription,omitzero"`
+	Help             sarifMultiformatMessage `json:"help,omitzero"`
+	Properties       sarifProperties         `json:"properties,omitzero"`
 }
 
 type sarifProperties struct {
@@ -73,6 +77,14 @@ type sarifProperties struct {
 
 type sarifMessage struct {
 	Text string `json:"text"`
+}
+
+// sarifMultiformatMessage is SARIF's multiformatMessageString: a plain-text rendering plus an
+// optional Markdown one, which viewers prefer when they can render it. Text is required whenever
+// Markdown is present.
+type sarifMultiformatMessage struct {
+	Text     string `json:"text"`
+	Markdown string `json:"markdown,omitzero"`
 }
 
 type sarifResult struct {
@@ -126,6 +138,8 @@ func (f SARIFFormat) WriteIssues(w io.Writer, issues []linter.Issue) error {
 		desc := sarifRuleDescriptor{ID: id}
 		if r, ok := catalog[id]; ok {
 			desc.ShortDescription = sarifMessage{Text: r.Description}
+			desc.FullDescription = sarifMessage{Text: r.LongDescription}
+			desc.Help = sarifHelpFor(r)
 			desc.Properties = sarifProperties{Tags: []string{r.Category}}
 		}
 		descriptors = append(descriptors, desc)
@@ -176,6 +190,39 @@ func (f SARIFFormat) WriteIssues(w io.Writer, issues []linter.Issue) error {
 		return fmt.Errorf("write issues: %w", err)
 	}
 	return nil
+}
+
+// sarifHelpFor returns the rule's rationale and reference links as SARIF help, the text a viewer
+// shows when a reader asks why an alert was raised. It is the zero value, and so omitted, for a rule
+// that documents neither.
+func sarifHelpFor(r SARIFRule) sarifMultiformatMessage {
+	if len(r.References) == 0 {
+		// Prose alone renders the same either way, so there is no Markdown rendering to add.
+		return sarifMultiformatMessage{Text: r.LongDescription}
+	}
+	var plain, md strings.Builder
+	plain.WriteString("References:")
+	md.WriteString("**References**\n")
+	for _, ref := range r.References {
+		plain.WriteString("\n- " + ref)
+		// Angle brackets make the URL a link even where it contains Markdown punctuation.
+		md.WriteString("\n- <" + ref + ">")
+	}
+	return sarifMultiformatMessage{
+		Text:     joinParagraphs(r.LongDescription, plain.String()),
+		Markdown: joinParagraphs(r.LongDescription, md.String()),
+	}
+}
+
+// joinParagraphs joins the non-empty sections with a blank line between them.
+func joinParagraphs(sections ...string) string {
+	kept := make([]string, 0, len(sections))
+	for _, s := range sections {
+		if s != "" {
+			kept = append(kept, s)
+		}
+	}
+	return strings.Join(kept, "\n\n")
 }
 
 // artifactURIFor returns the SARIF location of the file at path, which must be a URI rather than a

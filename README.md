@@ -92,6 +92,7 @@ The remaining flags perform a one-off action and exit; run
 | `-config <path>` | use the config file at `<path>` instead of [auto-discovery](#config-file) |
 | `-init` | write a new `.decolint.jsonc` listing every rule at its default severity |
 | `-rules` | print the built-in rules as a Markdown table |
+| `-explain <rule-id>` | print what one rule checks, why, and where it is documented |
 | `-version` | print version information |
 | `-help` | print usage |
 
@@ -281,6 +282,17 @@ severity unless overridden by a [config file](#config-file). A rule
 can also optionally target specific platforms (see [Target
 platforms](#target-platforms)); a rule with no target platform applies
 to all platforms.
+
+Each rule also explains why it exists and links to the specification
+or documentation it is based on. To read that for a single rule:
+
+```console
+decolint -explain no-privileged-container
+```
+
+The [SARIF output](#output-formats) carries the same explanation and
+links for every rule it reports, so they show up on the alert in
+GitHub Code Scanning.
 
 ### Rule categories
 

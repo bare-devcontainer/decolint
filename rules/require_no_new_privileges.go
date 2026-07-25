@@ -13,10 +13,18 @@ import (
 var RequireNoNewPrivileges = &linter.Rule{
 	ID:          "require-no-new-privileges",
 	Description: `require "no-new-privileges" to be set via a devcontainer.json's "securityOpt" property, or a "--security-opt no-new-privileges..." entry in "runArgs"`,
-	Category:    linter.CategorySecurity,
-	FileTypes:   []linter.FileType{linter.Devcontainer},
-	Paths:       []string{""},
-	Check:       checkRequireNoNewPrivileges,
+	LongDescription: `Without this option a process in the container can still gain privileges it was not started with, by
+executing a setuid binary — which undercuts the point of running as a non-root user. Setting it raises the
+kernel's "no_new_privs" bit, which every child process inherits and none can clear, so the container's
+privileges can only ever shrink.`,
+	References: []string{
+		"https://containers.dev/implementors/json_reference/#general-devcontainerjson-properties",
+		"https://docs.kernel.org/userspace-api/no_new_privs.html",
+	},
+	Category:  linter.CategorySecurity,
+	FileTypes: []linter.FileType{linter.Devcontainer},
+	Paths:     []string{""},
+	Check:     checkRequireNoNewPrivileges,
 }
 
 func checkRequireNoNewPrivileges(_ *linter.Context, node *linter.Node) []linter.Finding {

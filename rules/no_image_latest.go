@@ -13,10 +13,17 @@ import (
 var NoImageLatest = &linter.Rule{
 	ID:          "no-image-latest",
 	Description: `disallow container images without an explicit tag or with the "latest" tag`,
-	Category:    linter.CategoryReproducibility,
-	FileTypes:   []linter.FileType{linter.Devcontainer},
-	Paths:       []string{"/image"},
-	Check:       checkNoImageLatest,
+	LongDescription: `A reference with no tag resolves to "latest", and "latest" is just the tag a publisher moves as they
+release. Either way the configuration says "whatever is current", so the same devcontainer.json builds a
+different environment next month, and a build that broke cannot be reproduced from the file alone. Name
+the version the project was tested against.`,
+	References: []string{
+		"https://containers.dev/implementors/json_reference/#image-or-dockerfile-specific-properties",
+	},
+	Category:  linter.CategoryReproducibility,
+	FileTypes: []linter.FileType{linter.Devcontainer},
+	Paths:     []string{"/image"},
+	Check:     checkNoImageLatest,
 }
 
 func checkNoImageLatest(_ *linter.Context, node *linter.Node) []linter.Finding {

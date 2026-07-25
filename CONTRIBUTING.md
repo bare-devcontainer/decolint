@@ -34,6 +34,13 @@ and calls `Check` for every value matching one of the paths; a `*`
 segment matches any object member name or array index, and the empty
 string matches the document root.
 
+Besides the one-line `Description` of what it checks, every rule
+carries a `LongDescription` explaining why the configuration it
+reports is a problem, and at least one `References` URL pointing at
+the specification, documentation, or implementation that justifies it.
+Both are shown by `decolint -explain <rule-id>` and in the SARIF
+output, so write them for the user who just hit the finding.
+
 A rule's default severity is not set individually; it comes entirely
 from its category (see `categoryDefaultSeverities` in
 [`rules.go`](rules/rules.go)) — only `CategoryCorrectness` runs by
@@ -46,13 +53,15 @@ package rules
 import "github.com/bare-devcontainer/decolint/linter"
 
 var MyRule = &linter.Rule{
-	ID:          "my-rule",
-	Description: "...",
-	Category:    linter.CategoryCorrectness,
-	FileTypes:   []linter.FileType{linter.Devcontainer},
-	Platforms:   nil, // applies to every platform
-	Paths:       []string{"/mounts/*"},
-	Check:       checkMyRule,
+	ID:              "my-rule",
+	Description:     "...",
+	LongDescription: "...",
+	References:      []string{"https://containers.dev/implementors/json_reference/"},
+	Category:        linter.CategoryCorrectness,
+	FileTypes:       []linter.FileType{linter.Devcontainer},
+	Platforms:       nil, // applies to every platform
+	Paths:           []string{"/mounts/*"},
+	Check:           checkMyRule,
 }
 
 func checkMyRule(ctx *linter.Context, node *linter.Node) []linter.Finding {

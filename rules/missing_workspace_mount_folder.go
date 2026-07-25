@@ -13,18 +13,10 @@ import (
 var MissingWorkspaceMountFolder = &linter.Rule{
 	ID:          "missing-workspace-mount-folder",
 	Description: `disallow a devcontainer.json using "image" or "build" that sets only one of "workspaceMount" or "workspaceFolder"`,
-	LongDescription: `The two properties describe opposite ends of the same override: "workspaceMount" says where the source
-code is mounted, "workspaceFolder" says which path inside the container the tooling opens. The reference
-documents each as requiring the other, because setting one alone either mounts the source somewhere
-nothing opens, or opens a path nothing is mounted at.`,
-	References: []string{
-		"https://containers.dev/implementors/json_reference/#image-or-dockerfile-specific-properties",
-		"https://containers.dev/implementors/spec/#workspacefolder-and-workspacemount",
-	},
-	Category:  linter.CategoryCorrectness,
-	FileTypes: []linter.FileType{linter.Devcontainer},
-	Paths:     []string{""},
-	Check:     checkMissingWorkspaceMountFolder,
+	Category:    linter.CategoryCorrectness,
+	FileTypes:   []linter.FileType{linter.Devcontainer},
+	Paths:       []string{""},
+	Check:       checkMissingWorkspaceMountFolder,
 }
 
 func checkMissingWorkspaceMountFolder(_ *linter.Context, node *linter.Node) []linter.Finding {

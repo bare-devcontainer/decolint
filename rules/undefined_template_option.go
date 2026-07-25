@@ -16,18 +16,10 @@ import (
 var UndefinedTemplateOption = &linter.Rule{
 	ID:          "undefined-template-option",
 	Description: "disallow a `${templateOption:...}` reference to an option not declared in devcontainer-template.json",
-	LongDescription: `Applying a Template replaces each "${templateOption:name}" with the value the user chose for the option of
-that name. A reference to an option that "options" does not declare is never prompted for, and the
-reference implementation substitutes the empty string for it, so a typo silently produces an empty value
-in the applied files instead of an error.`,
-	References: []string{
-		"https://containers.dev/implementors/templates/#the-options-property",
-		"https://github.com/devcontainers/cli",
-	},
-	Category:  linter.CategoryCorrectness,
-	FileTypes: []linter.FileType{linter.Template},
-	Paths:     []string{""},
-	Check:     checkUndefinedTemplateOption,
+	Category:    linter.CategoryCorrectness,
+	FileTypes:   []linter.FileType{linter.Template},
+	Paths:       []string{""},
+	Check:       checkUndefinedTemplateOption,
 }
 
 func checkUndefinedTemplateOption(ctx *linter.Context, node *linter.Node) []linter.Finding {

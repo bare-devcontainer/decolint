@@ -11,18 +11,10 @@ import (
 var ConflictingContainerDef = &linter.Rule{
 	ID:          "conflicting-container-def",
 	Description: `disallow a devcontainer.json that defines more than one of "image", "build", or "dockerComposeFile"`,
-	LongDescription: `The specification defines three mutually exclusive ways to create the container: from an image, from a
-Dockerfile, or from a Docker Compose project. Which one wins when several are set is unspecified, so the
-container that gets built depends on the tool rather than on the configuration. Keep the variant the
-project actually uses and remove the others.`,
-	References: []string{
-		"https://containers.dev/implementors/spec/#orchestration-options",
-		"https://containers.dev/implementors/json_reference/#scenario-specific-properties",
-	},
-	Category:  linter.CategoryCorrectness,
-	FileTypes: []linter.FileType{linter.Devcontainer},
-	Paths:     []string{""},
-	Check:     checkConflictingContainerDef,
+	Category:    linter.CategoryCorrectness,
+	FileTypes:   []linter.FileType{linter.Devcontainer},
+	Paths:       []string{""},
+	Check:       checkConflictingContainerDef,
 }
 
 func checkConflictingContainerDef(_ *linter.Context, node *linter.Node) []linter.Finding {

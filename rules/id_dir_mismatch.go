@@ -12,18 +12,10 @@ import (
 var IDDirMismatch = &linter.Rule{
 	ID:          "id-dir-mismatch",
 	Description: `disallow a Feature's or Template's "id" that does not match the name of its containing directory`,
-	LongDescription: `Both specifications require the "id" to match the name of the directory holding the metadata file, since
-that directory name is what packaging and distribution address the artifact by. When the two disagree the
-published reference does not resolve to what the directory contains; rename the directory or the "id" so
-they agree.`,
-	References: []string{
-		"https://containers.dev/implementors/features/#devcontainer-featurejson-properties",
-		"https://containers.dev/implementors/templates/#devcontainer-templatejson-properties",
-	},
-	Category:  linter.CategoryCorrectness,
-	FileTypes: []linter.FileType{linter.Feature, linter.Template},
-	Paths:     []string{"/id"},
-	Check:     checkIDDirMismatch,
+	Category:    linter.CategoryCorrectness,
+	FileTypes:   []linter.FileType{linter.Feature, linter.Template},
+	Paths:       []string{"/id"},
+	Check:       checkIDDirMismatch,
 }
 
 func checkIDDirMismatch(ctx *linter.Context, node *linter.Node) []linter.Finding {

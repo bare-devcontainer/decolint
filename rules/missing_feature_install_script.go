@@ -16,17 +16,10 @@ const installScriptName = "install.sh"
 var MissingFeatureInstallScript = &linter.Rule{
 	ID:          "missing-feature-install-script",
 	Description: "disallow a Feature directory without the required `install.sh` install script",
-	LongDescription: `A Feature is distributed as its metadata file plus the "install.sh" the tooling runs inside the container,
-which is where the Feature does all of its work. A directory without one publishes a Feature that
-installs nothing, and the omission only surfaces when someone builds a container with it.`,
-	References: []string{
-		"https://containers.dev/implementors/features/#folder-structure",
-		"https://containers.dev/implementors/features/#invoking-installsh",
-	},
-	Category:  linter.CategoryCorrectness,
-	FileTypes: []linter.FileType{linter.Feature},
-	Paths:     []string{""},
-	Check:     checkMissingFeatureInstallScript,
+	Category:    linter.CategoryCorrectness,
+	FileTypes:   []linter.FileType{linter.Feature},
+	Paths:       []string{""},
+	Check:       checkMissingFeatureInstallScript,
 }
 
 func checkMissingFeatureInstallScript(ctx *linter.Context, node *linter.Node) []linter.Finding {

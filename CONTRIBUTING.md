@@ -34,12 +34,10 @@ and calls `Check` for every value matching one of the paths; a `*`
 segment matches any object member name or array index, and the empty
 string matches the document root.
 
-Besides the one-line `Description` of what it checks, every rule
-carries a `LongDescription` explaining why the configuration it
-reports is a problem, and at least one `References` URL pointing at
-the specification, documentation, or implementation that justifies it.
-Both are shown by `decolint -explain <rule-id>` and in the SARIF
-output, so write them for the user who just hit the finding.
+The rule itself carries only the one-line `Description` of what it
+checks; the reasoning and the examples live on the documentation site
+(see [Documenting a rule](#documenting-a-rule) below), which every
+finding links to.
 
 A rule's default severity is not set individually; it comes entirely
 from its category (see `categoryDefaultSeverities` in
@@ -53,15 +51,13 @@ package rules
 import "github.com/bare-devcontainer/decolint/linter"
 
 var MyRule = &linter.Rule{
-	ID:              "my-rule",
-	Description:     "...",
-	LongDescription: "...",
-	References:      []string{"https://containers.dev/implementors/json_reference/"},
-	Category:        linter.CategoryCorrectness,
-	FileTypes:       []linter.FileType{linter.Devcontainer},
-	Platforms:       nil, // applies to every platform
-	Paths:           []string{"/mounts/*"},
-	Check:           checkMyRule,
+	ID:          "my-rule",
+	Description: "...",
+	Category:    linter.CategoryCorrectness,
+	FileTypes:   []linter.FileType{linter.Devcontainer},
+	Platforms:   nil, // applies to every platform
+	Paths:       []string{"/mounts/*"},
+	Check:       checkMyRule,
 }
 
 func checkMyRule(ctx *linter.Context, node *linter.Node) []linter.Finding {
@@ -76,6 +72,68 @@ The existing rules in [`rules/`](rules/) are good references,
 including for the table-driven tests each rule ships with. When a new
 rule lands, also add a row for it to the table in
 [README.md](README.md#rules).
+
+## Documenting a rule
+
+Every rule has a page under [`docs/rules/`](docs/rules/), named after
+its ID, which is where the reasoning and the examples live. It is what
+`decolint -explain`, the SARIF output, and every code scanning alert
+link to, so write it for the user who just hit the finding.
+
+````markdown
+---
+title: my-rule
+category: correctness
+platforms: []
+file_types: [devcontainer]
+description: >-
+  disallow ...
+---
+
+*{{ page.description }}*
+
+## Why
+
+What goes wrong in the configuration this reports, and what to do
+instead.
+
+## Bad
+
+```jsonc
+{ ... }
+```
+
+## Good
+
+```jsonc
+{ ... }
+```
+
+## References
+
+- <https://containers.dev/implementors/json_reference/>
+````
+
+The front matter must match the rule's Go declaration, and the tests
+in [`rules/doc_test.go`](rules/doc_test.go) enforce it: they lint the
+Bad example and require it to report the rule, lint the Good example
+and require it to report nothing, and check that every rule has a page
+and every page at least one `https` reference.
+
+Two things to know when writing the examples:
+
+- An example needing more than one file names each with a
+  ``### `path` `` heading before its block; without one, a block is
+  linted as the rule's own file type. Set `example_dir` in the front
+  matter when the rule reads the name of the directory it is in.
+- An example whose Bad and Good differ in something other than file
+  contents — a permission bit, or a missing file — cannot be linted.
+  Write it in whatever form shows the difference, set
+  `example_verify: false`, and add the rule to `unverifiableExamples`
+  in the test.
+
+Add the new page to the table in
+[`docs/rules/index.md`](docs/rules/index.md) too.
 
 When implementing or reviewing rules, consult the Dev Container
 specification at [containers.dev](https://containers.dev/) to confirm

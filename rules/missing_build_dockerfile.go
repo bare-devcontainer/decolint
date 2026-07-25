@@ -10,17 +10,10 @@ import (
 var MissingBuildDockerfile = &linter.Rule{
 	ID:          "missing-build-dockerfile",
 	Description: `disallow a devcontainer.json "build" object that is missing "dockerfile"`,
-	LongDescription: `"build.dockerfile" is the only required member of "build": it locates, relative to the devcontainer.json,
-the Dockerfile the image is built from. The other members ("context", "args", "target", ...) only shape a
-build that "dockerfile" defines, so without it there is nothing to build.`,
-	References: []string{
-		"https://containers.dev/implementors/json_reference/#image-or-dockerfile-specific-properties",
-		"https://containers.dev/implementors/spec/#dockerfile-based",
-	},
-	Category:  linter.CategoryCorrectness,
-	FileTypes: []linter.FileType{linter.Devcontainer},
-	Paths:     []string{"/build"},
-	Check:     checkMissingBuildDockerfile,
+	Category:    linter.CategoryCorrectness,
+	FileTypes:   []linter.FileType{linter.Devcontainer},
+	Paths:       []string{"/build"},
+	Check:       checkMissingBuildDockerfile,
 }
 
 func checkMissingBuildDockerfile(_ *linter.Context, node *linter.Node) []linter.Finding {

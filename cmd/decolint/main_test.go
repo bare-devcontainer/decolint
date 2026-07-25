@@ -453,8 +453,7 @@ func TestRun_Flags(t *testing.T) {
 			// The rule targets Codespaces, so the platform it is scoped to is named rather than "(all)".
 			"codespaces",
 			rule.Description,
-			rule.LongDescription,
-			rule.References[0],
+			rules.DocsURL(rule.ID),
 		} {
 			if !strings.Contains(out, want) {
 				t.Errorf("stdout = %q, want it to contain %q", out, want)

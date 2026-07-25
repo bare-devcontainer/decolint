@@ -31,11 +31,10 @@ func TestSARIFRules(t *testing.T) {
 	}
 
 	want := format.SARIFRule{
-		ID:              reg.Rule.ID,
-		Description:     reg.Rule.Description,
-		LongDescription: reg.Rule.LongDescription,
-		References:      reg.Rule.References,
-		Category:        reg.Rule.Category.String(),
+		ID:          reg.Rule.ID,
+		Description: reg.Rule.Description,
+		Category:    reg.Rule.Category.String(),
+		HelpURI:     rules.DocsURL(reg.Rule.ID),
 	}
 	if diff := cmp.Diff(want, got); diff != "" {
 		t.Errorf("sarifRules() entry mismatch (-want +got):\n%s", diff)

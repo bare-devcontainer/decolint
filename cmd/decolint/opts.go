@@ -67,7 +67,7 @@ func parseOptions(args []string, output io.Writer) (Options, error) {
 	fs.BoolVar(&opts.Merge, "merge", false, "lint the merged (effective) configuration, including referenced Features and base image metadata; overrides the config file's \"merge\" member")
 	fs.BoolVar(&opts.Version, "version", false, "print version information and exit")
 	fs.BoolVar(&opts.ListRules, "rules", false, "print the built-in rules as a Markdown table (category, target platforms, current severity), then exit")
-	fs.StringVar(&opts.Explain, "explain", "", "print what the rule with this ID checks, why, and where it is documented, then exit")
+	fs.StringVar(&opts.Explain, "explain", "", "print what the rule with this ID checks and where it is documented, then exit")
 	fs.BoolVar(&opts.Init, "init", false, "write a new .decolint.jsonc config file listing every rule at its default severity, then exit")
 	fs.Usage = func() { _ = usage(fs) }
 	if err := fs.Parse(args); err != nil {

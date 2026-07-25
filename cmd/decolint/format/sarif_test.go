@@ -14,11 +14,10 @@ func testSARIFFormat() SARIFFormat {
 		Version: "1.2.3",
 		Rules: []SARIFRule{
 			{
-				ID:              "no-image-latest",
-				Description:     "images should be pinned to a specific version",
-				LongDescription: "An unpinned image can change between builds.",
-				References:      []string{"https://containers.dev/implementors/json_reference/"},
-				Category:        "reproducibility",
+				ID:          "no-image-latest",
+				Description: "images should be pinned to a specific version",
+				Category:    "reproducibility",
+				HelpURI:     "https://example.invalid/rules/no-image-latest/",
 			},
 		},
 	}
@@ -35,9 +34,9 @@ func TestSARIFWriteIssues(t *testing.T) {
 	want := `{"$schema":"https://json.schemastore.org/sarif-2.1.0.json","version":"2.1.0","runs":[` +
 		`{"tool":{"driver":{"name":"decolint","version":"1.2.3","informationUri":"https://github.com/bare-devcontainer/decolint","rules":[` +
 		`{"id":"no-image-latest","shortDescription":{"text":"images should be pinned to a specific version"},` +
-		`"fullDescription":{"text":"An unpinned image can change between builds."},` +
-		`"help":{"text":"An unpinned image can change between builds.\n\nReferences:\n- https://containers.dev/implementors/json_reference/",` +
-		`"markdown":"An unpinned image can change between builds.\n\n**References**\n\n- <https://containers.dev/implementors/json_reference/>"},` +
+		`"helpUri":"https://example.invalid/rules/no-image-latest/",` +
+		`"help":{"text":"Documentation: https://example.invalid/rules/no-image-latest/",` +
+		`"markdown":"[Rule documentation](https://example.invalid/rules/no-image-latest/)"},` +
 		`"properties":{"tags":["reproducibility"]}},` +
 		`{"id":"some-error-rule"}]}},"results":[` +
 		`{"ruleId":"no-image-latest","ruleIndex":0,"level":"warning","message":{"text":"image \"ubuntu:latest\" uses the \"latest\" tag; pin a specific version"},` +
@@ -130,8 +129,8 @@ func TestSARIFWriteIssues_Empty(t *testing.T) {
 	}
 }
 
-// TestSARIFWriteIssues_RuleHelp checks how a rule's rationale and references become the descriptor's
-// fullDescription and help, including that a rule documenting neither carries neither field.
+// TestSARIFWriteIssues_RuleHelp checks how a rule's documentation address becomes the descriptor's
+// helpUri and help, including that a rule with nowhere to link to carries neither field.
 func TestSARIFWriteIssues_RuleHelp(t *testing.T) {
 	t.Parallel()
 
@@ -142,32 +141,19 @@ func TestSARIFWriteIssues_RuleHelp(t *testing.T) {
 		wantOmitted []string
 	}{
 		{
-			name: "rationale and references",
-			rule: SARIFRule{
-				ID:              "some-error-rule",
-				LongDescription: "Why it matters.",
-				References:      []string{"https://example.invalid/a", "https://example.invalid/b"},
-			},
+			name: "documented rule",
+			rule: SARIFRule{ID: "some-error-rule", HelpURI: "https://example.invalid/rules/some-error-rule/"},
 			want: []string{
-				`"fullDescription":{"text":"Why it matters."}`,
-				`"help":{"text":"Why it matters.\n\nReferences:\n- https://example.invalid/a\n- https://example.invalid/b",` +
-					`"markdown":"Why it matters.\n\n**References**\n\n- <https://example.invalid/a>\n- <https://example.invalid/b>"}`,
+				`"helpUri":"https://example.invalid/rules/some-error-rule/"`,
+				`"help":{"text":"Documentation: https://example.invalid/rules/some-error-rule/",` +
+					`"markdown":"[Rule documentation](https://example.invalid/rules/some-error-rule/)"}`,
 			},
 		},
 		{
-			name: "rationale only",
-			rule: SARIFRule{ID: "some-error-rule", LongDescription: "Why it matters."},
-			want: []string{
-				`"fullDescription":{"text":"Why it matters."}`,
-				`"help":{"text":"Why it matters."}`,
-			},
-			wantOmitted: []string{`"markdown"`},
-		},
-		{
-			name:        "neither",
+			name:        "no documentation address",
 			rule:        SARIFRule{ID: "some-error-rule", Description: "short only"},
 			want:        []string{`"shortDescription":{"text":"short only"}`},
-			wantOmitted: []string{`"fullDescription"`, `"help"`},
+			wantOmitted: []string{`"helpUri"`, `"help"`},
 		},
 	}
 	for _, tt := range tests {

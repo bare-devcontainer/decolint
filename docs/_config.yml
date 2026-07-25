@@ -1,0 +1,27 @@
+title: decolint
+description: A linter for Dev Container configuration files.
+url: https://bare-devcontainer.github.io
+baseurl: /decolint
+theme: minima
+permalink: pretty
+
+plugins:
+  - jekyll-relative-links
+
+header_pages:
+  - getting-started.md
+  - rules/index.md
+
+minima:
+  skin: auto
+
+defaults:
+  - scope:
+      path: ""
+    values:
+      layout: page
+
+exclude:
+  - Gemfile
+  - Gemfile.lock
+  - vendor

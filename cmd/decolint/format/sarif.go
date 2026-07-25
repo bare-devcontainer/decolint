@@ -17,11 +17,11 @@ import (
 // SARIFRule describes one rule for the SARIF rule catalog. It mirrors the [linter.Rule] fields the
 // SARIF output needs, so this package does not depend on the rules package.
 type SARIFRule struct {
-	ID              string
-	Description     string
-	LongDescription string
-	References      []string
-	Category        string
+	ID          string
+	Description string
+	Category    string
+	// HelpURI is where the rule is documented in full.
+	HelpURI string
 }
 
 // SARIFFormat prints a SARIF 2.1.0 log, suitable for upload to GitHub Code Scanning.
@@ -66,7 +66,7 @@ type sarifDriver struct {
 type sarifRuleDescriptor struct {
 	ID               string                  `json:"id"`
 	ShortDescription sarifMessage            `json:"shortDescription,omitzero"`
-	FullDescription  sarifMessage            `json:"fullDescription,omitzero"`
+	HelpURI          string                  `json:"helpUri,omitzero"`
 	Help             sarifMultiformatMessage `json:"help,omitzero"`
 	Properties       sarifProperties         `json:"properties,omitzero"`
 }
@@ -138,7 +138,7 @@ func (f SARIFFormat) WriteIssues(w io.Writer, issues []linter.Issue) error {
 		desc := sarifRuleDescriptor{ID: id}
 		if r, ok := catalog[id]; ok {
 			desc.ShortDescription = sarifMessage{Text: r.Description}
-			desc.FullDescription = sarifMessage{Text: r.LongDescription}
+			desc.HelpURI = r.HelpURI
 			desc.Help = sarifHelpFor(r)
 			desc.Properties = sarifProperties{Tags: []string{r.Category}}
 		}
@@ -192,37 +192,18 @@ func (f SARIFFormat) WriteIssues(w io.Writer, issues []linter.Issue) error {
 	return nil
 }
 
-// sarifHelpFor returns the rule's rationale and reference links as SARIF help, the text a viewer
-// shows when a reader asks why an alert was raised. It is the zero value, and so omitted, for a rule
-// that documents neither.
+// sarifHelpFor returns a link to the rule's documentation as SARIF help, the text a viewer shows
+// when a reader asks why an alert was raised. GitHub Code Scanning renders the Markdown form on the
+// alert but does not surface helpUri, so the link has to be in the message to be reachable. It is
+// the zero value, and so omitted, for a rule with nowhere to link to.
 func sarifHelpFor(r SARIFRule) sarifMultiformatMessage {
-	if len(r.References) == 0 {
-		// Prose alone renders the same either way, so there is no Markdown rendering to add.
-		return sarifMultiformatMessage{Text: r.LongDescription}
-	}
-	var plain, md strings.Builder
-	plain.WriteString("References:")
-	md.WriteString("**References**\n")
-	for _, ref := range r.References {
-		plain.WriteString("\n- " + ref)
-		// Angle brackets make the URL a link even where it contains Markdown punctuation.
-		md.WriteString("\n- <" + ref + ">")
+	if r.HelpURI == "" {
+		return sarifMultiformatMessage{}
 	}
 	return sarifMultiformatMessage{
-		Text:     joinParagraphs(r.LongDescription, plain.String()),
-		Markdown: joinParagraphs(r.LongDescription, md.String()),
+		Text:     "Documentation: " + r.HelpURI,
+		Markdown: "[Rule documentation](" + r.HelpURI + ")",
 	}
-}
-
-// joinParagraphs joins the non-empty sections with a blank line between them.
-func joinParagraphs(sections ...string) string {
-	kept := make([]string, 0, len(sections))
-	for _, s := range sections {
-		if s != "" {
-			kept = append(kept, s)
-		}
-	}
-	return strings.Join(kept, "\n\n")
 }
 
 // artifactURIFor returns the SARIF location of the file at path, which must be a URI rather than a

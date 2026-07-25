@@ -177,9 +177,10 @@ func platformNames(platforms []linter.Platform, sep string) string {
 	return strings.Join(names, sep)
 }
 
-// explainRule writes everything decolint documents about the rule with the given ID to output: what
-// it checks, why, and the references that justify it. It returns an error if no built-in rule has
-// that ID. The rule's severity is left to [listRules], which reports it for every rule at once.
+// explainRule writes what decolint knows about the rule with the given ID to output: what it
+// checks, the platforms it applies to, and where it is documented in full. It returns an error if
+// no built-in rule has that ID. The rule's severity is left to [listRules], which reports it for
+// every rule at once.
 func explainRule(output io.Writer, id string) error {
 	builtin := rules.Builtin()
 	i := slices.IndexFunc(builtin, func(reg rules.Registration) bool { return reg.Rule.ID == id })
@@ -191,14 +192,7 @@ func explainRule(output io.Writer, id string) error {
 	sections := []string{
 		fmt.Sprintf("%s (%s)\nPlatform: %s", rule.ID, rule.Category, platformNames(rule.Platforms, ", ")),
 		rule.Description,
-		rule.LongDescription,
-	}
-	if len(rule.References) > 0 {
-		refs := "References:"
-		for _, ref := range rule.References {
-			refs += "\n  " + ref
-		}
-		sections = append(sections, refs)
+		"Documentation: " + rules.DocsURL(rule.ID),
 	}
 	if _, err := fmt.Fprintln(output, strings.Join(sections, "\n\n")); err != nil {
 		return fmt.Errorf("write rule documentation: %w", err)

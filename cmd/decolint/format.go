@@ -40,11 +40,10 @@ func sarifRules() []format.SARIFRule {
 	out := make([]format.SARIFRule, len(regs))
 	for i, reg := range regs {
 		out[i] = format.SARIFRule{
-			ID:              reg.Rule.ID,
-			Description:     reg.Rule.Description,
-			LongDescription: reg.Rule.LongDescription,
-			References:      reg.Rule.References,
-			Category:        reg.Rule.Category.String(),
+			ID:          reg.Rule.ID,
+			Description: reg.Rule.Description,
+			Category:    reg.Rule.Category.String(),
+			HelpURI:     rules.DocsURL(reg.Rule.ID),
 		}
 	}
 	return out

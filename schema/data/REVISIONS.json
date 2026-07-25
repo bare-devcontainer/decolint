@@ -1,11 +1,11 @@
 {
   "spec": "c95ffeed1d059abfe9ffbe79762dc2fa4e7c2421",
-  "vscode": "d19517fec1fb7b0dbb06d495b07ceca41f98d73d",
+  "vscode": "dd862885ff5fbd279747c793e18105e6b7ddc805",
   "sources": {
     "devContainer.base.schema.json": "https://raw.githubusercontent.com/devcontainers/spec/c95ffeed1d059abfe9ffbe79762dc2fa4e7c2421/schemas/devContainer.base.schema.json",
+    "devContainer.codespaces.schema.json": "https://raw.githubusercontent.com/microsoft/vscode/dd862885ff5fbd279747c793e18105e6b7ddc805/extensions/configuration-editing/schemas/devContainer.codespaces.schema.json",
     "devContainer.schema.json": "https://raw.githubusercontent.com/devcontainers/spec/c95ffeed1d059abfe9ffbe79762dc2fa4e7c2421/schemas/devContainer.schema.json",
-    "devContainerFeature.schema.json": "https://raw.githubusercontent.com/devcontainers/spec/c95ffeed1d059abfe9ffbe79762dc2fa4e7c2421/schemas/devContainerFeature.schema.json",
-    "devContainer.codespaces.schema.json": "https://raw.githubusercontent.com/microsoft/vscode/d19517fec1fb7b0dbb06d495b07ceca41f98d73d/extensions/configuration-editing/schemas/devContainer.codespaces.schema.json",
-    "devContainer.vscode.schema.json": "https://raw.githubusercontent.com/microsoft/vscode/d19517fec1fb7b0dbb06d495b07ceca41f98d73d/extensions/configuration-editing/schemas/devContainer.vscode.schema.json"
+    "devContainer.vscode.schema.json": "https://raw.githubusercontent.com/microsoft/vscode/dd862885ff5fbd279747c793e18105e6b7ddc805/extensions/configuration-editing/schemas/devContainer.vscode.schema.json",
+    "devContainerFeature.schema.json": "https://raw.githubusercontent.com/devcontainers/spec/c95ffeed1d059abfe9ffbe79762dc2fa4e7c2421/schemas/devContainerFeature.schema.json"
   }
 }

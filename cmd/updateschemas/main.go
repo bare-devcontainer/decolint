@@ -1,14 +1,15 @@
 // Command updateschemas refreshes the vendored Dev Container schemas in schema/data from upstream.
 //
-// It resolves the current tip of devcontainers/spec@main and microsoft/vscode@main, downloads the
-// schema files at those commits, and rewrites schema/data/*.json and schema/data/REVISIONS.json. The
-// schema-sync workflow runs it and fails when the result differs from what is committed, signalling
-// that the vendored copies are stale.
+// It resolves the current tip of devcontainers/spec@main and microsoft/vscode@main and downloads the
+// schema files at those commits. When none of them differs from what is vendored it writes nothing;
+// otherwise it rewrites schema/data/*.json and schema/data/REVISIONS.json. The schema-sync workflow
+// runs it and opens a pull request when the working tree comes back dirty.
 //
 // Run it from the repository root: go run ./cmd/updateschemas.
 package main
 
 import (
+	"bytes"
 	"encoding/json/jsontext"
 	"encoding/json/v2"
 	"fmt"
@@ -69,16 +70,38 @@ func run() error {
 	sha := map[string]string{"spec": specSHA, "vscode": vscodeSHA}
 
 	rev := revisions{Spec: specSHA, VSCode: vscodeSHA, Sources: map[string]string{}}
+	fetched := make(map[string][]byte, len(files))
+	changed := false
 	for _, f := range files {
 		url := rawURL(f.repo, sha[f.repo], f.upPath)
 		body, err := download(url)
 		if err != nil {
 			return err
 		}
-		if err := os.WriteFile(filepath.Join(dataDir, f.name), body, 0o644); err != nil {
+		current, err := os.ReadFile(filepath.Join(dataDir, f.name))
+		if err != nil && !os.IsNotExist(err) {
+			return fmt.Errorf("read %s: %w", f.name, err)
+		}
+		if !bytes.Equal(current, body) {
+			changed = true
+		}
+		fetched[f.name] = body
+		rev.Sources[f.name] = url
+	}
+
+	// Both upstreams receive commits that leave the schemas untouched — microsoft/vscode many times
+	// a day — so recording every new commit would rewrite REVISIONS.json on almost every run and
+	// have the sync workflow raise a pull request that changes no schema. Nothing is written unless
+	// a schema itself differs; the recorded commits then still name where the current contents came
+	// from.
+	if !changed {
+		return nil
+	}
+
+	for _, f := range files {
+		if err := os.WriteFile(filepath.Join(dataDir, f.name), fetched[f.name], 0o644); err != nil {
 			return fmt.Errorf("write %s: %w", f.name, err)
 		}
-		rev.Sources[f.name] = url
 	}
 	return writeRevisions(dataDir, rev)
 }
@@ -125,9 +148,10 @@ func download(url string) ([]byte, error) {
 }
 
 // writeRevisions writes rev to REVISIONS.json under dir with two-space indentation and a trailing
-// newline, matching the committed format.
+// newline, matching the committed format. The sources are marshaled deterministically: map order is
+// otherwise unspecified, which would reorder the file on every run and make it look changed.
 func writeRevisions(dir string, rev revisions) error {
-	b, err := json.Marshal(rev, jsontext.Multiline(true), jsontext.WithIndent("  "))
+	b, err := json.Marshal(rev, jsontext.Multiline(true), jsontext.WithIndent("  "), json.Deterministic(true))
 	if err != nil {
 		return fmt.Errorf("marshal revisions: %w", err)
 	}

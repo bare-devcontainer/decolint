@@ -14,6 +14,14 @@ make lint    # golangci-lint
 make run ARGS="-format=json path/to/dir"
 ```
 
+The documentation site in [`docs/`](docs/) is built with
+[Hugo](https://gohugo.io/), pinned to the version the Makefile names:
+
+```console
+make site         # build into docs/public
+make site-serve   # serve with live reload
+```
+
 ## Adding a rule
 
 Rules are plain Go code. Declare a
@@ -75,10 +83,11 @@ rule lands, also add a row for it to the table in
 
 ## Documenting a rule
 
-Every rule has a page under [`docs/rules/`](docs/rules/), named after
-its ID, which is where the reasoning and the examples live. It is what
-`decolint -explain`, the SARIF output, and every code scanning alert
-link to, so write it for the user who just hit the finding.
+Every rule has a page under [`docs/content/rules/`](docs/content/rules/),
+named after its ID, which is where the reasoning and the examples live.
+It is what `decolint -explain`, the SARIF output, and every code
+scanning alert link to, so write it for the user who just hit the
+finding.
 
 ````markdown
 ---
@@ -89,8 +98,6 @@ file_types: [devcontainer]
 description: >-
   disallow ...
 ---
-
-*{{ page.description }}*
 
 ## Why
 
@@ -132,8 +139,10 @@ Two things to know when writing the examples:
   `example_verify: false`, and add the rule to `unverifiableExamples`
   in the test.
 
-Add the new page to the table in
-[`docs/rules/index.md`](docs/rules/index.md) too.
+The rule index and the sidebar are built from the pages themselves, so
+there is no list to update by hand. Preview the site with `make
+site-serve`, which needs [Hugo](https://gohugo.io/) at the version the
+[Makefile](Makefile) names.
 
 When implementing or reviewing rules, consult the Dev Container
 specification at [containers.dev](https://containers.dev/) to confirm

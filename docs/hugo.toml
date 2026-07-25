@@ -1,0 +1,45 @@
+baseURL = "https://bare-devcontainer.github.io/decolint/"
+title = "decolint"
+locale = "en-us"
+enableRobotsTXT = true
+
+# A rule reference has no feed, tags or categories pages; the only taxonomy is the category each
+# rule already carries in its front matter, which the rules section renders itself.
+disableKinds = ["taxonomy", "term", "RSS"]
+
+# Findings link to a rule's page by an address derived from its ID (see rules.DocsURL), so the
+# published paths have to stay /rules/<rule-id>/.
+[permalinks]
+  rules = "/rules/:slug/"
+
+[params]
+  description = "A linter for Dev Container configuration files."
+  repository = "https://github.com/bare-devcontainer/decolint"
+
+[markup.highlight]
+  # Emit token classes rather than inline styles, so the colours live in the site's own stylesheet
+  # and follow the reader's light or dark preference.
+  noClasses = false
+
+# Resolve links written as relative Markdown paths, e.g. [Rules](rules/no-app-port.md), to the
+# published address of the page. Pages then read correctly both on the site and on GitHub.
+[markup.goldmark.renderHooks.link]
+  useEmbedded = "fallback"
+
+[markup.goldmark.renderer]
+  # Rule pages are written by contributors and rendered as-is; nothing needs raw HTML.
+  unsafe = false
+
+[markup.tableOfContents]
+  startLevel = 2
+  endLevel = 2
+
+[[menus.main]]
+  name = "Getting started"
+  pageRef = "/getting-started"
+  weight = 10
+
+[[menus.main]]
+  name = "Rules"
+  pageRef = "/rules"
+  weight = 20

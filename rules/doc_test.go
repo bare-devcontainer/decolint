@@ -21,7 +21,7 @@ import (
 // behavior the rule does not have.
 
 // docsDir holds the rule reference, one Markdown page per rule ID, relative to this package.
-const docsDir = "../docs/rules"
+const docsDir = "../docs/content/rules"
 
 // docsFileNames maps a file type to the name a page's examples are linted under, which is the name
 // the specification gives that kind of configuration file.
@@ -197,7 +197,8 @@ func readDocsPages(t *testing.T) map[string]docsPage {
 	pages := make(map[string]docsPage, len(entries))
 	for _, e := range entries {
 		name := e.Name()
-		if e.IsDir() || filepath.Ext(name) != ".md" || name == "index.md" {
+		// A leading underscore marks the section's own list page, not a rule.
+		if e.IsDir() || filepath.Ext(name) != ".md" || strings.HasPrefix(name, "_") {
 			continue
 		}
 		src, err := os.ReadFile(filepath.Join(docsDir, name))

@@ -19,6 +19,9 @@ profile.cov
 
 # Build output
 /bin/
+/docs/public/
+/docs/resources/
+/docs/.hugo_build.lock
 
 # Go workspace file
 go.work

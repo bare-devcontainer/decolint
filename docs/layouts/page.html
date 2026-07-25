@@ -1,0 +1,19 @@
+{{ define "main" }}
+  <article>
+    <h1>{{ .Title }}</h1>
+    {{/* A rule page states what the rule checks, and how it is scoped, from its front matter; the
+    body picks up at the reasoning. */}}
+    {{ if eq .Section "rules" }}
+      <p class="rule-summary">{{ .RenderString .Description }}</p>
+      <dl class="rule-meta">
+        <dt>Category</dt>
+        <dd><code>{{ .Params.category }}</code></dd>
+        <dt>Applies to</dt>
+        <dd>{{ delimit .Params.file_types ", " }}</dd>
+        <dt>Platforms</dt>
+        <dd>{{ with .Params.platforms }}{{ delimit . ", " }}{{ else }}all{{ end }}</dd>
+      </dl>
+    {{ end }}
+    {{ .Content }}
+  </article>
+{{ end }}

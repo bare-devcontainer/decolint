@@ -7,10 +7,12 @@ on:
     branches: [main]
     paths:
       - docs/**
+      - Makefile
       - .github/workflows/pages.yml
   pull_request:
     paths:
       - docs/**
+      - Makefile
       - .github/workflows/pages.yml
   workflow_dispatch:
 
@@ -22,6 +24,12 @@ concurrency:
   group: pages
   cancel-in-progress: false
 
+env:
+  # renovate: datasource=github-releases depName=gohugoio/hugo
+  HUGO_VERSION: 0.164.0
+  # sha256 of hugo_${HUGO_VERSION}_linux-amd64.tar.gz, from the release's checksums.txt.
+  HUGO_SHA256: d9c8b17285ea4ec004d9f814273ea910f2051ce02c284993fd1f91ba455ae50d
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -31,13 +39,23 @@ jobs:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           persist-credentials: false
-      # The site's url and baseurl are set in docs/_config.yml rather than taken from the Pages API,
-      # so the build needs no repository settings and runs the same on a fork.
-      - uses: actions/jekyll-build-pages@44a6e6beabd48582f863aeeb6cb2151cc1716697 # v1.0.13
-        with:
-          source: ./docs
-          destination: ./_site
+
+      # Installed from the release archive, pinned by checksum, rather than through a third-party
+      # action: one fewer action to trust, and the version is the one the Makefile names.
+      - name: Install Hugo
+        run: |
+          url="https://github.com/gohugoio/hugo/releases/download/v${HUGO_VERSION}/hugo_${HUGO_VERSION}_linux-amd64.tar.gz"
+          curl --fail --silent --show-error --location --output hugo.tar.gz "$url"
+          echo "${HUGO_SHA256}  hugo.tar.gz" | sha256sum --check --strict
+          mkdir -p "$RUNNER_TEMP/hugo"
+          tar -xzf hugo.tar.gz -C "$RUNNER_TEMP/hugo" hugo
+          echo "$RUNNER_TEMP/hugo" >> "$GITHUB_PATH"
+
+      - run: make site
+
       - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
+        with:
+          path: docs/public
 
   deploy:
     needs: build

@@ -33,7 +33,9 @@ func TestSARIFWriteIssues(t *testing.T) {
 	want := `{"$schema":"https://json.schemastore.org/sarif-2.1.0.json","version":"2.1.0","runs":[` +
 		`{"tool":{"driver":{"name":"decolint","version":"1.2.3","informationUri":"https://github.com/bare-devcontainer/decolint","rules":[` +
 		`{"id":"no-image-latest","shortDescription":{"text":"images should be pinned to a specific version"},"properties":{"tags":["reproducibility"]}},` +
-		`{"id":"some-error-rule"}]}},"results":[` +
+		`{"id":"some-error-rule"}]}},` +
+		`"originalUriBaseIds":{"%SRCROOT%":{"description":{"text":"The directory decolint ran in, which the reported paths are relative to."}}},` +
+		`"results":[` +
 		`{"ruleId":"no-image-latest","ruleIndex":0,"level":"warning","message":{"text":"image \"ubuntu:latest\" uses the \"latest\" tag; pin a specific version"},` +
 		`"locations":[{"physicalLocation":{"artifactLocation":{"uri":".devcontainer/devcontainer.json","uriBaseId":"%SRCROOT%"},"region":{"startLine":4,"startColumn":12}}}]},` +
 		`{"ruleId":"some-error-rule","ruleIndex":1,"level":"error","message":{"text":"something is broken"},` +
@@ -80,13 +82,14 @@ func TestSARIFWriteIssues_ArtifactLocation(t *testing.T) {
 		}
 
 		// The URI's own path varies with the host, so only its form is asserted: a file URI with an
-		// empty authority, and no base id to resolve it against.
+		// empty authority, and no base id to resolve it against. The run still declares the base id,
+		// so the absence is asserted on the member rather than on the name.
 		out := sb.String()
 		if !strings.Contains(out, `"artifactLocation":{"uri":"file:///`) {
 			t.Errorf("WriteIssues sarif = %q, want an absolute file URI", out)
 		}
-		if strings.Contains(out, srcRootBaseID) {
-			t.Errorf("WriteIssues sarif = %q, want no %s for an absolute path", out, srcRootBaseID)
+		if strings.Contains(out, `"uriBaseId"`) {
+			t.Errorf("WriteIssues sarif = %q, want no base id for an absolute path", out)
 		}
 	})
 }
@@ -100,7 +103,9 @@ func TestSARIFWriteIssues_Empty(t *testing.T) {
 	}
 
 	want := `{"$schema":"https://json.schemastore.org/sarif-2.1.0.json","version":"2.1.0","runs":[` +
-		`{"tool":{"driver":{"name":"decolint","version":"1.2.3","informationUri":"https://github.com/bare-devcontainer/decolint","rules":[]}},"results":[]}]}` +
+		`{"tool":{"driver":{"name":"decolint","version":"1.2.3","informationUri":"https://github.com/bare-devcontainer/decolint","rules":[]}},` +
+		`"originalUriBaseIds":{"%SRCROOT%":{"description":{"text":"The directory decolint ran in, which the reported paths are relative to."}}},` +
+		`"results":[]}]}` +
 		"\n"
 	if sb.String() != want {
 		t.Errorf("WriteIssues sarif (empty) = %q, want %q", sb.String(), want)

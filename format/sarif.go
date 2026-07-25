@@ -34,8 +34,9 @@ const (
 	sarifSchemaURI = "https://json.schemastore.org/sarif-2.1.0.json"
 	sarifVersion   = "2.1.0"
 	informationURI = "https://github.com/bare-devcontainer/decolint"
-	// srcRootBaseID is the SARIF base id a relative path is reported against. An upload resolves it
-	// to the root of the analyzed checkout.
+	// srcRootBaseID is the SARIF base id a relative path is reported against. It is declared in the
+	// run but left unresolved (see sarifURIBase); a Code Scanning upload resolves it to the root of
+	// the analyzed checkout.
 	srcRootBaseID = "%SRCROOT%"
 )
 
@@ -49,8 +50,16 @@ type sarifLog struct {
 }
 
 type sarifRun struct {
-	Tool    sarifTool     `json:"tool"`
-	Results []sarifResult `json:"results"`
+	Tool               sarifTool               `json:"tool"`
+	OriginalURIBaseIDs map[string]sarifURIBase `json:"originalUriBaseIds"`
+	Results            []sarifResult           `json:"results"`
+}
+
+// sarifURIBase declares a base id without resolving it. A base id may carry the absolute URI it
+// stands for, but decolint does not know where its working directory sits in the analyzed project,
+// so it leaves the value to the consumer, which does.
+type sarifURIBase struct {
+	Description sarifMessage `json:"description"`
 }
 
 type sarifTool struct {
@@ -166,6 +175,9 @@ func (f SARIFFormat) WriteIssues(w io.Writer, issues []linter.Issue) error {
 				Version:        f.Version,
 				InformationURI: informationURI,
 				Rules:          descriptors,
+			}},
+			OriginalURIBaseIDs: map[string]sarifURIBase{srcRootBaseID: {
+				Description: sarifMessage{Text: "The directory decolint ran in, which the reported paths are relative to."},
 			}},
 			Results: results,
 		}},

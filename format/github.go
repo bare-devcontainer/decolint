@@ -13,7 +13,7 @@ import (
 type GitHubFormat struct{}
 
 // WriteIssues writes issues to w as GitHub Actions workflow commands. Paths are written with "/"
-// separators, which is what GitHub matches an annotation against on every runner.
+// separators, which is what GitHub matches an annotation against.
 func (GitHubFormat) WriteIssues(w io.Writer, issues []linter.Issue) error {
 	for _, issue := range issues {
 		command := "error"

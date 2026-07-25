@@ -268,9 +268,8 @@ func TestRun(t *testing.T) {
 }
 
 // TestRun_IDDirMismatchNamesTheDirectory checks that id-dir-mismatch judges a Feature by the
-// directory it sits in rather than by how that directory was named on the command line. Naming it
-// from inside, which is what the default lint target does, leaves the reported path with no
-// directory component, and the rule must still name the directory the Feature is in.
+// directory it sits in rather than by how that directory was named on the command line. The default
+// lint target names it from inside, leaving the reported path with no directory component.
 func TestRun_IDDirMismatchNamesTheDirectory(t *testing.T) {
 	// Uses t.Chdir, which cannot be combined with t.Parallel.
 
@@ -314,8 +313,8 @@ func TestRun_IDDirMismatchNamesTheDirectory(t *testing.T) {
 }
 
 // TestRun_ReportedPathsAreWorkingDirectoryRelative checks that findings name files the same way
-// however the lint target was named, and that a target outside the working directory — which has no
-// relative form to name it by — is named absolutely.
+// however the lint target was named, and that a target outside the working directory is named
+// absolutely.
 func TestRun_ReportedPathsAreWorkingDirectoryRelative(t *testing.T) {
 	// Uses t.Chdir, which cannot be combined with t.Parallel.
 
@@ -805,7 +804,6 @@ func TestRun_Init(t *testing.T) {
 func TestRunLint_DeduplicatesTargets(t *testing.T) {
 	t.Parallel()
 
-	// The same directory named twice must be linted once, so its findings are reported once.
 	dir := writeDevcontainer(t, `{"image": "ubuntu:latest"}`)
 	cfg := Config{
 		Format: "json",
@@ -1579,8 +1577,7 @@ func TestAbsPathString(t *testing.T) {
 func TestAbsPathString_NoWorkingDirectory(t *testing.T) {
 	// Uses t.Chdir, which cannot be combined with t.Parallel.
 
-	// With the working directory gone there is nothing to render against, so the path stays absolute
-	// rather than being dropped from the message it appears in.
+	// With the working directory gone there is nothing to render against, so the path stays absolute.
 	dir := t.TempDir()
 	t.Chdir(dir)
 	if err := os.Remove(dir); err != nil {

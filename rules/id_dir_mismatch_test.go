@@ -10,9 +10,9 @@ import (
 func TestIDDirMismatch(t *testing.T) {
 	t.Parallel()
 
-	// The reported path and the containing directory's name are supplied separately, as the linter
-	// supplies them: the path is only how the file is named in output, and carries no directory
-	// component of its own when the lint target is the directory the file sits in.
+	// The reported path and the directory's name are supplied separately, as the linter supplies
+	// them: the path is only how the file is named in output (see [linter.Context.Path]), so the
+	// cases below vary the two independently.
 	const featurePath = "my-feature/devcontainer-feature.json"
 	const templatePath = "my-template/devcontainer-template.json"
 

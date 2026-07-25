@@ -311,13 +311,13 @@ type mergeFn func(ctx context.Context, f discovery.ConfigFile, doc *linter.Docum
 type substituteFn func(workspaceFolder string, doc *linter.Document)
 
 // absPath is the location of a file or directory, always absolute so that it means the same thing
-// however the lint target was named on the command line. Printing it renders it for the reader; see
-// [absPath.String].
+// however the lint target was named on the command line. Printing it does not yield that absolute
+// form; see [absPath.String].
 type absPath string
 
 // String renders p the way findings and error messages name it: relative to the working directory
-// when it is inside it, absolute otherwise. A path outside the working directory has no relative
-// form worth reading, and neither has one when the working directory cannot be determined.
+// when it is inside it, absolute otherwise — a path reached by climbing out of the working directory
+// reads no better than its own location.
 func (p absPath) String() string {
 	wd, err := os.Getwd()
 	if err != nil {
@@ -331,18 +331,17 @@ func (p absPath) String() string {
 }
 
 // lintPath lints the devcontainer directory dir. It is opened as an os.Root, so every file the lint
-// reads is confined to it, and because dir is absolute so is every path derived from it. It is an
-// error if dir is not a directory.
+// reads is confined to it; because dir is absolute, so is every path derived from it. It is an error
+// if dir is not a directory.
 func lintPath(ctx context.Context, l *linter.Linter, subst substituteFn, merge mergeFn, dir absPath) ([]linter.Issue, error) {
 	root, err := os.OpenRoot(string(dir))
 	if err != nil {
-		// Pointing decolint straight at a devcontainer.json is a natural mistake; the open error
-		// alone ("not a directory") does not say what to pass instead.
+		// Pointing decolint straight at a devcontainer.json is a natural mistake, and "not a
+		// directory" alone does not say what to pass instead.
 		if info, statErr := os.Stat(string(dir)); statErr == nil && !info.IsDir() {
 			return nil, fmt.Errorf("%s is not a directory; pass the directory that contains the devcontainer configuration", dir)
 		}
-		// The wrapped error names the path itself, so repeating it here would only make the message
-		// longer.
+		// os.OpenRoot's error already names the path.
 		return nil, fmt.Errorf("lint directory: %w", err)
 	}
 	// The root is only read from, so a close error is inconsequential.
@@ -421,8 +420,8 @@ func lintFile(ctx context.Context, l *linter.Linter, subst substituteFn, merge m
 	if err != nil {
 		return nil, fmt.Errorf("open config dir %s: %w", location, err)
 	}
-	// The directory's name is taken from the file's own location, which names it whatever the lint
-	// target was called; the reported path does not, being relative to the working directory.
+	// The reported path can be relative to the containing directory itself, naming no directory at
+	// all, so the name comes from the absolute location.
 	name := filepath.Base(filepath.Dir(string(location)))
 	return l.LintDocument(location.String(), f.Type, doc, linter.Dir{FS: sub, Name: name}), nil
 }

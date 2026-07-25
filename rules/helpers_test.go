@@ -48,9 +48,8 @@ func assertIssuesAt(t *testing.T, r *linter.Rule, severity linter.Severity, path
 }
 
 // assertIssuesInDir is like assertIssuesAt but lets the caller supply the directory the file is
-// linted in (see [linter.Dir]), so rules that inspect sibling files can be exercised against a fake
-// filesystem (e.g. a [testing/fstest.MapFS]) and rules that read the directory's name against a
-// name of the caller's choosing.
+// linted in (see [linter.Dir]): a fake filesystem (e.g. a [testing/fstest.MapFS]) for rules that
+// inspect sibling files, and a directory name for rules that read it.
 func assertIssuesInDir(t *testing.T, r *linter.Rule, severity linter.Severity, path string, fileType linter.FileType, src string, dir linter.Dir, want []linter.Issue) {
 	t.Helper()
 

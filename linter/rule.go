@@ -138,9 +138,9 @@ func ParseCategory(name string) (Category, error) {
 
 // Context carries everything a rule needs to inspect a single configuration file.
 type Context struct {
-	// Path is the path of the file being linted. It is meant for reporting: its spelling follows
-	// whatever the caller named the file, so a rule must not read anything into its shape (see
-	// [Dir] for the containing directory).
+	// Path is the path of the file being linted, for reporting only: it is spelled however the
+	// caller named the file, so a rule must not read anything into its shape. Use [Dir] for the
+	// containing directory.
 	Path string
 	// Type is the kind of configuration file being linted.
 	Type FileType
@@ -157,9 +157,8 @@ type Dir struct {
 	// FS gives read access to the directory's contents, confined to the lint root. It is nil when
 	// the caller has no backing filesystem, e.g. an in-memory document.
 	FS fs.FS
-	// Name is the directory's own name, resolved from where the directory actually is. It is not
-	// derived from [Context.Path], which carries no name of its own when the caller names the file
-	// relative to the directory itself. It is empty when the caller has no directory to name.
+	// Name is the directory's own name, taken from where the directory actually is rather than from
+	// [Context.Path]. It is empty when the caller has no directory to name.
 	Name string
 }
 

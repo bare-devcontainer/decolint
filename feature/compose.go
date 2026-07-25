@@ -43,9 +43,8 @@ func composeContributors(ctx context.Context, f *Fetcher, fsRoot *os.Root, confi
 		return nil, true, nil
 	}
 	// The Compose files resolve relative to the referencing devcontainer.json's directory on the real
-	// filesystem, as "docker compose" itself would. The directory is resolved to an absolute path so
-	// that compose-go resolves the build context to one too (see composeBuildMetadata), which the
-	// display of a Dockerfile reached through it depends on (see composeDisplayRef).
+	// filesystem, as "docker compose" itself would. The directory is made absolute so that compose-go
+	// resolves the build context to an absolute path too, which composeDisplayRef relies on.
 	baseDir, err := filepath.Abs(filepath.Join(fsRoot.Name(), configDir))
 	if err != nil {
 		return nil, true, fmt.Errorf("resolve %s: %w", configDir, err)
@@ -231,9 +230,9 @@ func composeBuildMetadata(ctx context.Context, f *Fetcher, baseDir, firstCompose
 // when it lies within it, and absolute otherwise (a build context reached through "extends" or a
 // "../" Compose file may sit outside it).
 //
-// The configuration directory, rather than the working directory decolint reports findings against,
-// is what this is relative to: the reference identifies a contributor within the merged
-// configuration (see [contributor.displayID]), so it must not depend on where decolint was run from.
+// It is deliberately not relative to the working directory: the reference identifies a contributor
+// within the merged configuration (see [contributor.displayID]), so it must not depend on where
+// decolint ran.
 func composeDisplayRef(baseDir, path string) string {
 	if rel, err := filepath.Rel(baseDir, path); err == nil && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
 		return rel

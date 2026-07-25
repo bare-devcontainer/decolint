@@ -225,7 +225,7 @@ func TestParseOptions_Paths(t *testing.T) {
 	t.Parallel()
 
 	// Arguments are taken as given; resolving and deduplicating them is runLint's job (see
-	// TestResolvePaths).
+	// TestRunLint_DeduplicatesTargets).
 	tests := []struct {
 		name string
 		args []string

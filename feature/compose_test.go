@@ -343,16 +343,15 @@ func TestMerge_ComposeDockerfileRefIsRootIndependent(t *testing.T) {
 	repo := t.TempDir()
 	writeFiles(t, repo, map[string]string{
 		".devcontainer/devcontainer.json": `{"dockerComposeFile": "docker-compose.yml", "service": "app"}`,
-		// The build context sits outside the .devcontainer directory, so the reference cannot be a
-		// name relative to it and must name the Dockerfile's own location instead.
+		// The build context sits outside the .devcontainer directory, so the reference must name the
+		// Dockerfile's own location rather than a name relative to the configuration directory.
 		".devcontainer/docker-compose.yml": "services:\n  app:\n    build:\n      context: ..\n",
 		"Dockerfile":                       "FROM scratch\nRUN --bogus=1 x\n",
 	})
 	configDir := filepath.Join(repo, ".devcontainer")
 	want := filepath.Join(repo, "Dockerfile")
 
-	// The lint root is named relative to the working directory in one run and absolutely in the
-	// other; both name the same directory.
+	// The lint root is named relative to the working directory in one run and absolutely in the other.
 	t.Chdir(repo)
 	for _, dir := range []string{".devcontainer", configDir} {
 		t.Run(dir, func(t *testing.T) {

@@ -43,8 +43,8 @@ func initConfigFile(output io.Writer) error {
 // "denyWarnings", when true, treats warnings as failures (exit code 1);
 // the -deny-warnings flag takes precedence, e.g.:
 //   "denyWarnings": true
-// "format" selects the output format ("text", "json", or "github"); the
-// -format flag takes precedence, e.g.:
+// "format" selects the output format ("text", "json", "github", or
+// "sarif"); the -format flag takes precedence, e.g.:
 //   "format": "github"
 // "localEnv" supplies the values ${localEnv:NAME} resolves to when merging,
 // and the environment Compose-file interpolation reads; environment

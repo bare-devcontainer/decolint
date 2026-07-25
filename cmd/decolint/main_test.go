@@ -552,8 +552,7 @@ type (
 		ArtifactLocation sarifArtifactLocation `json:"artifactLocation"`
 	}
 	sarifArtifactLocation struct {
-		URI       string `json:"uri"`
-		URIBaseID string `json:"uriBaseId"`
+		URI string `json:"uri"`
 	}
 )
 
@@ -620,10 +619,10 @@ func TestRun_OutputFormat(t *testing.T) {
 			t.Fatalf("output is not a SARIF log: %v\noutput: %s", err, stdout.String())
 		}
 
-		// The fixture is inside the working directory, so it is reported relative to the source root.
+		// The fixture is inside the working directory, so it is reported relative to it.
 		locAt := func(uri string) []sarifLocation {
 			return []sarifLocation{{PhysicalLocation: sarifPhysicalLocation{
-				ArtifactLocation: sarifArtifactLocation{URI: uri, URIBaseID: "%SRCROOT%"},
+				ArtifactLocation: sarifArtifactLocation{URI: uri},
 			}}}
 		}
 		// The catalog lists only referenced rules, sorted by ID, so each result's ruleIndex points at
@@ -651,8 +650,8 @@ func TestRun_OutputFormat(t *testing.T) {
 		t.Parallel()
 
 		// A directory outside the working directory is reported absolutely, which SARIF can only
-		// express as an absolute file URI: no source root it could be relative to applies. The
-		// fixture trips missing-container-def, an error by default and free of any platform or fetch.
+		// express as an absolute file URI. The fixture trips missing-container-def, an error by
+		// default and free of any platform or fetch.
 		dir := writeDevcontainer(t, `{}`)
 
 		var stdout, stderr bytes.Buffer
@@ -681,7 +680,6 @@ func TestRun_OutputFormat(t *testing.T) {
 					RuleID:    "missing-container-def",
 					RuleIndex: 0,
 					Level:     "error",
-					// No uriBaseId: an absolute URI is not resolved against a source root.
 					Locations: []sarifLocation{{PhysicalLocation: sarifPhysicalLocation{
 						ArtifactLocation: sarifArtifactLocation{URI: uri},
 					}}},

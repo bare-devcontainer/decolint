@@ -33,13 +33,11 @@ func TestSARIFWriteIssues(t *testing.T) {
 	want := `{"$schema":"https://json.schemastore.org/sarif-2.1.0.json","version":"2.1.0","runs":[` +
 		`{"tool":{"driver":{"name":"decolint","version":"1.2.3","informationUri":"https://github.com/bare-devcontainer/decolint","rules":[` +
 		`{"id":"no-image-latest","shortDescription":{"text":"images should be pinned to a specific version"},"properties":{"tags":["reproducibility"]}},` +
-		`{"id":"some-error-rule"}]}},` +
-		`"originalUriBaseIds":{"%SRCROOT%":{"description":{"text":"The directory decolint ran in, which the reported paths are relative to."}}},` +
-		`"results":[` +
+		`{"id":"some-error-rule"}]}},"results":[` +
 		`{"ruleId":"no-image-latest","ruleIndex":0,"level":"warning","message":{"text":"image \"ubuntu:latest\" uses the \"latest\" tag; pin a specific version"},` +
-		`"locations":[{"physicalLocation":{"artifactLocation":{"uri":".devcontainer/devcontainer.json","uriBaseId":"%SRCROOT%"},"region":{"startLine":4,"startColumn":12}}}]},` +
+		`"locations":[{"physicalLocation":{"artifactLocation":{"uri":".devcontainer/devcontainer.json"},"region":{"startLine":4,"startColumn":12}}}]},` +
 		`{"ruleId":"some-error-rule","ruleIndex":1,"level":"error","message":{"text":"something is broken"},` +
-		`"locations":[{"physicalLocation":{"artifactLocation":{"uri":".devcontainer/devcontainer.json","uriBaseId":"%SRCROOT%"},"region":{"startLine":8,"startColumn":3}}}]}]}]}` +
+		`"locations":[{"physicalLocation":{"artifactLocation":{"uri":".devcontainer/devcontainer.json"},"region":{"startLine":8,"startColumn":3}}}]}]}]}` +
 		"\n"
 	if sb.String() != want {
 		t.Errorf("WriteIssues sarif = %q, want %q", sb.String(), want)
@@ -47,9 +45,9 @@ func TestSARIFWriteIssues(t *testing.T) {
 }
 
 // TestSARIFWriteIssues_ArtifactLocation checks how a finding's path becomes a SARIF artifact
-// location: a path built with the host's separators is reported against the source root with "/"
-// ones, while an absolute path — which decolint reports for a file outside the directory it runs in
-// — is reported as a file URI that no base id applies to.
+// location: a path built with the host's separators stays relative but is written with "/" ones,
+// while an absolute path — which decolint reports for a file outside the directory it runs in — is
+// written as a file URI.
 func TestSARIFWriteIssues_ArtifactLocation(t *testing.T) {
 	t.Parallel()
 
@@ -64,7 +62,27 @@ func TestSARIFWriteIssues_ArtifactLocation(t *testing.T) {
 			t.Fatalf("WriteIssues: %v", err)
 		}
 
-		want := `"artifactLocation":{"uri":".devcontainer/go/devcontainer.json","uriBaseId":"%SRCROOT%"}`
+		want := `"artifactLocation":{"uri":".devcontainer/go/devcontainer.json"}`
+		if !strings.Contains(sb.String(), want) {
+			t.Errorf("WriteIssues sarif = %q, want it to contain %q", sb.String(), want)
+		}
+	})
+
+	t.Run("UNC path", func(t *testing.T) {
+		t.Parallel()
+
+		// A UNC path names its host in the leading "//" segment, which belongs in the URI's authority
+		// rather than its path. The path is given in the form filepath.ToSlash yields for it on
+		// Windows, which is absolute on every host, so this holds off Windows too.
+		issues := testIssues()[:1]
+		issues[0].Path = "//server/share/devcontainer.json"
+
+		var sb strings.Builder
+		if err := testSARIFFormat().WriteIssues(&sb, issues); err != nil {
+			t.Fatalf("WriteIssues: %v", err)
+		}
+
+		want := `"artifactLocation":{"uri":"file://server/share/devcontainer.json"}`
 		if !strings.Contains(sb.String(), want) {
 			t.Errorf("WriteIssues sarif = %q, want it to contain %q", sb.String(), want)
 		}
@@ -82,14 +100,10 @@ func TestSARIFWriteIssues_ArtifactLocation(t *testing.T) {
 		}
 
 		// The URI's own path varies with the host, so only its form is asserted: a file URI with an
-		// empty authority, and no base id to resolve it against. The run still declares the base id,
-		// so the absence is asserted on the member rather than on the name.
+		// empty authority.
 		out := sb.String()
 		if !strings.Contains(out, `"artifactLocation":{"uri":"file:///`) {
 			t.Errorf("WriteIssues sarif = %q, want an absolute file URI", out)
-		}
-		if strings.Contains(out, `"uriBaseId"`) {
-			t.Errorf("WriteIssues sarif = %q, want no base id for an absolute path", out)
 		}
 	})
 }
@@ -103,9 +117,7 @@ func TestSARIFWriteIssues_Empty(t *testing.T) {
 	}
 
 	want := `{"$schema":"https://json.schemastore.org/sarif-2.1.0.json","version":"2.1.0","runs":[` +
-		`{"tool":{"driver":{"name":"decolint","version":"1.2.3","informationUri":"https://github.com/bare-devcontainer/decolint","rules":[]}},` +
-		`"originalUriBaseIds":{"%SRCROOT%":{"description":{"text":"The directory decolint ran in, which the reported paths are relative to."}}},` +
-		`"results":[]}]}` +
+		`{"tool":{"driver":{"name":"decolint","version":"1.2.3","informationUri":"https://github.com/bare-devcontainer/decolint","rules":[]}},"results":[]}]}` +
 		"\n"
 	if sb.String() != want {
 		t.Errorf("WriteIssues sarif (empty) = %q, want %q", sb.String(), want)

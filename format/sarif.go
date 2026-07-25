@@ -34,10 +34,6 @@ const (
 	sarifSchemaURI = "https://json.schemastore.org/sarif-2.1.0.json"
 	sarifVersion   = "2.1.0"
 	informationURI = "https://github.com/bare-devcontainer/decolint"
-	// srcRootBaseID is the SARIF base id a relative path is reported against. It is declared in the
-	// run but left unresolved (see sarifURIBase); a Code Scanning upload resolves it to the root of
-	// the analyzed checkout.
-	srcRootBaseID = "%SRCROOT%"
 )
 
 // The wire structs cover the subset of SARIF 2.1.0 decolint emits. Fields marshal in declaration
@@ -50,16 +46,8 @@ type sarifLog struct {
 }
 
 type sarifRun struct {
-	Tool               sarifTool               `json:"tool"`
-	OriginalURIBaseIDs map[string]sarifURIBase `json:"originalUriBaseIds"`
-	Results            []sarifResult           `json:"results"`
-}
-
-// sarifURIBase declares a base id without resolving it. A base id may carry the absolute URI it
-// stands for, but decolint does not know where its working directory sits in the analyzed project,
-// so it leaves the value to the consumer, which does.
-type sarifURIBase struct {
-	Description sarifMessage `json:"description"`
+	Tool    sarifTool     `json:"tool"`
+	Results []sarifResult `json:"results"`
 }
 
 type sarifTool struct {
@@ -105,8 +93,7 @@ type sarifPhysicalLocation struct {
 }
 
 type sarifArtifactLocation struct {
-	URI       string `json:"uri"`
-	URIBaseID string `json:"uriBaseId,omitzero"`
+	URI string `json:"uri"`
 }
 
 type sarifRegion struct {
@@ -119,7 +106,7 @@ type sarifRegion struct {
 //
 // The run's rule catalog lists only the rules referenced by issues, sorted by rule ID; a rule
 // missing from f.Rules is listed with its ID alone. Issue paths are reported as URIs; see
-// [artifactLocationFor].
+// [artifactURIFor].
 func (f SARIFFormat) WriteIssues(w io.Writer, issues []linter.Issue) error {
 	catalog := make(map[string]SARIFRule, len(f.Rules))
 	for _, r := range f.Rules {
@@ -159,7 +146,7 @@ func (f SARIFFormat) WriteIssues(w io.Writer, issues []linter.Issue) error {
 			Message:   sarifMessage{Text: issue.Message},
 			Locations: []sarifLocation{{
 				PhysicalLocation: sarifPhysicalLocation{
-					ArtifactLocation: artifactLocationFor(issue.Path),
+					ArtifactLocation: sarifArtifactLocation{URI: artifactURIFor(issue.Path)},
 					Region:           sarifRegion{StartLine: issue.Line, StartColumn: issue.Col},
 				},
 			}},
@@ -176,9 +163,6 @@ func (f SARIFFormat) WriteIssues(w io.Writer, issues []linter.Issue) error {
 				InformationURI: informationURI,
 				Rules:          descriptors,
 			}},
-			OriginalURIBaseIDs: map[string]sarifURIBase{srcRootBaseID: {
-				Description: sarifMessage{Text: "The directory decolint ran in, which the reported paths are relative to."},
-			}},
 			Results: results,
 		}},
 	}
@@ -194,15 +178,20 @@ func (f SARIFFormat) WriteIssues(w io.Writer, issues []linter.Issue) error {
 	return nil
 }
 
-// artifactLocationFor returns the SARIF location of the file at path, whose members must be a URI
-// rather than a filesystem path. A relative path is reported against [srcRootBaseID]; an absolute
-// one, which decolint reports for a file outside the directory it runs in, becomes an absolute file
-// URI, since resolving it against the source root would name a different file.
-func artifactLocationFor(path string) sarifArtifactLocation {
+// artifactURIFor returns the SARIF location of the file at path, which must be a URI rather than a
+// filesystem path. A relative path stays relative, for the consumer to resolve against the root of
+// the analyzed project; an absolute one, which decolint reports for a file outside the directory it
+// runs in, becomes an absolute file URI, since resolving it that way would name a different file.
+func artifactURIFor(path string) string {
 	slashed := filepath.ToSlash(path)
 	if !filepath.IsAbs(path) {
-		return sarifArtifactLocation{URI: (&url.URL{Path: slashed}).String(), URIBaseID: srcRootBaseID}
+		return (&url.URL{Path: slashed}).String()
 	}
-	// A Windows path is absolute without a leading "/", which a file URI's path needs.
-	return sarifArtifactLocation{URI: (&url.URL{Scheme: "file", Path: "/" + strings.TrimPrefix(slashed, "/")}).String()}
+	// A UNC path names a host, which a file URI carries as its authority rather than in its path.
+	if rest, ok := strings.CutPrefix(slashed, "//"); ok {
+		host, share, _ := strings.Cut(rest, "/")
+		return (&url.URL{Scheme: "file", Host: host, Path: "/" + share}).String()
+	}
+	// A Windows drive path is absolute without a leading "/", which a file URI's path needs.
+	return (&url.URL{Scheme: "file", Path: "/" + strings.TrimPrefix(slashed, "/")}).String()
 }

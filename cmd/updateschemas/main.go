@@ -5,7 +5,7 @@
 // schema-sync workflow runs it and fails when the result differs from what is committed, signalling
 // that the vendored copies are stale.
 //
-// Run it from the repository root: go run ./internal/updateschemas.
+// Run it from the repository root: go run ./cmd/updateschemas.
 package main
 
 import (

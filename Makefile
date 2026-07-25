@@ -39,7 +39,7 @@ lint: ## Run all lint rules
 
 .PHONY: update-schemas
 update-schemas: ## Refresh the vendored Dev Container schemas from upstream
-	go run ./internal/updateschemas
+	go run ./cmd/updateschemas
 
 .PHONY: clean
 clean: ## Remove build artifacts

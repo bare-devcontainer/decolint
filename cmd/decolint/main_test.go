@@ -802,11 +802,43 @@ func TestRun_Init(t *testing.T) {
 	})
 }
 
+func TestRunLint_DeduplicatesTargets(t *testing.T) {
+	t.Parallel()
+
+	// The same directory named twice must be linted once, so its findings are reported once.
+	dir := writeDevcontainer(t, `{"image": "ubuntu:latest"}`)
+	cfg := Config{
+		Format: "json",
+		Rules:  map[string]linter.Severity{"no-image-latest": linter.SeverityError},
+	}
+
+	lint := func(t *testing.T, paths []string) int {
+		t.Helper()
+		var stdout bytes.Buffer
+		if _, err := runLint(t.Context(), &stdout, io.Discard, Options{Paths: paths}, cfg); err != nil {
+			t.Fatalf("runLint: %v", err)
+		}
+		var issues []linter.Issue
+		if err := json.Unmarshal(stdout.Bytes(), &issues); err != nil {
+			t.Fatalf("output is not a JSON issue array: %v\noutput: %s", err, stdout.String())
+		}
+		return len(issues)
+	}
+
+	want := lint(t, []string{dir})
+	if want == 0 {
+		t.Fatal("no findings for the fixture; the test cannot tell deduplication from a silent lint")
+	}
+	if got := lint(t, []string{dir, dir + string(filepath.Separator)}); got != want {
+		t.Errorf("findings for the directory named twice = %d, want %d", got, want)
+	}
+}
+
 func TestRunLint_UnresolvableTarget(t *testing.T) {
 	// Uses t.Chdir, which cannot be combined with t.Parallel.
 
-	// A target that cannot be resolved fails the run before any file is read, so no findings are
-	// written either.
+	// A target whose location cannot be resolved is recorded like any other per-target failure, so
+	// the findings collected so far are still written.
 	dir := t.TempDir()
 	t.Chdir(dir)
 	if err := os.Remove(dir); err != nil {
@@ -814,15 +846,15 @@ func TestRunLint_UnresolvableTarget(t *testing.T) {
 	}
 
 	var stdout bytes.Buffer
-	hasIssue, err := runLint(t.Context(), &stdout, io.Discard, Options{Paths: []string{"."}}, Config{})
+	hasIssue, err := runLint(t.Context(), &stdout, io.Discard, Options{Paths: []string{"."}}, Config{Format: "json"})
 	if err == nil || !strings.Contains(err.Error(), "resolve directory") {
 		t.Errorf("err = %v, want a directory resolution error", err)
 	}
 	if hasIssue {
 		t.Error("hasIssue = true, want false")
 	}
-	if stdout.Len() != 0 {
-		t.Errorf("stdout = %q, want empty", stdout.String())
+	if got := strings.TrimSpace(stdout.String()); got != "[]" {
+		t.Errorf("stdout = %q, want an empty JSON issue array", got)
 	}
 }
 
@@ -1511,60 +1543,6 @@ func TestLintPath(t *testing.T) {
 			t.Error("merge ran on a Feature configuration")
 		}
 	})
-}
-
-func TestResolvePaths(t *testing.T) {
-	// Uses t.Chdir, which cannot be combined with t.Parallel.
-
-	t.Chdir(t.TempDir())
-	// t.TempDir can hand back a path through a symlink (/var on macOS), which names the same
-	// directory as "." but does not resolve to the same absolute path; ask for the one arguments
-	// resolve to.
-	wd, err := filepath.Abs(".")
-	if err != nil {
-		t.Fatalf("Abs: %v", err)
-	}
-	sub := filepath.Join(wd, "sub")
-
-	tests := []struct {
-		name  string
-		paths []string
-		want  []absPath
-	}{
-		{"a relative argument", []string{"."}, []absPath{absPath(wd)}},
-		{"the same directory spelled two ways", []string{".", wd}, []absPath{absPath(wd)}},
-		{"a repeated argument", []string{wd, wd}, []absPath{absPath(wd)}},
-		{"a trailing separator", []string{".", "." + string(filepath.Separator)}, []absPath{absPath(wd)}},
-		{"distinct directories are all kept", []string{".", sub}, []absPath{absPath(wd), absPath(sub)}},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got, err := resolvePaths(tt.paths)
-			if err != nil {
-				t.Fatalf("resolvePaths: %v", err)
-			}
-			if diff := cmp.Diff(tt.want, got); diff != "" {
-				t.Errorf("resolvePaths(%q) mismatch (-want +got):\n%s", tt.paths, diff)
-			}
-		})
-	}
-}
-
-func TestResolvePaths_LocationError(t *testing.T) {
-	// Uses t.Chdir, which cannot be combined with t.Parallel.
-
-	// A relative argument resolves against the working directory; deleting it leaves the argument
-	// with no location to resolve, which must surface as an error.
-	dir := t.TempDir()
-	t.Chdir(dir)
-	if err := os.Remove(dir); err != nil {
-		t.Fatal(err)
-	}
-
-	if _, err := resolvePaths([]string{"."}); err == nil ||
-		!strings.Contains(err.Error(), "resolve directory") {
-		t.Errorf("err = %v, want a directory resolution error", err)
-	}
 }
 
 func TestAbsPathString(t *testing.T) {

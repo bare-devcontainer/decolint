@@ -5,6 +5,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"testing/fstest"
 
 	"github.com/tailscale/hujson"
 )
@@ -44,7 +45,7 @@ func lintSource(t *testing.T, l *Linter, path string, fileType FileType, src str
 	if err != nil {
 		t.Fatalf("ParseDocument: %v", err)
 	}
-	return l.LintDocument(path, fileType, doc)
+	return l.LintDocument(path, fileType, doc, Dir{})
 }
 
 func TestLintDocument_Position(t *testing.T) {
@@ -107,12 +108,55 @@ func TestLintDocument_TreeMutation(t *testing.T) {
 
 	l := New()
 	l.RegisterRule(flagRule, SeverityWarn)
-	issues := l.LintDocument("devcontainer.json", Devcontainer, doc)
+	issues := l.LintDocument("devcontainer.json", Devcontainer, doc, Dir{})
 	if len(issues) != 1 {
 		t.Fatalf("got %d issues %v, want 1", len(issues), issues)
 	}
 	if issues[0].Line != 2 || issues[0].Col != 3 {
 		t.Errorf("position = %d:%d, want 2:3", issues[0].Line, issues[0].Col)
+	}
+}
+
+func TestLintDocument_ContextDir(t *testing.T) {
+	t.Parallel()
+
+	// A stub rule records the Dir it is handed so we can assert LintDocument passes it through
+	// unchanged, including the zero case for an in-memory document.
+	var got Dir
+	dirRule := &Rule{
+		ID:        "dir-rule",
+		FileTypes: []FileType{Devcontainer},
+		Paths:     []string{""},
+		Check: func(ctx *Context, _ *Node) []Finding {
+			got = ctx.Dir
+			return nil
+		},
+	}
+
+	want := Dir{FS: fstest.MapFS{"install.sh": {Data: []byte("#!/bin/sh\n")}}, Name: "my-feature"}
+	for _, tt := range []struct {
+		name string
+		dir  Dir
+	}{
+		{"with directory", want},
+		{"zero directory", Dir{}},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			doc, err := ParseDocument([]byte(`{"name": "test"}`))
+			if err != nil {
+				t.Fatalf("ParseDocument: %v", err)
+			}
+			l := New()
+			l.RegisterRule(dirRule, SeverityWarn)
+			got = Dir{}
+			l.LintDocument("devcontainer.json", Devcontainer, doc, tt.dir)
+			if got.Name != tt.dir.Name {
+				t.Errorf("ctx.Dir.Name = %q, want %q", got.Name, tt.dir.Name)
+			}
+			if (got.FS == nil) != (tt.dir.FS == nil) {
+				t.Errorf("ctx.Dir.FS = %v, want %v", got.FS, tt.dir.FS)
+			}
+		})
 	}
 }
 

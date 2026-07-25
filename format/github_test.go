@@ -2,6 +2,7 @@ package format
 
 import (
 	"errors"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -16,6 +17,26 @@ func TestGitHubWriteIssues(t *testing.T) {
 
 	want := `::warning file=.devcontainer/devcontainer.json,line=4,col=12,title=no-image-latest::image "ubuntu:latest" uses the "latest" tag; pin a specific version
 ::error file=.devcontainer/devcontainer.json,line=8,col=3,title=some-error-rule::something is broken
+`
+	if sb.String() != want {
+		t.Errorf("WriteIssues github = %q, want %q", sb.String(), want)
+	}
+}
+
+// TestGitHubWriteIssues_PathSeparators checks that a path built with the host's separators is
+// written with "/" ones, which is what GitHub matches an annotation against.
+func TestGitHubWriteIssues_PathSeparators(t *testing.T) {
+	t.Parallel()
+
+	issues := testIssues()[:1]
+	issues[0].Path = filepath.Join(".devcontainer", "go", "devcontainer.json")
+
+	var sb strings.Builder
+	if err := (GitHubFormat{}).WriteIssues(&sb, issues); err != nil {
+		t.Fatalf("WriteIssues: %v", err)
+	}
+
+	want := `::warning file=.devcontainer/go/devcontainer.json,line=4,col=12,title=no-image-latest::image "ubuntu:latest" uses the "latest" tag; pin a specific version
 `
 	if sb.String() != want {
 		t.Errorf("WriteIssues github = %q, want %q", sb.String(), want)

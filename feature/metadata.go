@@ -82,9 +82,8 @@ func parseMetadata(src []byte) (*Metadata, error) {
 	return md, nil
 }
 
-// parseAliases returns the Feature's identifiers: its id followed by any "legacyIds". They match a
-// renamed Feature referenced by an older id in another Feature's "installsAfter" or in
-// "overrideFeatureInstallOrder". A Feature that declares no id yields at most its "legacyIds".
+// parseAliases returns the Feature's [Metadata.Aliases]: its id followed by any "legacyIds". A
+// Feature that declares no id yields at most its "legacyIds".
 func parseAliases(root hujson.Value, id string) []string {
 	var aliases []string
 	if id != "" {

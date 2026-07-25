@@ -334,6 +334,42 @@ func TestMerge_ComposeFileOutsideConfigDir(t *testing.T) {
 	})
 }
 
+// TestMerge_ComposeDockerfileRefIsRootIndependent checks that a Dockerfile reached through a compose
+// build is named the same way however the lint root was named. The reference appears in the error a
+// broken Dockerfile produces, and reaches the merged configuration as a contributor's display id.
+func TestMerge_ComposeDockerfileRefIsRootIndependent(t *testing.T) {
+	// Uses t.Chdir, which cannot be combined with t.Parallel.
+
+	repo := t.TempDir()
+	writeFiles(t, repo, map[string]string{
+		".devcontainer/devcontainer.json": `{"dockerComposeFile": "docker-compose.yml", "service": "app"}`,
+		// The build context sits outside the .devcontainer directory, so the reference must name the
+		// Dockerfile's own location rather than a name relative to the configuration directory.
+		".devcontainer/docker-compose.yml": "services:\n  app:\n    build:\n      context: ..\n",
+		"Dockerfile":                       "FROM scratch\nRUN --bogus=1 x\n",
+	})
+	configDir := filepath.Join(repo, ".devcontainer")
+	want := filepath.Join(repo, "Dockerfile")
+
+	// The lint root is named relative to the working directory in one run and absolutely in the other.
+	t.Chdir(repo)
+	for _, dir := range []string{".devcontainer", configDir} {
+		t.Run(dir, func(t *testing.T) {
+			root, err := hujson.Parse([]byte(`{"dockerComposeFile": "docker-compose.yml", "service": "app"}`))
+			if err != nil {
+				t.Fatalf("parse devcontainer.json: %v", err)
+			}
+			err = Merge(t.Context(), NewFetcher(), openRoot(t, dir), ".", nil, &root)
+			if err == nil {
+				t.Fatal("Merge: got nil error, want the Dockerfile's parse error")
+			}
+			if !strings.Contains(err.Error(), want) {
+				t.Errorf("Merge error = %v, want it to name the Dockerfile as %q", err, want)
+			}
+		})
+	}
+}
+
 // mergeOutsideDir parses src as the .devcontainer/devcontainer.json of repo and merges it with the
 // root confined to that .devcontainer directory, the confinement discovery applies.
 func mergeOutsideDir(t *testing.T, repo, src string) *hujson.Value {

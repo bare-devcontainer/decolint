@@ -10,11 +10,13 @@ import (
 	"github.com/bare-devcontainer/decolint/linter"
 )
 
-// Options holds the parsed command-line arguments. It is purely the CLI's view of the world; see
-// Config for the on-disk config file's shape, and mergeConfig for how the two are reconciled.
+// Options holds the parsed command-line arguments. Apart from the directories to lint, which are
+// resolved to the locations they name, it is purely the CLI's view of the world; see Config for the
+// on-disk config file's shape, and mergeConfig for how the two are reconciled.
 type Options struct {
-	// Paths are the directories to lint.
-	Paths []string
+	// Paths are the directories to lint, resolved so that each names the same directory however it
+	// was spelled on the command line (see absPath). Defaults to the working directory.
+	Paths []absPath
 	// DenyWarnings mirrors [Config.DenyWarnings]. When -deny-warnings is explicitly given it takes
 	// precedence over the config file's "denyWarnings" member, in either direction (see
 	// denyWarningsSet and mergeConfig).
@@ -89,32 +91,37 @@ func parseOptions(args []string, output io.Writer) (Options, error) {
 	// config file's "format" member is merged in, so both sources go through one validation path.
 	opts.Format = formatFlag
 
-	opts.Paths = dedupePaths(fs.Args())
-	if len(opts.Paths) == 0 {
-		opts.Paths = []string{"."}
+	targets := fs.Args()
+	if len(targets) == 0 {
+		targets = []string{"."}
+	}
+	opts.Paths, err = resolvePaths(targets)
+	if err != nil {
+		return Options{}, err
 	}
 
 	return opts, nil
 }
 
-// dedupePaths drops arguments naming a directory an earlier argument already names, so that passing
-// e.g. both "." and its absolute path lints it once rather than reporting every finding twice. The
-// spelling kept is the first one given, since that is the one the findings are reported under. An
-// argument whose location cannot be resolved is kept as given, leaving it for the lint to reject.
-func dedupePaths(paths []string) []string {
-	seen := make(map[string]struct{}, len(paths))
-	kept := make([]string, 0, len(paths))
+// resolvePaths resolves each argument to the directory it names, dropping one an earlier argument
+// already names so that passing e.g. both "." and its absolute path lints it once rather than
+// reporting every finding twice.
+func resolvePaths(paths []string) ([]absPath, error) {
+	seen := make(map[absPath]struct{}, len(paths))
+	resolved := make([]absPath, 0, len(paths))
 	for _, p := range paths {
 		abs, err := filepath.Abs(p)
-		if err == nil {
-			if _, ok := seen[abs]; ok {
-				continue
-			}
-			seen[abs] = struct{}{}
+		if err != nil {
+			return nil, fmt.Errorf("resolve directory %s: %w", p, err)
 		}
-		kept = append(kept, p)
+		dir := absPath(abs)
+		if _, ok := seen[dir]; ok {
+			continue
+		}
+		seen[dir] = struct{}{}
+		resolved = append(resolved, dir)
 	}
-	return kept
+	return resolved, nil
 }
 
 // parsePlatforms parses a comma-separated list of platform names into a slice of linter.Platform.

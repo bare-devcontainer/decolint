@@ -3,7 +3,9 @@ package main
 import (
 	"fmt"
 	"io"
+	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/bare-devcontainer/decolint/linter"
@@ -223,39 +225,30 @@ func TestParseOptions_Config(t *testing.T) {
 }
 
 func TestParseOptions_Paths(t *testing.T) {
-	t.Parallel()
-
-	opts, err := parseOptions(nil, io.Discard)
-	if err != nil {
-		t.Fatalf("parseOptions: %v", err)
-	}
-	if diff := cmp.Diff([]string{"."}, opts.Paths); diff != "" {
-		t.Errorf("Paths mismatch (-want +got):\n%s", diff)
-	}
-}
-
-func TestParseOptions_PathsDeduped(t *testing.T) {
 	// Uses t.Chdir, which cannot be combined with t.Parallel.
 
 	dir := t.TempDir()
 	t.Chdir(dir)
-	// t.TempDir can hand back a path through a symlink (/var on macOS), which resolves to the same
-	// directory as "." but not to the same absolute path; ask for the one deduplication compares.
+	// t.TempDir can hand back a path through a symlink (/var on macOS), which names the same
+	// directory as "." but does not resolve to the same absolute path; ask for the one arguments
+	// resolve to.
 	abs, err := filepath.Abs(".")
 	if err != nil {
 		t.Fatalf("Abs: %v", err)
 	}
+	sub := filepath.Join(abs, "sub")
 
 	tests := []struct {
 		name string
 		args []string
-		want []string
+		want []absPath
 	}{
-		{"the same directory spelled two ways", []string{".", abs}, []string{"."}},
-		{"the first spelling is the one kept", []string{abs, "."}, []string{abs}},
-		{"repeated argument", []string{abs, abs}, []string{abs}},
-		{"trailing separator", []string{".", "." + string(filepath.Separator)}, []string{"."}},
-		{"distinct directories are all kept", []string{".", filepath.Join(abs, "sub")}, []string{".", filepath.Join(abs, "sub")}},
+		{"no arguments lint the working directory", nil, []absPath{absPath(abs)}},
+		{"a relative argument", []string{"."}, []absPath{absPath(abs)}},
+		{"the same directory spelled two ways", []string{".", abs}, []absPath{absPath(abs)}},
+		{"a repeated argument", []string{abs, abs}, []absPath{absPath(abs)}},
+		{"a trailing separator", []string{".", "." + string(filepath.Separator)}, []absPath{absPath(abs)}},
+		{"distinct directories are all kept", []string{".", sub}, []absPath{absPath(abs), absPath(sub)}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -267,5 +260,22 @@ func TestParseOptions_PathsDeduped(t *testing.T) {
 				t.Errorf("Paths mismatch (-want +got):\n%s", diff)
 			}
 		})
+	}
+}
+
+func TestParseOptions_PathsLocationError(t *testing.T) {
+	// Uses t.Chdir, which cannot be combined with t.Parallel.
+
+	// A relative argument resolves against the working directory; deleting it leaves the argument
+	// with no location to resolve, which must surface as an error.
+	dir := t.TempDir()
+	t.Chdir(dir)
+	if err := os.Remove(dir); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := parseOptions([]string{"."}, io.Discard); err == nil ||
+		!strings.Contains(err.Error(), "resolve directory") {
+		t.Errorf("err = %v, want a directory resolution error", err)
 	}
 }

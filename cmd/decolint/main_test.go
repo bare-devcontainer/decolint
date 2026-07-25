@@ -810,7 +810,7 @@ func TestRunLint(t *testing.T) {
 		dir := writeDevcontainer(t, `{"image": "ubuntu:latest"}`)
 
 		var stdout bytes.Buffer
-		hasIssue, runErr := runLint(t.Context(), &stdout, io.Discard, Options{Paths: []string{dir}}, Config{})
+		hasIssue, runErr := runLint(t.Context(), &stdout, io.Discard, Options{Paths: []absPath{absPath(dir)}}, Config{})
 		if runErr != nil || hasIssue {
 			t.Errorf("hasIssue = %v, err = %v, want false, nil; stdout: %s", hasIssue, runErr, stdout.String())
 		}
@@ -821,7 +821,7 @@ func TestRunLint(t *testing.T) {
 		dir := writeDevcontainer(t, `{"image": "ubuntu:latest"}`)
 
 		var stdout bytes.Buffer
-		opts := Options{Paths: []string{dir}}
+		opts := Options{Paths: []absPath{absPath(dir)}}
 		cfg := Config{Rules: map[string]linter.Severity{"no-image-latest": linter.SeverityError}}
 		hasIssue, runErr := runLint(t.Context(), &stdout, io.Discard, opts, cfg)
 		if runErr != nil || !hasIssue {
@@ -834,7 +834,7 @@ func TestRunLint(t *testing.T) {
 		dir := writeDevcontainer(t, `{}`) // triggers missing-container-def (error by default)
 
 		var stdout bytes.Buffer
-		opts := Options{Paths: []string{dir}}
+		opts := Options{Paths: []absPath{absPath(dir)}}
 		cfg := Config{Rules: map[string]linter.Severity{"missing-container-def": linter.SeverityOff}}
 		hasIssue, runErr := runLint(t.Context(), &stdout, io.Discard, opts, cfg)
 		if runErr != nil || hasIssue {
@@ -862,7 +862,7 @@ func TestRunLint(t *testing.T) {
 		dir := writeDevcontainer(t, `{"image": "ubuntu:latest"}`) // no-image-latest is in reproducibility
 
 		var stdout bytes.Buffer
-		opts := Options{Paths: []string{dir}}
+		opts := Options{Paths: []absPath{absPath(dir)}}
 		cfg := Config{Categories: map[string]linter.Severity{"reproducibility": linter.SeverityError}}
 		hasIssue, runErr := runLint(t.Context(), &stdout, io.Discard, opts, cfg)
 		if runErr != nil || !hasIssue {
@@ -891,7 +891,7 @@ func TestRunLint(t *testing.T) {
 		file := filepath.Join(dir, ".devcontainer", "devcontainer.json")
 
 		var stdout bytes.Buffer
-		hasIssue, runErr := runLint(t.Context(), &stdout, io.Discard, Options{Paths: []string{file}}, Config{})
+		hasIssue, runErr := runLint(t.Context(), &stdout, io.Discard, Options{Paths: []absPath{absPath(file)}}, Config{})
 		if runErr == nil || hasIssue {
 			t.Errorf("hasIssue = %v, err = %v, want false, 'not a directory'", hasIssue, runErr)
 		}
@@ -902,7 +902,7 @@ func TestRunLint(t *testing.T) {
 		dir := writeDevcontainer(t, `{"image": "ubuntu:latest"}`)
 
 		var stdout bytes.Buffer
-		opts := Options{Paths: []string{dir}}
+		opts := Options{Paths: []absPath{absPath(dir)}}
 		cfg := Config{Rules: map[string]linter.Severity{"no-bind-mount": linter.SeverityError}}
 		hasIssue, runErr := runLint(t.Context(), &stdout, io.Discard, opts, cfg)
 		if runErr != nil || hasIssue {
@@ -1368,7 +1368,7 @@ func TestLintPath(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		issues, err := lintPath(t.Context(), newLinter(), noSubst, nil, dir)
+		issues, err := lintPath(t.Context(), newLinter(), noSubst, nil, absPath(dir))
 		if err != nil {
 			t.Fatalf("lintPath: %v", err)
 		}
@@ -1415,7 +1415,7 @@ func TestLintPath(t *testing.T) {
 
 	t.Run("directory without config", func(t *testing.T) {
 		t.Parallel()
-		_, err := lintPath(t.Context(), newLinter(), noSubst, nil, t.TempDir())
+		_, err := lintPath(t.Context(), newLinter(), noSubst, nil, absPath(t.TempDir()))
 		if err == nil || !strings.Contains(err.Error(), "no devcontainer configuration found") {
 			t.Errorf("err = %v, want 'no devcontainer configuration found'", err)
 		}
@@ -1424,7 +1424,7 @@ func TestLintPath(t *testing.T) {
 	t.Run("a configuration file is not a directory", func(t *testing.T) {
 		t.Parallel()
 		file := filepath.Join(writeDevcontainer(t, body), ".devcontainer", "devcontainer.json")
-		_, err := lintPath(t.Context(), newLinter(), noSubst, nil, file)
+		_, err := lintPath(t.Context(), newLinter(), noSubst, nil, absPath(file))
 		if err == nil || !strings.Contains(err.Error(), "is not a directory; pass the directory") {
 			t.Errorf("err = %v, want the error to say a directory is expected", err)
 		}
@@ -1436,7 +1436,7 @@ func TestLintPath(t *testing.T) {
 		wantErr := errors.New("fetch failed")
 		merge := func(context.Context, discovery.ConfigFile, *linter.Document) error { return wantErr }
 
-		if _, err := lintPath(t.Context(), newLinter(), noSubst, merge, dir); !errors.Is(err, wantErr) {
+		if _, err := lintPath(t.Context(), newLinter(), noSubst, merge, absPath(dir)); !errors.Is(err, wantErr) {
 			t.Errorf("lintPath error = %v, want %v", err, wantErr)
 		}
 	})
@@ -1450,7 +1450,7 @@ func TestLintPath(t *testing.T) {
 			return nil
 		}
 
-		if _, err := lintPath(t.Context(), linter.New(), noSubst, merge, dir); err != nil {
+		if _, err := lintPath(t.Context(), linter.New(), noSubst, merge, absPath(dir)); err != nil {
 			t.Fatalf("lintPath: %v", err)
 		}
 		if called {
@@ -1480,7 +1480,7 @@ func TestLintPath(t *testing.T) {
 		}
 		subst := func(string, *linter.Document) {}
 
-		if _, err := lintPath(t.Context(), l, subst, merge, dir); err != nil {
+		if _, err := lintPath(t.Context(), l, subst, merge, absPath(dir)); err != nil {
 			t.Fatalf("lintPath: %v", err)
 		}
 		if called {
@@ -1534,24 +1534,6 @@ func TestAbsPathString_NoWorkingDirectory(t *testing.T) {
 	p := absPath(filepath.Join(dir, "devcontainer.json"))
 	if got := p.String(); got != string(p) {
 		t.Errorf("absPath(%q).String() = %q, want it unchanged", string(p), got)
-	}
-}
-
-func TestLintPath_LocationError(t *testing.T) {
-	// Uses t.Chdir, which cannot be combined with t.Parallel.
-
-	// A relative target resolves against the working directory; deleting it leaves the target with
-	// no location to resolve, which must surface as an error.
-	dir := t.TempDir()
-	t.Chdir(dir)
-	if err := os.Remove(dir); err != nil {
-		t.Fatal(err)
-	}
-
-	subst := func(string, *linter.Document) {}
-	if _, err := lintPath(t.Context(), linter.New(), subst, nil, "."); err == nil ||
-		!strings.Contains(err.Error(), "resolve directory") {
-		t.Errorf("err = %v, want a directory resolution error", err)
 	}
 }
 

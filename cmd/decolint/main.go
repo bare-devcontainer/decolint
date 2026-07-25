@@ -266,8 +266,8 @@ func runLint(ctx context.Context, stdout, stderr io.Writer, opts Options, cfg Co
 	var allIssues []linter.Issue
 	var worstSeverity linter.Severity
 	var lintErr error
-	for _, path := range opts.Paths {
-		issues, err := lintPath(ctx, l, subst, merge, path)
+	for _, dir := range opts.Paths {
+		issues, err := lintPath(ctx, l, subst, merge, dir)
 		for _, issue := range issues {
 			if issue.Severity > worstSeverity {
 				worstSeverity = issue.Severity
@@ -317,20 +317,16 @@ func (p absPath) String() string {
 	return rel
 }
 
-// lintPath lints the devcontainer directory at path. The directory is opened as an os.Root on its
-// absolute location, so every file the lint reads is confined to it and every path derived from it
-// is absolute. It is an error if path is not a directory.
-func lintPath(ctx context.Context, l *linter.Linter, subst substituteFn, merge mergeFn, path string) ([]linter.Issue, error) {
-	abs, err := filepath.Abs(path)
-	if err != nil {
-		return nil, fmt.Errorf("resolve directory %s: %w", path, err)
-	}
-	root, err := os.OpenRoot(abs)
+// lintPath lints the devcontainer directory dir. It is opened as an os.Root, so every file the lint
+// reads is confined to it, and because dir is absolute so is every path derived from it. It is an
+// error if dir is not a directory.
+func lintPath(ctx context.Context, l *linter.Linter, subst substituteFn, merge mergeFn, dir absPath) ([]linter.Issue, error) {
+	root, err := os.OpenRoot(string(dir))
 	if err != nil {
 		// Pointing decolint straight at a devcontainer.json is a natural mistake; the open error
 		// alone ("not a directory") does not say what to pass instead.
-		if info, statErr := os.Stat(abs); statErr == nil && !info.IsDir() {
-			return nil, fmt.Errorf("%s is not a directory; pass the directory that contains the devcontainer configuration", absPath(abs))
+		if info, statErr := os.Stat(string(dir)); statErr == nil && !info.IsDir() {
+			return nil, fmt.Errorf("%s is not a directory; pass the directory that contains the devcontainer configuration", dir)
 		}
 		// The wrapped error names the path itself, so repeating it here would only make the message
 		// longer.

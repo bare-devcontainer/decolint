@@ -9,6 +9,7 @@ import (
 	"io"
 	"io/fs"
 	"os"
+	"path"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -642,6 +643,52 @@ func TestRun_OutputFormat(t *testing.T) {
 		}
 		sortResults := cmpopts.SortSlices(func(a, b sarifResult) bool { return a.RuleID < b.RuleID })
 		if diff := cmp.Diff(want, log, sortResults); diff != "" {
+			t.Errorf("sarif log mismatch (-want +got):\n%s", diff)
+		}
+	})
+
+	t.Run("sarif log outside the working directory", func(t *testing.T) {
+		t.Parallel()
+
+		// A directory outside the working directory is reported absolutely, which SARIF can only
+		// express as an absolute file URI: no source root it could be relative to applies. The
+		// fixture trips missing-container-def, an error by default and free of any platform or fetch.
+		dir := writeDevcontainer(t, `{}`)
+
+		var stdout, stderr bytes.Buffer
+		exitCode := run(t.Context(), []string{"-format=sarif", dir}, &stdout, &stderr)
+		if exitCode != 1 {
+			t.Fatalf("exit code = %d, want 1; stderr: %s", exitCode, stderr.String())
+		}
+
+		var log sarifLog
+		if err := json.Unmarshal(stdout.Bytes(), &log); err != nil {
+			t.Fatalf("output is not a SARIF log: %v\noutput: %s", err, stdout.String())
+		}
+
+		// A file URI's path carries exactly one leading slash, which a POSIX path already has and a
+		// Windows one does not.
+		config := filepath.Join(dir, ".devcontainer", "devcontainer.json")
+		uri := "file://" + path.Join("/", filepath.ToSlash(config))
+		want := sarifLog{
+			Version: "2.1.0",
+			Runs: []sarifRun{{
+				Tool: sarifTool{Driver: sarifDriver{
+					Name:  "decolint",
+					Rules: []sarifRule{{ID: "missing-container-def"}},
+				}},
+				Results: []sarifResult{{
+					RuleID:    "missing-container-def",
+					RuleIndex: 0,
+					Level:     "error",
+					// No uriBaseId: an absolute URI is not resolved against a source root.
+					Locations: []sarifLocation{{PhysicalLocation: sarifPhysicalLocation{
+						ArtifactLocation: sarifArtifactLocation{URI: uri},
+					}}},
+				}},
+			}},
+		}
+		if diff := cmp.Diff(want, log); diff != "" {
 			t.Errorf("sarif log mismatch (-want +got):\n%s", diff)
 		}
 	})

@@ -4,19 +4,17 @@ import (
 	"flag"
 	"fmt"
 	"io"
-	"path/filepath"
 	"strings"
 
 	"github.com/bare-devcontainer/decolint/linter"
 )
 
-// Options holds the parsed command-line arguments. Apart from the directories to lint, which are
-// resolved to the locations they name, it is purely the CLI's view of the world; see Config for the
-// on-disk config file's shape, and mergeConfig for how the two are reconciled.
+// Options holds the parsed command-line arguments. It is purely the CLI's view of the world; see
+// Config for the on-disk config file's shape, and mergeConfig for how the two are reconciled.
 type Options struct {
-	// Paths are the directories to lint, resolved so that each names the same directory however it
-	// was spelled on the command line (see absPath). Defaults to the working directory.
-	Paths []absPath
+	// Paths are the directories to lint, as named on the command line; runLint resolves them (see
+	// resolvePaths).
+	Paths []string
 	// DenyWarnings mirrors [Config.DenyWarnings]. When -deny-warnings is explicitly given it takes
 	// precedence over the config file's "denyWarnings" member, in either direction (see
 	// denyWarningsSet and mergeConfig).
@@ -91,37 +89,12 @@ func parseOptions(args []string, output io.Writer) (Options, error) {
 	// config file's "format" member is merged in, so both sources go through one validation path.
 	opts.Format = formatFlag
 
-	targets := fs.Args()
-	if len(targets) == 0 {
-		targets = []string{"."}
-	}
-	opts.Paths, err = resolvePaths(targets)
-	if err != nil {
-		return Options{}, err
+	opts.Paths = fs.Args()
+	if len(opts.Paths) == 0 {
+		opts.Paths = []string{"."}
 	}
 
 	return opts, nil
-}
-
-// resolvePaths resolves each argument to the directory it names, dropping one an earlier argument
-// already names so that passing e.g. both "." and its absolute path lints it once rather than
-// reporting every finding twice.
-func resolvePaths(paths []string) ([]absPath, error) {
-	seen := make(map[absPath]struct{}, len(paths))
-	resolved := make([]absPath, 0, len(paths))
-	for _, p := range paths {
-		abs, err := filepath.Abs(p)
-		if err != nil {
-			return nil, fmt.Errorf("resolve directory %s: %w", p, err)
-		}
-		dir := absPath(abs)
-		if _, ok := seen[dir]; ok {
-			continue
-		}
-		seen[dir] = struct{}{}
-		resolved = append(resolved, dir)
-	}
-	return resolved, nil
 }
 
 // parsePlatforms parses a comma-separated list of platform names into a slice of linter.Platform.

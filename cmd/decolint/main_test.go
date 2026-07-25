@@ -802,6 +802,30 @@ func TestRun_Init(t *testing.T) {
 	})
 }
 
+func TestRunLint_UnresolvableTarget(t *testing.T) {
+	// Uses t.Chdir, which cannot be combined with t.Parallel.
+
+	// A target that cannot be resolved fails the run before any file is read, so no findings are
+	// written either.
+	dir := t.TempDir()
+	t.Chdir(dir)
+	if err := os.Remove(dir); err != nil {
+		t.Fatal(err)
+	}
+
+	var stdout bytes.Buffer
+	hasIssue, err := runLint(t.Context(), &stdout, io.Discard, Options{Paths: []string{"."}}, Config{})
+	if err == nil || !strings.Contains(err.Error(), "resolve directory") {
+		t.Errorf("err = %v, want a directory resolution error", err)
+	}
+	if hasIssue {
+		t.Error("hasIssue = true, want false")
+	}
+	if stdout.Len() != 0 {
+		t.Errorf("stdout = %q, want empty", stdout.String())
+	}
+}
+
 func TestRunLint(t *testing.T) {
 	t.Parallel()
 
@@ -810,7 +834,7 @@ func TestRunLint(t *testing.T) {
 		dir := writeDevcontainer(t, `{"image": "ubuntu:latest"}`)
 
 		var stdout bytes.Buffer
-		hasIssue, runErr := runLint(t.Context(), &stdout, io.Discard, Options{Paths: []absPath{absPath(dir)}}, Config{})
+		hasIssue, runErr := runLint(t.Context(), &stdout, io.Discard, Options{Paths: []string{dir}}, Config{})
 		if runErr != nil || hasIssue {
 			t.Errorf("hasIssue = %v, err = %v, want false, nil; stdout: %s", hasIssue, runErr, stdout.String())
 		}
@@ -821,7 +845,7 @@ func TestRunLint(t *testing.T) {
 		dir := writeDevcontainer(t, `{"image": "ubuntu:latest"}`)
 
 		var stdout bytes.Buffer
-		opts := Options{Paths: []absPath{absPath(dir)}}
+		opts := Options{Paths: []string{dir}}
 		cfg := Config{Rules: map[string]linter.Severity{"no-image-latest": linter.SeverityError}}
 		hasIssue, runErr := runLint(t.Context(), &stdout, io.Discard, opts, cfg)
 		if runErr != nil || !hasIssue {
@@ -834,7 +858,7 @@ func TestRunLint(t *testing.T) {
 		dir := writeDevcontainer(t, `{}`) // triggers missing-container-def (error by default)
 
 		var stdout bytes.Buffer
-		opts := Options{Paths: []absPath{absPath(dir)}}
+		opts := Options{Paths: []string{dir}}
 		cfg := Config{Rules: map[string]linter.Severity{"missing-container-def": linter.SeverityOff}}
 		hasIssue, runErr := runLint(t.Context(), &stdout, io.Discard, opts, cfg)
 		if runErr != nil || hasIssue {
@@ -862,7 +886,7 @@ func TestRunLint(t *testing.T) {
 		dir := writeDevcontainer(t, `{"image": "ubuntu:latest"}`) // no-image-latest is in reproducibility
 
 		var stdout bytes.Buffer
-		opts := Options{Paths: []absPath{absPath(dir)}}
+		opts := Options{Paths: []string{dir}}
 		cfg := Config{Categories: map[string]linter.Severity{"reproducibility": linter.SeverityError}}
 		hasIssue, runErr := runLint(t.Context(), &stdout, io.Discard, opts, cfg)
 		if runErr != nil || !hasIssue {
@@ -891,7 +915,7 @@ func TestRunLint(t *testing.T) {
 		file := filepath.Join(dir, ".devcontainer", "devcontainer.json")
 
 		var stdout bytes.Buffer
-		hasIssue, runErr := runLint(t.Context(), &stdout, io.Discard, Options{Paths: []absPath{absPath(file)}}, Config{})
+		hasIssue, runErr := runLint(t.Context(), &stdout, io.Discard, Options{Paths: []string{file}}, Config{})
 		if runErr == nil || hasIssue {
 			t.Errorf("hasIssue = %v, err = %v, want false, 'not a directory'", hasIssue, runErr)
 		}
@@ -902,7 +926,7 @@ func TestRunLint(t *testing.T) {
 		dir := writeDevcontainer(t, `{"image": "ubuntu:latest"}`)
 
 		var stdout bytes.Buffer
-		opts := Options{Paths: []absPath{absPath(dir)}}
+		opts := Options{Paths: []string{dir}}
 		cfg := Config{Rules: map[string]linter.Severity{"no-bind-mount": linter.SeverityError}}
 		hasIssue, runErr := runLint(t.Context(), &stdout, io.Discard, opts, cfg)
 		if runErr != nil || hasIssue {
@@ -1487,6 +1511,60 @@ func TestLintPath(t *testing.T) {
 			t.Error("merge ran on a Feature configuration")
 		}
 	})
+}
+
+func TestResolvePaths(t *testing.T) {
+	// Uses t.Chdir, which cannot be combined with t.Parallel.
+
+	t.Chdir(t.TempDir())
+	// t.TempDir can hand back a path through a symlink (/var on macOS), which names the same
+	// directory as "." but does not resolve to the same absolute path; ask for the one arguments
+	// resolve to.
+	wd, err := filepath.Abs(".")
+	if err != nil {
+		t.Fatalf("Abs: %v", err)
+	}
+	sub := filepath.Join(wd, "sub")
+
+	tests := []struct {
+		name  string
+		paths []string
+		want  []absPath
+	}{
+		{"a relative argument", []string{"."}, []absPath{absPath(wd)}},
+		{"the same directory spelled two ways", []string{".", wd}, []absPath{absPath(wd)}},
+		{"a repeated argument", []string{wd, wd}, []absPath{absPath(wd)}},
+		{"a trailing separator", []string{".", "." + string(filepath.Separator)}, []absPath{absPath(wd)}},
+		{"distinct directories are all kept", []string{".", sub}, []absPath{absPath(wd), absPath(sub)}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := resolvePaths(tt.paths)
+			if err != nil {
+				t.Fatalf("resolvePaths: %v", err)
+			}
+			if diff := cmp.Diff(tt.want, got); diff != "" {
+				t.Errorf("resolvePaths(%q) mismatch (-want +got):\n%s", tt.paths, diff)
+			}
+		})
+	}
+}
+
+func TestResolvePaths_LocationError(t *testing.T) {
+	// Uses t.Chdir, which cannot be combined with t.Parallel.
+
+	// A relative argument resolves against the working directory; deleting it leaves the argument
+	// with no location to resolve, which must surface as an error.
+	dir := t.TempDir()
+	t.Chdir(dir)
+	if err := os.Remove(dir); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := resolvePaths([]string{"."}); err == nil ||
+		!strings.Contains(err.Error(), "resolve directory") {
+		t.Errorf("err = %v, want a directory resolution error", err)
+	}
 }
 
 func TestAbsPathString(t *testing.T) {

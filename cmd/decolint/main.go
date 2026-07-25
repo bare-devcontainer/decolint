@@ -263,10 +263,15 @@ func runLint(ctx context.Context, stdout, stderr io.Writer, opts Options, cfg Co
 		}
 	}
 
+	targets, err := resolvePaths(opts.Paths)
+	if err != nil {
+		return false, err
+	}
+
 	var allIssues []linter.Issue
 	var worstSeverity linter.Severity
 	var lintErr error
-	for _, dir := range opts.Paths {
+	for _, dir := range targets {
 		issues, err := lintPath(ctx, l, subst, merge, dir)
 		for _, issue := range issues {
 			if issue.Severity > worstSeverity {
@@ -315,6 +320,27 @@ func (p absPath) String() string {
 		return string(p)
 	}
 	return rel
+}
+
+// resolvePaths resolves each of the directories named on the command line to the location it names,
+// dropping one an earlier argument already names so that passing e.g. both "." and its absolute path
+// lints it once rather than reporting every finding twice.
+func resolvePaths(paths []string) ([]absPath, error) {
+	seen := make(map[absPath]struct{}, len(paths))
+	resolved := make([]absPath, 0, len(paths))
+	for _, p := range paths {
+		abs, err := filepath.Abs(p)
+		if err != nil {
+			return nil, fmt.Errorf("resolve directory %s: %w", p, err)
+		}
+		dir := absPath(abs)
+		if _, ok := seen[dir]; ok {
+			continue
+		}
+		seen[dir] = struct{}{}
+		resolved = append(resolved, dir)
+	}
+	return resolved, nil
 }
 
 // lintPath lints the devcontainer directory dir. It is opened as an os.Root, so every file the lint

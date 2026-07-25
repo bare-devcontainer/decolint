@@ -8,8 +8,11 @@ on:
 permissions: {}
 
 jobs:
-  check:
+  sync:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
+    # The pull request is opened with the housekeeper app's token, so the job's own token only needs
+    # to read the repository for the checkout.
     permissions:
       contents: read
     steps:
@@ -19,11 +22,59 @@ jobs:
       - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
         with:
           go-version-file: go.mod
+
       - name: Refresh vendored schemas from upstream
         run: make update-schemas
-      - name: Fail if the vendored schemas are stale
+
+      - name: Generate GitHub App Token
+        id: app-token
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        with:
+          client-id: ${{ secrets.HOUSEKEEPER_CLIENT_ID }}
+          private-key: ${{ secrets.HOUSEKEEPER_PRIVATE_KEY }}
+
+      - name: Create PR for Schema Update
+        env:
+          GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
         run: |
-          if ! git diff --exit-code schema/data; then
-            echo "::error::Vendored Dev Container schemas are out of date. Run 'make update-schemas' and commit schema/data." >&2
-            exit 1
+          set -e
+
+          changed=$(git status --porcelain -- 'schema/data' | awk '{print $2}')
+          if [ -z "$changed" ]; then
+            echo "Vendored schemas are up to date."
+            exit 0
           fi
+
+          OWNER="${GITHUB_REPOSITORY_OWNER}"
+          REPO="${GITHUB_REPOSITORY#*/}"
+          BRANCH="housekeeper/schema-update-${GITHUB_RUN_ID}"
+          MESSAGE="chore: update vendored Dev Container schemas"
+
+          gh api "repos/${OWNER}/${REPO}/git/refs" \
+            --method POST \
+            -F ref="refs/heads/${BRANCH}" \
+            -F sha="${GITHUB_SHA}"
+
+          while IFS= read -r file; do
+            existing_sha=$(gh api "repos/${OWNER}/${REPO}/contents/${file}?ref=${BRANCH}" \
+              --jq '.sha' 2>/dev/null || true)
+            args=(
+              --method PUT
+              -F message="${MESSAGE}"
+              -F content="$(base64 -w0 "$file")"
+              -F branch="${BRANCH}"
+            )
+            [ -n "$existing_sha" ] && args+=(-F sha="$existing_sha")
+            gh api "repos/${OWNER}/${REPO}/contents/${file}" "${args[@]}"
+          done <<< "$changed"
+
+          # The upstream commits the schemas were vendored from, so the review shows what moved.
+          spec=$(jq -r '.spec' schema/data/REVISIONS.json)
+          vscode=$(jq -r '.vscode' schema/data/REVISIONS.json)
+          files=$(echo "$changed" | sed 's|^schema/data/|- |')
+
+          gh pr create \
+            --title "${MESSAGE}" \
+            --body "$(printf '## Updated Schemas\n\n%s\n\n## Upstream Revisions\n\n- devcontainers/spec@%s\n- microsoft/vscode@%s\n' "${files}" "${spec}" "${vscode}")" \
+            --head "${BRANCH}" \
+            --base main

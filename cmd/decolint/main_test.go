@@ -267,51 +267,6 @@ func TestRun(t *testing.T) {
 	}
 }
 
-// TestRun_IDDirMismatchNamesTheDirectory checks that id-dir-mismatch judges a Feature by the
-// directory it sits in rather than by how that directory was named on the command line. The default
-// lint target names it from inside, leaving the reported path with no directory component.
-func TestRun_IDDirMismatchNamesTheDirectory(t *testing.T) {
-	// Uses t.Chdir, which cannot be combined with t.Parallel.
-
-	// The fixture's id deliberately does not match its directory, so the rule fires in every run and
-	// the message it fires with is what distinguishes the runs.
-	const want = `id "wrong-id" does not match containing directory "feature"`
-	abs, err := filepath.Abs("testdata/e2e/feature")
-	if err != nil {
-		t.Fatalf("Abs: %v", err)
-	}
-
-	tests := []struct {
-		name string
-		args []string
-	}{
-		{"named from outside", []string{abs}},
-		{"named as the working directory", []string{"."}},
-		{"not named at all", nil},
-	}
-	t.Chdir(abs)
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			var stdout, stderr bytes.Buffer
-			run(t.Context(), append([]string{"-format=json"}, tt.args...), &stdout, &stderr)
-
-			var issues []linter.Issue
-			if err := json.Unmarshal(stdout.Bytes(), &issues); err != nil {
-				t.Fatalf("output is not a JSON issue array: %v\noutput: %s", err, stdout.String())
-			}
-			var got []string
-			for _, issue := range issues {
-				if issue.RuleID == "id-dir-mismatch" {
-					got = append(got, issue.Message)
-				}
-			}
-			if diff := cmp.Diff([]string{want}, got); diff != "" {
-				t.Errorf("id-dir-mismatch messages mismatch (-want +got):\n%s", diff)
-			}
-		})
-	}
-}
-
 // TestRun_ReportedPathsAreWorkingDirectoryRelative checks that findings name files the same way
 // however the lint target was named, and that a target outside the working directory is named
 // absolutely.
@@ -1541,6 +1496,76 @@ func TestLintPath(t *testing.T) {
 			t.Error("merge ran on a Feature configuration")
 		}
 	})
+}
+
+// dirNameRule is a stub rule that reports the name of the directory the linted file sits in, used to
+// observe the [linter.Dir] a lint hands to rules without depending on a rule that reads it.
+var dirNameRule = &linter.Rule{
+	ID:          "test-dir-name",
+	Description: "reports the containing directory's name",
+	FileTypes:   []linter.FileType{linter.Feature},
+	Paths:       []string{"/id"},
+	Check: func(ctx *linter.Context, node *linter.Node) []linter.Finding {
+		return []linter.Finding{{Message: ctx.Dir.Name, Offset: node.Value.StartOffset}}
+	},
+}
+
+// TestLintPath_DirName checks that rules are handed the name of the directory the configuration file
+// sits in wherever the lint runs from, while the path the finding is reported at follows the working
+// directory. Linting a directory from inside it leaves that path with no directory component, so the
+// name cannot be taken from there.
+func TestLintPath_DirName(t *testing.T) {
+	// Uses t.Chdir, which cannot be combined with t.Parallel.
+
+	parent := t.TempDir()
+	// t.TempDir can hand back a path through a symlink (/var on macOS), which is not the path the
+	// process reports as its working directory; ask for the one findings are reported against.
+	t.Chdir(parent)
+	parent, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("Getwd: %v", err)
+	}
+	target := filepath.Join(parent, "my-feature")
+	sibling := filepath.Join(parent, "elsewhere")
+	for _, dir := range []string{target, sibling} {
+		if err := os.Mkdir(dir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.WriteFile(filepath.Join(target, "devcontainer-feature.json"), []byte(`{"id": "my-feature"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	tests := []struct {
+		name     string
+		wd       string
+		wantPath string
+	}{
+		{"from the directory itself", target, "devcontainer-feature.json"},
+		{"from its parent", parent, filepath.Join("my-feature", "devcontainer-feature.json")},
+		{"from outside", sibling, filepath.Join(target, "devcontainer-feature.json")},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Chdir(tt.wd)
+			l := linter.New()
+			l.RegisterRule(dirNameRule, linter.SeverityWarn)
+
+			issues, err := lintPath(t.Context(), l, nil, nil, absPath(target))
+			if err != nil {
+				t.Fatalf("lintPath: %v", err)
+			}
+			if len(issues) != 1 {
+				t.Fatalf("got %d issues %v, want 1", len(issues), issues)
+			}
+			if issues[0].Message != "my-feature" {
+				t.Errorf("ctx.Dir.Name = %q, want %q", issues[0].Message, "my-feature")
+			}
+			if issues[0].Path != tt.wantPath {
+				t.Errorf("Path = %q, want %q", issues[0].Path, tt.wantPath)
+			}
+		})
+	}
 }
 
 func TestAbsPathString(t *testing.T) {

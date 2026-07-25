@@ -2,6 +2,7 @@ package format
 
 import (
 	"errors"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -41,6 +42,53 @@ func TestSARIFWriteIssues(t *testing.T) {
 	if sb.String() != want {
 		t.Errorf("WriteIssues sarif = %q, want %q", sb.String(), want)
 	}
+}
+
+// TestSARIFWriteIssues_ArtifactLocation checks how a finding's path becomes a SARIF artifact
+// location: a path built with the host's separators is reported against the source root with "/"
+// ones, while an absolute path — which decolint reports for a file outside the directory it runs in
+// — is reported as a file URI that no base id applies to.
+func TestSARIFWriteIssues_ArtifactLocation(t *testing.T) {
+	t.Parallel()
+
+	t.Run("relative path", func(t *testing.T) {
+		t.Parallel()
+
+		issues := testIssues()[:1]
+		issues[0].Path = filepath.Join(".devcontainer", "go", "devcontainer.json")
+
+		var sb strings.Builder
+		if err := testSARIFFormat().WriteIssues(&sb, issues); err != nil {
+			t.Fatalf("WriteIssues: %v", err)
+		}
+
+		want := `"artifactLocation":{"uri":".devcontainer/go/devcontainer.json","uriBaseId":"%SRCROOT%"}`
+		if !strings.Contains(sb.String(), want) {
+			t.Errorf("WriteIssues sarif = %q, want it to contain %q", sb.String(), want)
+		}
+	})
+
+	t.Run("absolute path", func(t *testing.T) {
+		t.Parallel()
+
+		issues := testIssues()[:1]
+		issues[0].Path = filepath.Join(t.TempDir(), "devcontainer.json")
+
+		var sb strings.Builder
+		if err := testSARIFFormat().WriteIssues(&sb, issues); err != nil {
+			t.Fatalf("WriteIssues: %v", err)
+		}
+
+		// The URI's own path varies with the host, so only its form is asserted: a file URI with an
+		// empty authority, and no base id to resolve it against.
+		out := sb.String()
+		if !strings.Contains(out, `"artifactLocation":{"uri":"file:///`) {
+			t.Errorf("WriteIssues sarif = %q, want an absolute file URI", out)
+		}
+		if strings.Contains(out, srcRootBaseID) {
+			t.Errorf("WriteIssues sarif = %q, want no %s for an absolute path", out, srcRootBaseID)
+		}
+	})
 }
 
 func TestSARIFWriteIssues_Empty(t *testing.T) {

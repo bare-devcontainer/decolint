@@ -6,8 +6,10 @@ import (
 	"fmt"
 	"io"
 	"maps"
+	"net/url"
 	"path/filepath"
 	"slices"
+	"strings"
 
 	"github.com/bare-devcontainer/decolint/linter"
 )
@@ -32,6 +34,9 @@ const (
 	sarifSchemaURI = "https://json.schemastore.org/sarif-2.1.0.json"
 	sarifVersion   = "2.1.0"
 	informationURI = "https://github.com/bare-devcontainer/decolint"
+	// srcRootBaseID is the SARIF base id a relative path is reported against. An upload resolves it
+	// to the root of the analyzed checkout.
+	srcRootBaseID = "%SRCROOT%"
 )
 
 // The wire structs cover the subset of SARIF 2.1.0 decolint emits. Fields marshal in declaration
@@ -92,7 +97,7 @@ type sarifPhysicalLocation struct {
 
 type sarifArtifactLocation struct {
 	URI       string `json:"uri"`
-	URIBaseID string `json:"uriBaseId"`
+	URIBaseID string `json:"uriBaseId,omitzero"`
 }
 
 type sarifRegion struct {
@@ -104,8 +109,8 @@ type sarifRegion struct {
 // in-memory buffer first so that a failure never leaves partial output on w.
 //
 // The run's rule catalog lists only the rules referenced by issues, sorted by rule ID; a rule
-// missing from f.Rules is listed with its ID alone. Issue paths become forward-slash URIs relative
-// to %SRCROOT%, so uploads map to repository files when decolint runs at the repository root.
+// missing from f.Rules is listed with its ID alone. Issue paths are reported as URIs; see
+// [artifactLocationFor].
 func (f SARIFFormat) WriteIssues(w io.Writer, issues []linter.Issue) error {
 	catalog := make(map[string]SARIFRule, len(f.Rules))
 	for _, r := range f.Rules {
@@ -145,11 +150,8 @@ func (f SARIFFormat) WriteIssues(w io.Writer, issues []linter.Issue) error {
 			Message:   sarifMessage{Text: issue.Message},
 			Locations: []sarifLocation{{
 				PhysicalLocation: sarifPhysicalLocation{
-					ArtifactLocation: sarifArtifactLocation{
-						URI:       filepath.ToSlash(issue.Path),
-						URIBaseID: "%SRCROOT%",
-					},
-					Region: sarifRegion{StartLine: issue.Line, StartColumn: issue.Col},
+					ArtifactLocation: artifactLocationFor(issue.Path),
+					Region:           sarifRegion{StartLine: issue.Line, StartColumn: issue.Col},
 				},
 			}},
 		})
@@ -178,4 +180,17 @@ func (f SARIFFormat) WriteIssues(w io.Writer, issues []linter.Issue) error {
 		return fmt.Errorf("write issues: %w", err)
 	}
 	return nil
+}
+
+// artifactLocationFor returns the SARIF location of the file at path, whose members must be a URI
+// rather than a filesystem path. A relative path is reported against [srcRootBaseID]; an absolute
+// one, which decolint reports for a file outside the directory it runs in, becomes an absolute file
+// URI, since resolving it against the source root would name a different file.
+func artifactLocationFor(path string) sarifArtifactLocation {
+	slashed := filepath.ToSlash(path)
+	if !filepath.IsAbs(path) {
+		return sarifArtifactLocation{URI: (&url.URL{Path: slashed}).String(), URIBaseID: srcRootBaseID}
+	}
+	// A Windows path is absolute without a leading "/", which a file URI's path needs.
+	return sarifArtifactLocation{URI: (&url.URL{Scheme: "file", Path: "/" + strings.TrimPrefix(slashed, "/")}).String()}
 }

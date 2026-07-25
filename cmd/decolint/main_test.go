@@ -594,7 +594,8 @@ func TestRun_OutputFormat(t *testing.T) {
 					Locations []struct {
 						PhysicalLocation struct {
 							ArtifactLocation struct {
-								URI string `json:"uri"`
+								URI       string `json:"uri"`
+								URIBaseID string `json:"uriBaseId"`
 							} `json:"artifactLocation"`
 						} `json:"physicalLocation"`
 					} `json:"locations"`
@@ -629,8 +630,12 @@ func TestRun_OutputFormat(t *testing.T) {
 			if len(result.Locations) != 1 {
 				t.Fatalf("result %s locations = %d, want 1", result.RuleID, len(result.Locations))
 			}
-			if uri := result.Locations[0].PhysicalLocation.ArtifactLocation.URI; uri != violationsFile {
-				t.Errorf("result %s uri = %q, want %q", result.RuleID, uri, violationsFile)
+			location := result.Locations[0].PhysicalLocation.ArtifactLocation
+			if location.URI != violationsFile {
+				t.Errorf("result %s uri = %q, want %q", result.RuleID, location.URI, violationsFile)
+			}
+			if location.URIBaseID != "%SRCROOT%" {
+				t.Errorf("result %s uriBaseId = %q, want %q", result.RuleID, location.URIBaseID, "%SRCROOT%")
 			}
 		}
 		want := []string{"no-bind-mount", "no-host-port-format"}

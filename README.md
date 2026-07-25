@@ -198,8 +198,8 @@ Select a different output format to change this:
     with:
       sarif_file: decolint.sarif
   ```
-  Run `decolint` from the repository root with relative directory
-  arguments, so the reported paths resolve to repository files.
+  Run `decolint` from the repository root, so that the paths in the log
+  resolve to files in the repository.
 
 Every format reports paths relative to the directory `decolint` runs in,
 whichever way the linted directory was named on the command line. A file

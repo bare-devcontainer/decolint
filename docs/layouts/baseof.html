@@ -29,8 +29,8 @@
         {{ range site.Menus.main }}
           <a href="{{ .URL }}"{{ if $.IsMenuCurrent "main" . }} aria-current="page"{{ end }}>{{ .Name }}</a>
         {{ end }}
-        <a href="{{ site.Params.repository }}">GitHub</a>
       </nav>
+      <a class="site-header__github" href="{{ site.Params.repository }}">decolint on GitHub</a>
     </header>
 
     {{ $isRules := eq .Section "rules" }}

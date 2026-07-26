@@ -134,6 +134,10 @@ th {
   gap: 1.25rem;
 }
 
+.site-header__github {
+  margin-left: auto;
+}
+
 .site-header nav a[aria-current="page"] {
   color: var(--fg);
   font-weight: 600;

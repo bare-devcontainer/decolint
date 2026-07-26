@@ -76,6 +76,80 @@
 /* GenericUnderline */ .chroma .gl { text-decoration:underline }
 /* TextWhitespace */ .chroma .w { color:#fff }
 @media (prefers-color-scheme: dark) {
+  /* github-dark omits token classes it colors the same as the default text color,
+     so fall back to inheriting that color instead of the light style's, which
+     stays in effect below for every class the dark style does define. */
+  .chroma .bp { color: inherit }
+  .chroma .c { color: inherit }
+  .chroma .c1 { color: inherit }
+  .chroma .ch { color: inherit }
+  .chroma .cm { color: inherit }
+  .chroma .cp { color: inherit }
+  .chroma .cpf { color: inherit }
+  .chroma .cs { color: inherit }
+  .chroma .dl { color: inherit }
+  .chroma .err { color: inherit }
+  .chroma .fm { color: inherit }
+  .chroma .gd { color: inherit }
+  .chroma .ge { color: inherit }
+  .chroma .gi { color: inherit }
+  .chroma .gl { color: inherit }
+  .chroma .go { color: inherit }
+  .chroma .hl { color: inherit }
+  .chroma .il { color: inherit }
+  .chroma .k { color: inherit }
+  .chroma .kc { color: inherit }
+  .chroma .kd { color: inherit }
+  .chroma .kn { color: inherit }
+  .chroma .kp { color: inherit }
+  .chroma .kr { color: inherit }
+  .chroma .kt { color: inherit }
+  .chroma .line { color: inherit }
+  .chroma .ln { color: inherit }
+  .chroma .lnlinks { color: inherit }
+  .chroma .lnt { color: inherit }
+  .chroma .lntable { color: inherit }
+  .chroma .lntd { color: inherit }
+  .chroma .m { color: inherit }
+  .chroma .mb { color: inherit }
+  .chroma .mf { color: inherit }
+  .chroma .mh { color: inherit }
+  .chroma .mi { color: inherit }
+  .chroma .mo { color: inherit }
+  .chroma .na { color: inherit }
+  .chroma .nb { color: inherit }
+  .chroma .nc { color: inherit }
+  .chroma .nd { color: inherit }
+  .chroma .nf { color: inherit }
+  .chroma .ni { color: inherit }
+  .chroma .nl { color: inherit }
+  .chroma .nn { color: inherit }
+  .chroma .no { color: inherit }
+  .chroma .nt { color: inherit }
+  .chroma .nv { color: inherit }
+  .chroma .nx { color: inherit }
+  .chroma .o { color: inherit }
+  .chroma .or { color: inherit }
+  .chroma .ow { color: inherit }
+  .chroma .p { color: inherit }
+  .chroma .s { color: inherit }
+  .chroma .s1 { color: inherit }
+  .chroma .s2 { color: inherit }
+  .chroma .sa { color: inherit }
+  .chroma .sb { color: inherit }
+  .chroma .sc { color: inherit }
+  .chroma .sd { color: inherit }
+  .chroma .se { color: inherit }
+  .chroma .sh { color: inherit }
+  .chroma .si { color: inherit }
+  .chroma .sr { color: inherit }
+  .chroma .ss { color: inherit }
+  .chroma .sx { color: inherit }
+  .chroma .vc { color: inherit }
+  .chroma .vg { color: inherit }
+  .chroma .vi { color: inherit }
+  .chroma .vm { color: inherit }
+  .chroma .w { color: inherit }
 
   /* Background */ .bg { color:#e6edf3;background-color:#0d1117; }
   /* PreWrapper */ .chroma { color:#e6edf3;background-color:#0d1117;-webkit-text-size-adjust:none; }

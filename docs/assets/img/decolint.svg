@@ -1,10 +1,10 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 460 460" width="460" height="460" fill="none" role="img" aria-label="avatar">
   <rect width="460" height="460" fill="#131A20"></rect>
-  <g transform="translate(94 94) scale(4.25)">
-    <mask id="cutav" maskUnits="userSpaceOnUse" x="0" y="0" width="64" height="64">
-      <rect width="64" height="64" fill="#fff"></rect>
-      <circle cx="46" cy="46" r="10.5" fill="#000"></circle>
-    </mask>
+  <g transform="translate(66.8 66.8) scale(5.1)">
+  <mask id="cutav" maskUnits="userSpaceOnUse" x="0" y="0" width="64" height="64">
+    <rect width="64" height="64" fill="#fff"></rect>
+    <circle cx="46" cy="46" r="10.5" fill="#000"></circle>
+  </mask>
     <g mask="url(#cutav)" stroke="#FDFCFA" stroke-width="5" stroke-linejoin="round" stroke-linecap="round" fill="none">
       <path d="M32 7 55 20v24L32 57 9 44V20Z"></path>
       <path d="M9 20l23 13 23-13"></path>

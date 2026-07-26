@@ -115,6 +115,19 @@ func TestSplitReadme(t *testing.T) {
 	}
 }
 
+// TestSplitReadme_DuplicateHeadingSlug guards against nondeterminism: slugPage used to be built by
+// ranging the bodies map, so two pages sharing a heading slug resolved to whichever page Go's map
+// iteration visited last — differently from run to run — instead of failing.
+func TestSplitReadme_DuplicateHeadingSlug(t *testing.T) {
+	t.Parallel()
+
+	dup := strings.Replace(fixtureReadme, "## What decolint lints", "## Why decolint", 1)
+	_, err := splitReadme(dup)
+	if err == nil {
+		t.Fatal("splitReadme with a heading slug shared by two pages: got nil error, want one")
+	}
+}
+
 func TestSplitReadme_MarkerErrors(t *testing.T) {
 	t.Parallel()
 

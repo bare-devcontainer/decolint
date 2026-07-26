@@ -67,9 +67,15 @@ func splitReadme(src string) (map[string]string, error) {
 
 	// The heading -> page map spans all three bodies, so a link anywhere among them can be resolved
 	// to the page it actually lives on, or correctly left alone when it's already on the right one.
+	// Built in a fixed order (not a map range) and erroring on a repeat: two pages sharing a heading
+	// slug would otherwise resolve to whichever page Go's map iteration visited last, silently and
+	// differently from run to run.
 	slugPage := map[string]string{}
-	for name, body := range bodies {
-		for _, h := range scanHeadings(body) {
+	for _, name := range readmePages {
+		for _, h := range scanHeadings(bodies[name]) {
+			if existing, ok := slugPage[h.Slug]; ok {
+				return nil, fmt.Errorf("heading %q (slug %q) appears on both %q and %q", h.Text, h.Slug, existing, name)
+			}
 			slugPage[h.Slug] = name
 		}
 	}

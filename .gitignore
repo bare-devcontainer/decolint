@@ -21,7 +21,8 @@ profile.cov
 /bin/
 /docs/public/
 /docs/resources/
-/docs/.hugo_build.lock
+# Hugo writes its build lock in the directory it runs from, which is not always docs/.
+.hugo_build.lock
 
 # Go workspace file
 go.work

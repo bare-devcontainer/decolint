@@ -141,7 +141,10 @@ func updateReadmeRulesTable(path string) error {
 	if out == string(src) {
 		return nil
 	}
-	return os.WriteFile(path, []byte(out), 0o644)
+	if err := os.WriteFile(path, []byte(out), 0o644); err != nil {
+		return fmt.Errorf("write %s: %w", path, err)
+	}
+	return nil
 }
 
 // renderRulesTable renders every built-in rule as a Markdown table row, each ID linking to its

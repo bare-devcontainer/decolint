@@ -66,7 +66,7 @@ func splitReadme(src string) (map[string]string, error) {
 		return nil, fmt.Errorf("could not find all expected section headings (why=%d try=%d linting=%d reference=%d contributing=%d)",
 			whyIdx, tryIdx, lintingIdx, refIdx, contribIdx)
 	}
-	if !(whyIdx < tryIdx && tryIdx < lintingIdx && lintingIdx < refIdx && refIdx < contribIdx) {
+	if whyIdx >= tryIdx || tryIdx >= lintingIdx || lintingIdx >= refIdx || refIdx >= contribIdx {
 		return nil, fmt.Errorf("section headings are not in the expected order (why=%d try=%d linting=%d reference=%d contributing=%d)",
 			whyIdx, tryIdx, lintingIdx, refIdx, contribIdx)
 	}

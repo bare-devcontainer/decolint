@@ -36,7 +36,7 @@ type heading struct {
 func scanHeadings(body string) []heading {
 	var out []heading
 	fenced := false
-	for _, line := range strings.Split(body, "\n") {
+	for line := range strings.SplitSeq(body, "\n") {
 		if strings.HasPrefix(strings.TrimSpace(line), "```") {
 			fenced = !fenced
 			continue
@@ -56,7 +56,8 @@ func scanHeadings(body string) []heading {
 // atxHeading parses line as an ATX heading ("# Title" through "###### Title"), returning its level
 // and text with any trailing "#"s trimmed.
 func atxHeading(line string) (level int, text string, ok bool) {
-	for level = 0; level < len(line) && level < 6 && line[level] == '#'; level++ {
+	for level < len(line) && level < 6 && line[level] == '#' {
+		level++
 	}
 	if level == 0 || level >= len(line) || line[level] != ' ' {
 		return 0, "", false

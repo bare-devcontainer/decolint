@@ -54,7 +54,9 @@ func writeGitHubFileGroup(w io.Writer, files []File) error {
 	if _, err := fmt.Fprintln(w, "::group::decolint"); err != nil {
 		return fmt.Errorf("write file group: %w", err)
 	}
-	if err := writeFileList(w, files); err != nil {
+	// Workflow commands are parsed by the runner, not read off a terminal, so the block is written
+	// undecorated.
+	if err := writeFileList(w, styler{}, files); err != nil {
 		return err
 	}
 	if _, err := fmt.Fprintln(w, "::endgroup::"); err != nil {

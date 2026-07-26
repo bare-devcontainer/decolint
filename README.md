@@ -82,7 +82,7 @@ overrides the config file when given:
 `-merge` and `-deny-warnings` override in either direction when given
 explicitly — e.g. `-merge=false` disables merging even if the config
 file sets `"merge": true`. Category and rule severities are config-file
-only.
+only, and [color](#color) is set by the `-color` flag only.
 
 The remaining flags perform a one-off action and exit; run
 `decolint -help` for the full list:
@@ -180,7 +180,8 @@ Found 0 errors and 1 warning.
 ```
 
 The first line names the config file in use, or says that no config
-file was found and how to create one.
+file was found and how to create one. Written to a terminal, the report
+is colored by severity; see [Color](#color).
 
 Select a different output format to change this:
 
@@ -223,6 +224,25 @@ Select a different output format to change this:
 Every format reports paths relative to the directory `decolint` runs in,
 whichever way the linted directory was named on the command line. A file
 outside that directory is reported with its absolute path.
+
+### Color
+
+The `text` format colors each finding by its severity when it is written
+to a terminal, and writes plain text otherwise — so a report piped into
+another command, or redirected to a file, stays free of escape
+sequences. The other formats are never colored.
+
+Pass `-color` to decide instead of leaving it to the terminal:
+
+```console
+decolint -color=always | less -R   # always color
+decolint -color=never              # never color
+```
+
+Without the flag, the `NO_COLOR` and `FORCE_COLOR` environment variables
+apply: set `NO_COLOR` to any non-empty value to turn color off, or
+`FORCE_COLOR` to color output that does not go to a terminal, such as a
+CI log. `-color` overrides both.
 
 ### Exit codes
 

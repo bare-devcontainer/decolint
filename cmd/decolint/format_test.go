@@ -15,21 +15,28 @@ func TestParseFormat(t *testing.T) {
 	tests := []struct {
 		name    string
 		in      string
+		color   bool
 		want    Format
 		wantErr bool
 	}{
-		{"empty", "", format.TextFormat{}, false},
-		{"text", "text", format.TextFormat{}, false},
-		{"json", "json", format.JSONFormat{}, false},
-		{"github", "github", format.GitHubFormat{}, false},
-		{"sarif", "sarif", format.SARIFFormat{Version: version, Rules: sarifRules(Config{})}, false},
-		{"unknown", "bogus", nil, true},
+		{"empty", "", false, format.TextFormat{}, false},
+		{"text", "text", false, format.TextFormat{}, false},
+		{"text colored", "text", true, format.TextFormat{Color: true}, false},
+		{"json", "json", false, format.JSONFormat{}, false},
+		// Color reaches the text format alone; a machine-readable format never carries escape
+		// sequences, however the output was asked to be colored.
+		{"json ignores color", "json", true, format.JSONFormat{}, false},
+		{"github", "github", false, format.GitHubFormat{}, false},
+		{"github ignores color", "github", true, format.GitHubFormat{}, false},
+		{"sarif", "sarif", false, format.SARIFFormat{Version: version, Rules: sarifRules(Config{})}, false},
+		{"sarif ignores color", "sarif", true, format.SARIFFormat{Version: version, Rules: sarifRules(Config{})}, false},
+		{"unknown", "bogus", false, nil, true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			cfg := Config{Format: tt.in}
-			got, err := parseFormat(cfg)
+			got, err := parseFormat(cfg, tt.color)
 			if (err != nil) != tt.wantErr {
 				t.Fatalf("parseFormat(%q) error = %v, wantErr %v", tt.in, err, tt.wantErr)
 			}

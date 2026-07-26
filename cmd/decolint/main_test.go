@@ -629,6 +629,23 @@ func TestRun_OutputFormat(t *testing.T) {
 				t.Errorf("text output missing %q; got:\n%s", want, out)
 			}
 		}
+		// The report is not written to a terminal here, so it carries no escape sequence.
+		if strings.Contains(out, "\x1b") {
+			t.Errorf("text output = %q, want no escape sequence in it", out)
+		}
+	})
+
+	t.Run("text colored on request", func(t *testing.T) {
+		t.Parallel()
+
+		var stdout, stderr bytes.Buffer
+		exitCode := run(t.Context(), []string{"-color=always", "-platform=vscode,codespaces", violationsDir}, &stdout, &stderr)
+		if exitCode != 1 {
+			t.Fatalf("exit code = %d, want 1; stderr: %s", exitCode, stderr.String())
+		}
+		if !strings.Contains(stdout.String(), "\x1b[31;1merror\x1b[0m") {
+			t.Errorf("colored text output = %q, want the severity of an issue colored in it", stdout.String())
+		}
 	})
 
 	t.Run("github workflow commands", func(t *testing.T) {

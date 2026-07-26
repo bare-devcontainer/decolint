@@ -235,7 +235,7 @@ Flags:
 // cfgPath is the config file cfg was loaded from, empty when the run uses the defaults; it is
 // reported so the output says which settings were in effect.
 func runLint(ctx context.Context, stdout, stderr io.Writer, opts Options, cfg Config, cfgPath string) (bool, error) {
-	outputFormat, err := parseFormat(cfg)
+	outputFormat, err := parseFormat(cfg, useColor(opts.Color, isTerminal(stdout), os.Getenv))
 	if err != nil {
 		return false, err
 	}

@@ -146,6 +146,91 @@ Found 0 errors and 0 warnings.
 	}
 }
 
+// ANSI escape sequences the colored text report is made of; off ends the innermost one.
+const (
+	ansiBold   = "\x1b[1m"
+	ansiDim    = "\x1b[2m"
+	ansiGreen  = "\x1b[32m"
+	ansiRed    = "\x1b[31;1m"
+	ansiYellow = "\x1b[33;1m"
+	ansiOff    = "\x1b[0m"
+)
+
+func TestTextWriteReport_Color(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name   string
+		report Report
+		want   []string
+	}{
+		{
+			name:   "the severity of each issue is colored and its position stands out",
+			report: testReport(),
+			want: []string{
+				ansiBold + "Config:" + ansiOff + " .decolint.jsonc",
+				ansiBold + "Linted 2 files:" + ansiOff,
+				"  .devcontainer/devcontainer.json " + ansiDim + "(devcontainer)" + ansiOff,
+				"  src/devcontainer-feature.json " + ansiDim + "(feature)" + ansiOff,
+				"",
+				ansiBold + ".devcontainer/devcontainer.json:4:12" + ansiOff + ": " + ansiYellow + "warn" + ansiOff +
+					`: image "ubuntu:latest" uses the "latest" tag; pin a specific version ` + ansiDim + "(no-image-latest)" + ansiOff,
+				ansiBold + ".devcontainer/devcontainer.json:8:3" + ansiOff + ": " + ansiRed + "error" + ansiOff +
+					": something is broken " + ansiDim + "(some-error-rule)" + ansiOff,
+				"Found " + ansiRed + "1 error" + ansiOff + " and " + ansiYellow + "1 warning" + ansiOff + ".",
+				"",
+			},
+		},
+		{
+			// A run with nothing to report is colored as a whole, so it is recognizable without
+			// reading the counts.
+			name:   "a clean run is summarized in green",
+			report: Report{Files: []File{{Path: ".devcontainer.json", Type: linter.Devcontainer}}},
+			want: []string{
+				ansiBold + "Config:" + ansiOff + " " + ansiDim + `none (defaults; run "decolint -init" to create .decolint.jsonc)` + ansiOff,
+				ansiBold + "Linted 1 file:" + ansiOff,
+				"  .devcontainer.json " + ansiDim + "(devcontainer)" + ansiOff,
+				"",
+				ansiGreen + "Found 0 errors and 0 warnings." + ansiOff,
+				"",
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			var sb strings.Builder
+			if err := (TextFormat{Color: true}).WriteReport(&sb, tt.report); err != nil {
+				t.Fatalf("WriteReport: %v", err)
+			}
+			want := strings.Join(tt.want, "\n")
+			if sb.String() != want {
+				t.Errorf("WriteReport text = %q, want %q", sb.String(), want)
+			}
+		})
+	}
+}
+
+// TestTextWriteReport_Uncolored checks that an undecorated issue line is the one
+// [linter.Issue.String] returns, so that the two renderings of a finding cannot drift apart.
+func TestTextWriteReport_Uncolored(t *testing.T) {
+	t.Parallel()
+
+	var sb strings.Builder
+	if err := (TextFormat{}).WriteReport(&sb, testReport()); err != nil {
+		t.Fatalf("WriteReport: %v", err)
+	}
+	for _, issue := range testIssues() {
+		if !strings.Contains(sb.String(), issue.String()+"\n") {
+			t.Errorf("WriteReport text = %q, want it to contain the line %q", sb.String(), issue.String())
+		}
+	}
+	if strings.Contains(sb.String(), "\x1b") {
+		t.Errorf("WriteReport text = %q, want no escape sequence in it", sb.String())
+	}
+}
+
 func TestTextWriteReport_WriteError(t *testing.T) {
 	t.Parallel()
 

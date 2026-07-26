@@ -40,6 +40,9 @@ type Options struct {
 	// stdout: "text", "json", "github", or "sarif". A non-empty value replaces the config file's
 	// "format" member; it is resolved into a Format by parseFormat in runLint.
 	Format string
+	// Color is when the text output should be colored, from the -color flag. It is CLI-only: whether
+	// escape sequences can be rendered depends on where decolint runs, not on the project it lints.
+	Color colorMode
 	// Version, when set, causes the program to print its version and exit.
 	Version bool
 	// ListRules, when set, causes the program to print the built-in rules and exit.
@@ -54,6 +57,7 @@ func parseOptions(args []string, output io.Writer) (Options, error) {
 	var opts Options
 	var platformFlag string
 	var formatFlag string
+	var colorFlag string
 
 	fs := flag.NewFlagSet(progName, flag.ContinueOnError)
 	fs.SetOutput(output)
@@ -61,6 +65,7 @@ func parseOptions(args []string, output io.Writer) (Options, error) {
 	fs.StringVar(&opts.ConfigPath, "config", "", "path to a config file (default: auto-discover .decolint.jsonc or .decolint.json in the current directory)")
 	fs.StringVar(&platformFlag, "platform", "", "comma-separated target platforms to include in addition to \"all\" (vscode, codespaces); overrides the config file's \"platforms\" member")
 	fs.StringVar(&formatFlag, "format", "", "output format: text (default), json, github, or sarif; overrides the config file's \"format\" member")
+	fs.StringVar(&colorFlag, "color", "", "when to color the text output: auto (default; only when writing to a terminal), always, or never")
 	fs.BoolVar(&opts.Merge, "merge", false, "lint the merged (effective) configuration, including referenced Features and base image metadata; overrides the config file's \"merge\" member")
 	fs.BoolVar(&opts.Version, "version", false, "print version information and exit")
 	fs.BoolVar(&opts.ListRules, "rules", false, "print the built-in rules as a Markdown table (category, target platforms, current severity), then exit")
@@ -87,6 +92,12 @@ func parseOptions(args []string, output io.Writer) (Options, error) {
 	// The raw name is validated and resolved into a Format by parseFormat in runLint, after the
 	// config file's "format" member is merged in, so both sources go through one validation path.
 	opts.Format = formatFlag
+
+	color, err := parseColorMode(colorFlag)
+	if err != nil {
+		return Options{}, err
+	}
+	opts.Color = color
 
 	opts.Paths = fs.Args()
 	if len(opts.Paths) == 0 {

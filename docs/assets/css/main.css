@@ -199,9 +199,14 @@ h3 {
 
 .rule-nav,
 .page-toc {
+  align-self: start;
   border-right: 1px solid var(--border);
   font-size: 0.9rem;
+  max-height: calc(100vh - 3rem);
+  overflow-y: auto;
   padding-right: 1.25rem;
+  position: sticky;
+  top: 1.5rem;
 }
 
 .rule-nav__all {
@@ -262,6 +267,9 @@ h3 {
   .page-toc {
     border-bottom: 1px solid var(--border);
     border-right: 0;
+    max-height: none;
+    overflow-y: visible;
     padding: 0 0 1rem;
+    position: static;
   }
 }

@@ -18,7 +18,7 @@ release. Either way the configuration says "whatever is current", so the same de
 different environment next month, and a build that broke cannot be reproduced from the file alone. Name
 the version the project was tested against.`,
 	References: []string{
-		`https://containers.dev/implementors/json_reference/#image-or-dockerfile-specific-properties`,
+		`https://containers.dev/implementors/json_reference/#image-specific`,
 	},
 	Category:  linter.CategoryReproducibility,
 	FileTypes: []linter.FileType{linter.Devcontainer},

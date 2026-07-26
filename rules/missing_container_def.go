@@ -15,7 +15,7 @@ the three is required in its own scenario. A configuration that sets none of the
 at all, so no tool can create one from it.`,
 	References: []string{
 		`https://containers.dev/implementors/spec/#orchestration-options`,
-		`https://containers.dev/implementors/json_reference/#scenario-specific-properties`,
+		`https://containers.dev/implementors/json_reference/#scenario-specific`,
 	},
 	Category:  linter.CategoryCorrectness,
 	FileTypes: []linter.FileType{linter.Devcontainer},

@@ -15,7 +15,7 @@ container the tooling should attach to. The specification requires "service" to 
 it is the one lifecycle scripts run in and the one editors connect to.`,
 	References: []string{
 		`https://containers.dev/implementors/spec/#docker-compose-based`,
-		`https://containers.dev/implementors/json_reference/#docker-compose-specific-properties`,
+		`https://containers.dev/implementors/json_reference/#compose-specific`,
 	},
 	Category:  linter.CategoryCorrectness,
 	FileTypes: []linter.FileType{linter.Devcontainer},

@@ -17,7 +17,7 @@ calls the default profile blocks precisely because they have been used to break 
 setting is most often copied from debugger instructions, where granting the "SYS_PTRACE" capability is
 enough on current runtimes.`,
 	References: []string{
-		`https://containers.dev/implementors/json_reference/#general-devcontainerjson-properties`,
+		`https://containers.dev/implementors/json_reference/#general-properties`,
 		`https://docs.docker.com/engine/security/seccomp/`,
 	},
 	Category:  linter.CategorySecurity,

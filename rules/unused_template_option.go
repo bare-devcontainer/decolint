@@ -17,7 +17,7 @@ var UnusedTemplateOption = &linter.Rule{
 references is still presented to the user when the Template is applied, so it asks a question whose
 answer changes nothing — usually a leftover from a removed file or a renamed reference.`,
 	References: []string{
-		`https://containers.dev/implementors/templates/#the-options-property`,
+		`https://containers.dev/implementors/templates/#options`,
 		`https://containers.dev/implementors/templates/#option-resolution`,
 	},
 	Category:  linter.CategoryStyle,

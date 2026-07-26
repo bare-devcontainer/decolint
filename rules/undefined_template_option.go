@@ -21,8 +21,7 @@ that name. A reference to an option that "options" does not declare is never pro
 reference implementation substitutes the empty string for it, so a typo silently produces an empty value
 in the applied files instead of an error.`,
 	References: []string{
-		`https://containers.dev/implementors/templates/#the-options-property`,
-		`https://github.com/devcontainers/cli`,
+		`https://containers.dev/implementors/templates/#options`,
 	},
 	Category:  linter.CategoryCorrectness,
 	FileTypes: []linter.FileType{linter.Template},

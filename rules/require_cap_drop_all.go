@@ -17,7 +17,7 @@ access, changing file ownership, or binding privileged ports. Dropping all of th
 what the workload needs ("capAdd") means a process that is compromised inherits no privilege the project
 never asked for.`,
 	References: []string{
-		`https://containers.dev/implementors/json_reference/#general-devcontainerjson-properties`,
+		`https://containers.dev/implementors/json_reference/#general-properties`,
 		`https://docs.docker.com/engine/security/#linux-kernel-capabilities`,
 	},
 	Category:  linter.CategorySecurity,

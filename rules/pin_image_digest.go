@@ -26,7 +26,7 @@ registry can serve a different image for the same tag on a different day. A dige
 itself, so "image@sha256:..." always resolves to the exact image the project was tested with, and the
 client verifies what it pulled against it.`,
 	References: []string{
-		`https://containers.dev/implementors/json_reference/#image-or-dockerfile-specific-properties`,
+		`https://containers.dev/implementors/json_reference/#image-specific`,
 		`https://github.com/opencontainers/image-spec/blob/main/descriptor.md#digests`,
 	},
 	Category:  linter.CategoryReproducibility,

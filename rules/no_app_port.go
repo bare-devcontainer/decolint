@@ -13,7 +13,7 @@ application has to listen on all interfaces rather than just "localhost" to be r
 port instead looks like "localhost" to the application and can be changed without recreating the
 container, which is why the reference recommends "forwardPorts" in most cases.`,
 	References: []string{
-		`https://containers.dev/implementors/json_reference/#image-or-dockerfile-specific-properties`,
+		`https://containers.dev/implementors/json_reference/#image-specific`,
 		`https://containers.dev/implementors/json_reference/#publishing-vs-forwarding-ports`,
 	},
 	Category:  linter.CategoryStyle,

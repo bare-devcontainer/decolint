@@ -17,7 +17,7 @@ that directory name is what packaging and distribution address the artifact by. 
 published reference does not resolve to what the directory contains; rename the directory or the "id" so
 they agree.`,
 	References: []string{
-		`https://containers.dev/implementors/features/#devcontainer-featurejson-properties`,
+		`https://containers.dev/implementors/features/#devcontainer-feature-json-properties`,
 		`https://containers.dev/implementors/templates/#devcontainer-templatejson-properties`,
 	},
 	Category:  linter.CategoryCorrectness,

@@ -18,7 +18,7 @@ running in it — including a compromised dependency pulled in by the project's 
 the machine. Docker-in-Docker is the usual reason it is set; a Feature that provides it, or the specific
 capabilities and devices the workload needs, is a far narrower grant.`,
 	References: []string{
-		`https://containers.dev/implementors/json_reference/#general-devcontainerjson-properties`,
+		`https://containers.dev/implementors/json_reference/#general-properties`,
 		`https://docs.docker.com/engine/security/#docker-daemon-attack-surface`,
 	},
 	Category:  linter.CategorySecurity,

@@ -15,7 +15,7 @@ Codespaces documents that it ignores "bind" mounts apart from the Docker socket.
 without an error and the container starts missing the data it expects. Volume mounts are honored, so use
 "type=volume" for anything that only has to persist across rebuilds.`,
 	References: []string{
-		`https://github.com/devcontainers/spec/blob/main/docs/specs/supporting-tools.md#github-codespaces`,
+		`https://containers.dev/supporting#codespaces-specific-limitations`,
 		`https://containers.dev/implementors/spec/#mounts`,
 	},
 	Category:  linter.CategoryCorrectness,

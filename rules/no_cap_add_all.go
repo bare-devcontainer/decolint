@@ -17,7 +17,7 @@ withholds the dangerous ones by default. "ALL" hands them all over, including ca
 "SYS_ADMIN" and "SYS_MODULE" that let a process reconfigure the host kernel and escape the container.
 "capAdd" exists to name the one or two a workload actually needs, e.g. "SYS_PTRACE" for a debugger.`,
 	References: []string{
-		`https://containers.dev/implementors/json_reference/#general-devcontainerjson-properties`,
+		`https://containers.dev/implementors/json_reference/#general-properties`,
 		`https://docs.docker.com/engine/security/#linux-kernel-capabilities`,
 	},
 	Category:  linter.CategorySecurity,

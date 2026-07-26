@@ -22,7 +22,7 @@ wholesale, and a hand-written profile is rarely reviewed as carefully or updated
 syscalls. Keep the default unless the workload provably needs more, and review the replacement if it
 does.`,
 	References: []string{
-		`https://containers.dev/implementors/json_reference/#general-devcontainerjson-properties`,
+		`https://containers.dev/implementors/json_reference/#general-properties`,
 		`https://docs.docker.com/engine/security/seccomp/`,
 	},
 	Category:  linter.CategorySecurity,

@@ -20,7 +20,7 @@ container hands root-equivalent control of the host to every process inside — 
 project's own build fetches. When the container genuinely needs Docker, a Docker-in-Docker Feature or a
 rootless daemon keeps that access inside the container.`,
 	References: []string{
-		`https://containers.dev/implementors/json_reference/#general-devcontainerjson-properties`,
+		`https://containers.dev/implementors/json_reference/#general-properties`,
 		`https://docs.docker.com/engine/security/#docker-daemon-attack-surface`,
 	},
 	Category:  linter.CategorySecurity,

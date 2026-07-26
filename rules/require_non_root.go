@@ -21,7 +21,7 @@ the developer's session drives then runs as root: lifecycle scripts, terminals, 
 and build tools the editor starts, so a compromised dependency runs with full control of the container.
 Naming an unprivileged user — as the specification's own images do — costs nothing and contains it.`,
 	References: []string{
-		`https://containers.dev/implementors/json_reference/#remoteuser`,
+		`https://containers.dev/implementors/json_reference/#remoteUser`,
 		`https://containers.dev/implementors/spec/#users`,
 	},
 	Category:  linter.CategorySecurity,

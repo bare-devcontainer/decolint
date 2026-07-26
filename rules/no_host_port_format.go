@@ -20,8 +20,8 @@ rather than from the primary one. Codespaces documents that it does not support 
 property, so the entry is ignored there and the port is not forwarded. A bare port number, which refers
 to the primary container, works everywhere.`,
 	References: []string{
-		`https://github.com/devcontainers/spec/blob/main/docs/specs/supporting-tools.md#github-codespaces`,
-		`https://containers.dev/implementors/json_reference/#general-devcontainerjson-properties`,
+		`https://containers.dev/supporting#codespaces-specific-limitations`,
+		`https://containers.dev/implementors/json_reference/#general-properties`,
 	},
 	Category:  linter.CategoryCorrectness,
 	FileTypes: []linter.FileType{linter.Devcontainer},

@@ -18,9 +18,9 @@ var PinExtensionVersion = &linter.Rule{
 	LongDescription: `An extension ID on its own installs whatever the marketplace publishes at the moment the container is
 created, so two developers on the same devcontainer.json can end up with different formatters, linters, or
 language server versions — and an extension update can change the environment without any commit.
-Appending a version ("publisher.name@1.2.3") makes the editor tooling as pinned as the rest of the image.`,
+Appending a version (` + "`publisher.name@1.2.3`" + `) makes the editor tooling as pinned as the rest of the image.`,
 	References: []string{
-		`https://github.com/devcontainers/spec/blob/main/docs/specs/supporting-tools.md#visual-studio-code`,
+		`https://containers.dev/supporting#visual-studio-code`,
 		`https://code.visualstudio.com/docs/configure/extensions/extension-marketplace`,
 	},
 	Category:  linter.CategoryReproducibility,

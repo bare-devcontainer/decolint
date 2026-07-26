@@ -18,8 +18,8 @@ code is mounted, "workspaceFolder" says which path inside the container the tool
 documents each as requiring the other, because setting one alone either mounts the source somewhere
 nothing opens, or opens a path nothing is mounted at.`,
 	References: []string{
-		`https://containers.dev/implementors/json_reference/#image-or-dockerfile-specific-properties`,
-		`https://containers.dev/implementors/spec/#workspacefolder-and-workspacemount`,
+		`https://containers.dev/implementors/json_reference/#image-specific`,
+		`https://containers.dev/implementors/spec/#workspace-folder`,
 	},
 	Category:  linter.CategoryCorrectness,
 	FileTypes: []linter.FileType{linter.Devcontainer},

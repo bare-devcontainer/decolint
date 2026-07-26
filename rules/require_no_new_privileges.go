@@ -18,7 +18,7 @@ executing a setuid binary — which undercuts the point of running as a non-root
 kernel's "no_new_privs" bit, which every child process inherits and none can clear, so the container's
 privileges can only ever shrink.`,
 	References: []string{
-		`https://containers.dev/implementors/json_reference/#general-devcontainerjson-properties`,
+		`https://containers.dev/implementors/json_reference/#general-properties`,
 		`https://docs.kernel.org/userspace-api/no_new_privs.html`,
 	},
 	Category:  linter.CategorySecurity,

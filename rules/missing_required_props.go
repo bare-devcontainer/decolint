@@ -16,7 +16,7 @@ var MissingRequiredProps = &linter.Rule{
 artifact, the "version" is what consumers pin to, and the "name" is what a user recognizes it by in a
 list. Metadata missing any of them cannot be published as a usable Feature or Template.`,
 	References: []string{
-		`https://containers.dev/implementors/features/#devcontainer-featurejson-properties`,
+		`https://containers.dev/implementors/features/#devcontainer-feature-json-properties`,
 		`https://containers.dev/implementors/templates/#devcontainer-templatejson-properties`,
 	},
 	Category:  linter.CategoryCorrectness,

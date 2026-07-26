@@ -14,7 +14,7 @@ var MissingBuildDockerfile = &linter.Rule{
 the Dockerfile the image is built from. The other members ("context", "args", "target", ...) only shape a
 build that "dockerfile" defines, so without it there is nothing to build.`,
 	References: []string{
-		`https://containers.dev/implementors/json_reference/#image-or-dockerfile-specific-properties`,
+		`https://containers.dev/implementors/json_reference/#image-specific`,
 		`https://containers.dev/implementors/spec/#dockerfile-based`,
 	},
 	Category:  linter.CategoryCorrectness,

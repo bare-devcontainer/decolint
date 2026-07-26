@@ -17,7 +17,7 @@ container that gets built depends on the tool rather than on the configuration. 
 project actually uses and remove the others.`,
 	References: []string{
 		`https://containers.dev/implementors/spec/#orchestration-options`,
-		`https://containers.dev/implementors/json_reference/#scenario-specific-properties`,
+		`https://containers.dev/implementors/json_reference/#scenario-specific`,
 	},
 	Category:  linter.CategoryCorrectness,
 	FileTypes: []linter.FileType{linter.Devcontainer},

@@ -12,6 +12,8 @@ on:
       - cmd/docgen/**
       - README.md
       - Makefile
+      - go.mod
+      - go.sum
       - .github/workflows/pages.yml
   pull_request:
     paths:
@@ -21,6 +23,8 @@ on:
       - cmd/docgen/**
       - README.md
       - Makefile
+      - go.mod
+      - go.sum
       - .github/workflows/pages.yml
   workflow_dispatch:
 

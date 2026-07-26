@@ -92,7 +92,6 @@ The remaining flags perform a one-off action and exit; run
 | `-config <path>` | use the config file at `<path>` instead of [auto-discovery](#config-file) |
 | `-init` | write a new `.decolint.jsonc` listing every rule at its default severity |
 | `-rules` | print the built-in rules as a Markdown table |
-| `-explain <rule-id>` | print what one rule checks and where it is documented |
 | `-version` | print version information |
 | `-help` | print usage |
 
@@ -286,11 +285,8 @@ to all platforms.
 Every rule has a page on the [documentation
 site](https://bare-devcontainer.github.io/decolint/rules/) covering
 why it exists, the configuration it accepts and rejects, and the
-specification it is based on. To look one up from the command line:
-
-```console
-decolint -explain no-privileged-container
-```
+specification it is based on. Each rule ID in the table below links to
+its page.
 
 The [SARIF output](#output-formats) links every rule it reports to the
 same page, so the reasoning is one click away from the alert in GitHub

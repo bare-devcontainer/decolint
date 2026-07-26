@@ -12,7 +12,6 @@ import (
 	"os/signal"
 	"path"
 	"path/filepath"
-	"slices"
 	"strings"
 	"syscall"
 
@@ -74,14 +73,6 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 
 	if opts.Init {
 		if err := initConfigFile(stdout); err != nil {
-			_, _ = fmt.Fprintln(stderr, progName+":", err)
-			return exitCodeError
-		}
-		return exitCodeSuccess
-	}
-
-	if opts.Explain != "" {
-		if err := explainRule(stdout, opts.Explain); err != nil {
 			_, _ = fmt.Fprintln(stderr, progName+":", err)
 			return exitCodeError
 		}
@@ -175,29 +166,6 @@ func platformNames(platforms []linter.Platform, sep string) string {
 		names[i] = p.String()
 	}
 	return strings.Join(names, sep)
-}
-
-// explainRule writes what decolint knows about the rule with the given ID to output: what it
-// checks, the platforms it applies to, and where it is documented in full. It returns an error if
-// no built-in rule has that ID. The rule's severity is left to [listRules], which reports it for
-// every rule at once.
-func explainRule(output io.Writer, id string) error {
-	builtin := rules.Builtin()
-	i := slices.IndexFunc(builtin, func(reg rules.Registration) bool { return reg.Rule.ID == id })
-	if i < 0 {
-		return fmt.Errorf("unknown rule ID %q; run with -rules to list the built-in rules", id)
-	}
-	rule := builtin[i].Rule
-
-	sections := []string{
-		fmt.Sprintf("%s (%s)\nPlatform: %s", rule.ID, rule.Category, platformNames(rule.Platforms, ", ")),
-		rule.Description,
-		"Documentation: " + rules.DocsURL(rule.ID),
-	}
-	if _, err := fmt.Fprintln(output, strings.Join(sections, "\n\n")); err != nil {
-		return fmt.Errorf("write rule documentation: %w", err)
-	}
-	return nil
 }
 
 // columnWidths returns, for each column in rows, the display width of its widest cell, so every

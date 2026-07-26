@@ -196,33 +196,6 @@ func TestParseOptions_DenyWarningsSet(t *testing.T) {
 	}
 }
 
-func TestParseOptions_Explain(t *testing.T) {
-	t.Parallel()
-
-	// The rule ID is captured verbatim; explainRule is what rejects one that names no built-in rule.
-	tests := []struct {
-		name string
-		args []string
-		want string
-	}{
-		{"no flag", nil, ""},
-		{"rule id", []string{"-explain=no-image-latest"}, "no-image-latest"},
-		{"unknown rule id", []string{"-explain=bogus"}, "bogus"},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-			opts, err := parseOptions(tt.args, io.Discard)
-			if err != nil {
-				t.Fatalf("parseOptions(%v) error = %v", tt.args, err)
-			}
-			if opts.Explain != tt.want {
-				t.Errorf("Explain = %q, want %q", opts.Explain, tt.want)
-			}
-		})
-	}
-}
-
 func TestParseOptions_Config(t *testing.T) {
 	t.Parallel()
 

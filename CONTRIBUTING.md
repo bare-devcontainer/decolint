@@ -85,9 +85,8 @@ rule lands, also add a row for it to the table in
 
 Every rule has a page under [`docs/content/rules/`](docs/content/rules/),
 named after its ID, which is where the reasoning and the examples live.
-It is what `decolint -explain`, the SARIF output, and every code
-scanning alert link to, so write it for the user who just hit the
-finding.
+It is what the SARIF output, and so every code scanning alert, links
+to, so write it for the user who just hit the finding.
 
 ````markdown
 ---

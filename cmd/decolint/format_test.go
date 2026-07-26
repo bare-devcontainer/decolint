@@ -1,6 +1,7 @@
 package main
 
 import (
+	"io/fs"
 	"slices"
 	"testing"
 
@@ -148,5 +149,21 @@ func TestSarifRules(t *testing.T) {
 				t.Errorf("sarifRules() = %v, want it not to contain %q", ids, tt.wantMissing)
 			}
 		})
+	}
+}
+
+// TestRuleSnippet_ModeIsPermissionBitsOnly checks that ruleSnippet reports only the POSIX
+// permission bits (see format.RuleExampleFile.Mode), not the type bits fs.FileMode also carries
+// (e.g. fs.ModeDir), which would otherwise inflate the value ruleExample -rules -format=json emits.
+func TestRuleSnippet_ModeIsPermissionBitsOnly(t *testing.T) {
+	t.Parallel()
+
+	snippet := ruleSnippet(linter.Snippet{
+		Files: []linter.ExampleFile{
+			{Path: "some-dir", Mode: fs.ModeDir | 0o755},
+		},
+	})
+	if got, want := snippet.Files[0].Mode, uint32(0o755); got != want {
+		t.Errorf("Mode = %#o, want %#o", got, want)
 	}
 }

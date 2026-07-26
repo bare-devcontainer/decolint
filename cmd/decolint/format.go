@@ -102,7 +102,7 @@ func ruleExample(ex linter.Example) format.RuleExample {
 func ruleSnippet(s linter.Snippet) format.RuleSnippet {
 	files := make([]format.RuleExampleFile, len(s.Files))
 	for i, f := range s.Files {
-		files[i] = format.RuleExampleFile{Path: f.Path, Content: f.Content, Mode: uint32(f.Mode)}
+		files[i] = format.RuleExampleFile{Path: f.Path, Content: f.Content, Mode: uint32(f.Mode.Perm())}
 	}
 	return format.RuleSnippet{Files: files, DirName: s.DirName}
 }

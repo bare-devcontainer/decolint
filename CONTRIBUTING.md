@@ -15,11 +15,13 @@ make run ARGS="-format=json path/to/dir"
 ```
 
 The documentation site in [`docs/`](docs/) is built with
-[Hugo](https://gohugo.io/), pinned to the version the Makefile names:
+[Hugo](https://gohugo.io/). It is a tool dependency in
+[`go.mod`](go.mod), so there is nothing to install and the version is
+pinned with the rest of them:
 
 ```console
 make site         # build into docs/public
-make site-serve   # serve with live reload
+make site-serve   # serve with live reload at http://localhost:1313/
 ```
 
 ## Adding a rule
@@ -140,8 +142,7 @@ Two things to know when writing the examples:
 
 The rule index and the sidebar are built from the pages themselves, so
 there is no list to update by hand. Preview the site with `make
-site-serve`, which needs [Hugo](https://gohugo.io/) at the version the
-[Makefile](Makefile) names.
+site-serve`.
 
 When implementing or reviewing rules, consult the Dev Container
 specification at [containers.dev](https://containers.dev/) to confirm

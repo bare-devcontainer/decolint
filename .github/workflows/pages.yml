@@ -24,12 +24,6 @@ concurrency:
   group: pages
   cancel-in-progress: false
 
-env:
-  # renovate: datasource=github-releases depName=gohugoio/hugo
-  HUGO_VERSION: 0.164.0
-  # sha256 of hugo_${HUGO_VERSION}_linux-amd64.tar.gz, from the release's checksums.txt.
-  HUGO_SHA256: d9c8b17285ea4ec004d9f814273ea910f2051ce02c284993fd1f91ba455ae50d
-
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -40,16 +34,11 @@ jobs:
         with:
           persist-credentials: false
 
-      # Installed from the release archive, pinned by checksum, rather than through a third-party
-      # action: one fewer action to trust, and the version is the one the Makefile names.
-      - name: Install Hugo
-        run: |
-          url="https://github.com/gohugoio/hugo/releases/download/v${HUGO_VERSION}/hugo_${HUGO_VERSION}_linux-amd64.tar.gz"
-          curl --fail --silent --show-error --location --output hugo.tar.gz "$url"
-          echo "${HUGO_SHA256}  hugo.tar.gz" | sha256sum --check --strict
-          mkdir -p "$RUNNER_TEMP/hugo"
-          tar -xzf hugo.tar.gz -C "$RUNNER_TEMP/hugo" hugo
-          echo "$RUNNER_TEMP/hugo" >> "$GITHUB_PATH"
+      # Hugo is a tool dependency in go.mod, so the Go toolchain is all this needs: "make site"
+      # builds it at the pinned version and caches it like any other dependency.
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
+        with:
+          go-version-file: go.mod
 
       - run: make site
 

@@ -2,7 +2,7 @@
 from the pages themselves, so it lists exactly what the site publishes. */}}
 {{ $rules := where site.RegularPages "Section" "rules" }}
 <aside class="rule-nav">
-  <a class="rule-nav__all" href="{{ "/rules/" | relURL }}">All rules</a>
+  <a class="rule-nav__all" href="{{ (site.GetPage "/rules").RelPermalink }}">All rules</a>
   {{ range hugo.Data.categories }}
     {{ $inCategory := where $rules "Params.category" .name }}
     {{ with $inCategory }}

@@ -29,15 +29,16 @@ type File struct {
 // writeFileList writes files as a human-readable block, one indented line per file naming its path
 // and the kind of configuration it was detected as. It writes nothing when no file was linted, so
 // callers need not guard the call.
-func writeFileList(w io.Writer, files []File) error {
+func writeFileList(w io.Writer, st styler, files []File) error {
 	if len(files) == 0 {
 		return nil
 	}
-	if _, err := fmt.Fprintf(w, "Linted %d file%s:\n", len(files), pluralize(len(files))); err != nil {
+	heading := fmt.Sprintf("Linted %d file%s:", len(files), pluralize(len(files)))
+	if _, err := fmt.Fprintln(w, st.bold(heading)); err != nil {
 		return fmt.Errorf("write file list: %w", err)
 	}
 	for _, f := range files {
-		if _, err := fmt.Fprintf(w, "  %s (%s)\n", f.Path, f.Type); err != nil {
+		if _, err := fmt.Fprintf(w, "  %s %s\n", f.Path, st.dim("("+string(f.Type)+")")); err != nil {
 			return fmt.Errorf("write file list: %w", err)
 		}
 	}

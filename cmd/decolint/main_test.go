@@ -24,6 +24,10 @@ import (
 	"github.com/google/go-cmp/cmp/cmpopts"
 )
 
+// emptyEnv is the environment a test run reads: an empty one, so that a variable set around the
+// test process (NO_COLOR, FORCE_COLOR) cannot change the output being asserted.
+func emptyEnv(string) string { return "" }
+
 // jsonOutput is the object the json format writes, as the tests that read decolint's own output
 // decode it.
 type jsonOutput struct {
@@ -255,7 +259,7 @@ func TestRun(t *testing.T) {
 			args := append([]string{"-format=json"}, tt.args...)
 
 			var stdout, stderr bytes.Buffer
-			exitCode := run(t.Context(), args, &stdout, &stderr)
+			exitCode := run(t.Context(), args, &stdout, &stderr, emptyEnv)
 			if stderr.String() != "" {
 				t.Fatalf("stderr = %q, want empty", stderr.String())
 			}
@@ -299,7 +303,7 @@ func TestRun_ReportedPathsAreWorkingDirectoryRelative(t *testing.T) {
 	reportedPaths := func(t *testing.T, target string) []string {
 		t.Helper()
 		var stdout, stderr bytes.Buffer
-		run(t.Context(), []string{"-format=json", "-platform=codespaces", target}, &stdout, &stderr)
+		run(t.Context(), []string{"-format=json", "-platform=codespaces", target}, &stdout, &stderr, emptyEnv)
 		issues := decodeJSONOutput(t, stdout.Bytes()).Issues
 		if len(issues) == 0 {
 			t.Fatalf("no findings for %s; the fixture is expected to trip codespaces rules", target)
@@ -341,7 +345,7 @@ func TestRun_Flags(t *testing.T) {
 		t.Parallel()
 
 		var stdout, stderr bytes.Buffer
-		exitCode := run(t.Context(), []string{"-version"}, &stdout, &stderr)
+		exitCode := run(t.Context(), []string{"-version"}, &stdout, &stderr, emptyEnv)
 		if exitCode != 0 {
 			t.Errorf("exit code = %d, want 0", exitCode)
 		}
@@ -357,7 +361,7 @@ func TestRun_Flags(t *testing.T) {
 		t.Parallel()
 
 		var stdout, stderr bytes.Buffer
-		exitCode := run(t.Context(), []string{"-rules"}, &stdout, &stderr)
+		exitCode := run(t.Context(), []string{"-rules"}, &stdout, &stderr, emptyEnv)
 		if exitCode != 0 {
 			t.Errorf("exit code = %d, want 0", exitCode)
 		}
@@ -388,7 +392,7 @@ func TestRun_Flags(t *testing.T) {
 		t.Parallel()
 
 		var stdout, stderr bytes.Buffer
-		exitCode := run(t.Context(), []string{"-rules", "-config=testdata/e2e/override.jsonc"}, &stdout, &stderr)
+		exitCode := run(t.Context(), []string{"-rules", "-config=testdata/e2e/override.jsonc"}, &stdout, &stderr, emptyEnv)
 		if exitCode != 0 {
 			t.Errorf("exit code = %d, want 0", exitCode)
 		}
@@ -423,7 +427,7 @@ func TestRun_Flags(t *testing.T) {
 		t.Parallel()
 
 		var stdout, stderr bytes.Buffer
-		exitCode := run(t.Context(), []string{"-rules", "-config=testdata/e2e/categories.jsonc"}, &stdout, &stderr)
+		exitCode := run(t.Context(), []string{"-rules", "-config=testdata/e2e/categories.jsonc"}, &stdout, &stderr, emptyEnv)
 		if exitCode != 0 {
 			t.Errorf("exit code = %d, want 0", exitCode)
 		}
@@ -452,7 +456,7 @@ func TestRun_Flags(t *testing.T) {
 		t.Parallel()
 
 		var stdout, stderr bytes.Buffer
-		exitCode := run(t.Context(), []string{"-help"}, &stdout, &stderr)
+		exitCode := run(t.Context(), []string{"-help"}, &stdout, &stderr, emptyEnv)
 		if exitCode != 0 {
 			t.Errorf("exit code = %d, want 0", exitCode)
 		}
@@ -468,7 +472,7 @@ func TestRun_Flags(t *testing.T) {
 		t.Parallel()
 
 		var stdout, stderr bytes.Buffer
-		exitCode := run(t.Context(), []string{"-bogus"}, &stdout, &stderr)
+		exitCode := run(t.Context(), []string{"-bogus"}, &stdout, &stderr, emptyEnv)
 		if exitCode != 2 {
 			t.Errorf("exit code = %d, want 2", exitCode)
 		}
@@ -486,7 +490,7 @@ func TestRun_Flags(t *testing.T) {
 		dir := writeDevcontainer(t, `{"image": "ubuntu:latest"}`)
 
 		var stdout, stderr bytes.Buffer
-		exitCode := run(t.Context(), []string{"-config=nonexistent.jsonc", dir}, &stdout, &stderr)
+		exitCode := run(t.Context(), []string{"-config=nonexistent.jsonc", dir}, &stdout, &stderr, emptyEnv)
 		if exitCode != 2 {
 			t.Errorf("exit code = %d, want 2", exitCode)
 		}
@@ -502,7 +506,7 @@ func TestRun_Flags(t *testing.T) {
 		t.Parallel()
 
 		var stdout, stderr bytes.Buffer
-		exitCode := run(t.Context(), []string{"-format=bogus", "testdata/e2e/clean"}, &stdout, &stderr)
+		exitCode := run(t.Context(), []string{"-format=bogus", "testdata/e2e/clean"}, &stdout, &stderr, emptyEnv)
 		if exitCode != 2 {
 			t.Errorf("exit code = %d, want 2", exitCode)
 		}
@@ -518,7 +522,7 @@ func TestRun_Flags(t *testing.T) {
 		t.Parallel()
 
 		var stdout, stderr bytes.Buffer
-		exitCode := run(t.Context(), []string{"-platform=bogus", "testdata/e2e/clean"}, &stdout, &stderr)
+		exitCode := run(t.Context(), []string{"-platform=bogus", "testdata/e2e/clean"}, &stdout, &stderr, emptyEnv)
 		if exitCode != 2 {
 			t.Errorf("exit code = %d, want 2", exitCode)
 		}
@@ -614,7 +618,7 @@ func TestRun_OutputFormat(t *testing.T) {
 		t.Parallel()
 
 		var stdout, stderr bytes.Buffer
-		exitCode := run(t.Context(), []string{"-platform=vscode,codespaces", violationsDir}, &stdout, &stderr)
+		exitCode := run(t.Context(), []string{"-platform=vscode,codespaces", violationsDir}, &stdout, &stderr, emptyEnv)
 		if exitCode != 1 {
 			t.Fatalf("exit code = %d, want 1; stderr: %s", exitCode, stderr.String())
 		}
@@ -629,13 +633,49 @@ func TestRun_OutputFormat(t *testing.T) {
 				t.Errorf("text output missing %q; got:\n%s", want, out)
 			}
 		}
+		// The report is not written to a terminal here, so it carries no escape sequence.
+		if strings.Contains(out, "\x1b") {
+			t.Errorf("text output = %q, want no escape sequence in it", out)
+		}
+	})
+
+	t.Run("text colored on request", func(t *testing.T) {
+		t.Parallel()
+
+		var stdout, stderr bytes.Buffer
+		exitCode := run(t.Context(), []string{"-color=always", "-platform=vscode,codespaces", violationsDir}, &stdout, &stderr, emptyEnv)
+		if exitCode != 1 {
+			t.Fatalf("exit code = %d, want 1; stderr: %s", exitCode, stderr.String())
+		}
+		if !strings.Contains(stdout.String(), "\x1b[31;1merror\x1b[0m") {
+			t.Errorf("colored text output = %q, want the severity of an issue colored in it", stdout.String())
+		}
+	})
+
+	t.Run("text colored by the environment", func(t *testing.T) {
+		t.Parallel()
+
+		var stdout, stderr bytes.Buffer
+		env := func(name string) string {
+			if name == "FORCE_COLOR" {
+				return "1"
+			}
+			return ""
+		}
+		exitCode := run(t.Context(), []string{"-platform=vscode,codespaces", violationsDir}, &stdout, &stderr, env)
+		if exitCode != 1 {
+			t.Fatalf("exit code = %d, want 1; stderr: %s", exitCode, stderr.String())
+		}
+		if !strings.Contains(stdout.String(), "\x1b[31;1merror\x1b[0m") {
+			t.Errorf("text output with FORCE_COLOR set = %q, want the severity of an issue colored in it", stdout.String())
+		}
 	})
 
 	t.Run("github workflow commands", func(t *testing.T) {
 		t.Parallel()
 
 		var stdout, stderr bytes.Buffer
-		exitCode := run(t.Context(), []string{"-format=github", "-platform=vscode,codespaces", violationsDir}, &stdout, &stderr)
+		exitCode := run(t.Context(), []string{"-format=github", "-platform=vscode,codespaces", violationsDir}, &stdout, &stderr, emptyEnv)
 		if exitCode != 1 {
 			t.Fatalf("exit code = %d, want 1; stderr: %s", exitCode, stderr.String())
 		}
@@ -655,7 +695,7 @@ func TestRun_OutputFormat(t *testing.T) {
 		t.Parallel()
 
 		var stdout, stderr bytes.Buffer
-		exitCode := run(t.Context(), []string{"-format=sarif", "-platform=vscode,codespaces", violationsDir}, &stdout, &stderr)
+		exitCode := run(t.Context(), []string{"-format=sarif", "-platform=vscode,codespaces", violationsDir}, &stdout, &stderr, emptyEnv)
 		if exitCode != 1 {
 			t.Fatalf("exit code = %d, want 1; stderr: %s", exitCode, stderr.String())
 		}
@@ -703,7 +743,7 @@ func TestRun_OutputFormat(t *testing.T) {
 		dir := writeDevcontainer(t, `{}`)
 
 		var stdout, stderr bytes.Buffer
-		exitCode := run(t.Context(), []string{"-format=sarif", dir}, &stdout, &stderr)
+		exitCode := run(t.Context(), []string{"-format=sarif", dir}, &stdout, &stderr, emptyEnv)
 		if exitCode != 1 {
 			t.Fatalf("exit code = %d, want 1; stderr: %s", exitCode, stderr.String())
 		}
@@ -746,7 +786,7 @@ func TestRun_OutputFormat(t *testing.T) {
 
 		// format.jsonc sets "format": "json", so output is a JSON report with no -format flag.
 		var stdout, stderr bytes.Buffer
-		exitCode := run(t.Context(), []string{"-config=testdata/e2e/format.jsonc", violationsDir}, &stdout, &stderr)
+		exitCode := run(t.Context(), []string{"-config=testdata/e2e/format.jsonc", violationsDir}, &stdout, &stderr, emptyEnv)
 		if exitCode != 1 {
 			t.Fatalf("exit code = %d, want 1; stderr: %s", exitCode, stderr.String())
 		}
@@ -758,7 +798,7 @@ func TestRun_OutputFormat(t *testing.T) {
 
 		// -format=text wins over format.jsonc's "format": "json", so output is the text format.
 		var stdout, stderr bytes.Buffer
-		exitCode := run(t.Context(), []string{"-format=text", "-config=testdata/e2e/format.jsonc", violationsDir}, &stdout, &stderr)
+		exitCode := run(t.Context(), []string{"-format=text", "-config=testdata/e2e/format.jsonc", violationsDir}, &stdout, &stderr, emptyEnv)
 		if exitCode != 1 {
 			t.Fatalf("exit code = %d, want 1; stderr: %s", exitCode, stderr.String())
 		}
@@ -818,7 +858,7 @@ func TestRun_LintedFiles(t *testing.T) {
 			t.Parallel()
 
 			var stdout, stderr bytes.Buffer
-			run(t.Context(), append([]string{"-format=json"}, tt.args...), &stdout, &stderr)
+			run(t.Context(), append([]string{"-format=json"}, tt.args...), &stdout, &stderr, emptyEnv)
 			got := decodeJSONOutput(t, stdout.Bytes()).Files
 
 			want := make([]format.File, len(tt.want))
@@ -839,7 +879,7 @@ func TestRun_ConfigSource(t *testing.T) {
 
 	t.Run("config file given", func(t *testing.T) {
 		var stdout, stderr bytes.Buffer
-		run(t.Context(), []string{"-config=testdata/e2e/security-warn.jsonc", "testdata/e2e/clean"}, &stdout, &stderr)
+		run(t.Context(), []string{"-config=testdata/e2e/security-warn.jsonc", "testdata/e2e/clean"}, &stdout, &stderr, emptyEnv)
 
 		want := "Config: testdata/e2e/security-warn.jsonc\n"
 		if !strings.Contains(stdout.String(), want) {
@@ -860,7 +900,7 @@ func TestRun_ConfigSource(t *testing.T) {
 		t.Chdir(dir)
 
 		var stdout, stderr bytes.Buffer
-		run(t.Context(), []string{"."}, &stdout, &stderr)
+		run(t.Context(), []string{"."}, &stdout, &stderr, emptyEnv)
 
 		want := `Config: none (defaults; run "decolint -init" to create .decolint.jsonc)` + "\n"
 		if !strings.Contains(stdout.String(), want) {
@@ -877,7 +917,7 @@ func TestRun_BrokenConfig(t *testing.T) {
 	dir := writeDevcontainer(t, `{`)
 
 	var stdout, stderr bytes.Buffer
-	exitCode := run(t.Context(), []string{"-format=json", dir}, &stdout, &stderr)
+	exitCode := run(t.Context(), []string{"-format=json", dir}, &stdout, &stderr, emptyEnv)
 	if exitCode != 2 {
 		t.Errorf("exit code = %d, want 2", exitCode)
 	}
@@ -906,7 +946,7 @@ func TestRun_DefaultDirectory(t *testing.T) {
 
 	// No path argument: the current directory is linted. The config trips missing-container-def.
 	var stdout, stderr bytes.Buffer
-	exitCode := run(t.Context(), []string{"-format=json"}, &stdout, &stderr)
+	exitCode := run(t.Context(), []string{"-format=json"}, &stdout, &stderr, emptyEnv)
 	if exitCode != 1 {
 		t.Fatalf("exit code = %d, want 1; stderr: %s", exitCode, stderr.String())
 	}
@@ -943,7 +983,7 @@ func TestRun_ConfigDiscovery(t *testing.T) {
 		}
 
 		var stdout, stderr bytes.Buffer
-		exitCode := run(t.Context(), []string{"-format=json", project}, &stdout, &stderr)
+		exitCode := run(t.Context(), []string{"-format=json", project}, &stdout, &stderr, emptyEnv)
 		if exitCode != 1 {
 			t.Fatalf("exit code = %d, want 1; stderr: %s", exitCode, stderr.String())
 		}
@@ -964,7 +1004,7 @@ func TestRun_ConfigDiscovery(t *testing.T) {
 		}
 
 		var stdout, stderr bytes.Buffer
-		exitCode := run(t.Context(), []string{"-format=json", project}, &stdout, &stderr)
+		exitCode := run(t.Context(), []string{"-format=json", project}, &stdout, &stderr, emptyEnv)
 		if exitCode != 1 {
 			t.Fatalf("exit code = %d, want 1; stderr: %s", exitCode, stderr.String())
 		}
@@ -981,7 +1021,7 @@ func TestRun_Init(t *testing.T) {
 		t.Chdir(t.TempDir())
 
 		var stdout, stderr bytes.Buffer
-		exitCode := run(t.Context(), []string{"-init"}, &stdout, &stderr)
+		exitCode := run(t.Context(), []string{"-init"}, &stdout, &stderr, emptyEnv)
 		if exitCode != 0 {
 			t.Errorf("exit code = %d, want 0", exitCode)
 		}
@@ -1014,7 +1054,7 @@ func TestRun_Init(t *testing.T) {
 		}
 
 		var stdout, stderr bytes.Buffer
-		exitCode := run(t.Context(), []string{"-init"}, &stdout, &stderr)
+		exitCode := run(t.Context(), []string{"-init"}, &stdout, &stderr, emptyEnv)
 		if exitCode != 2 {
 			t.Errorf("exit code = %d, want 2", exitCode)
 		}
@@ -1036,7 +1076,7 @@ func TestRunLint_DeduplicatesTargets(t *testing.T) {
 	lint := func(t *testing.T, paths []string) int {
 		t.Helper()
 		var stdout bytes.Buffer
-		if _, err := runLint(t.Context(), &stdout, io.Discard, Options{Paths: paths}, cfg, ""); err != nil {
+		if _, err := runLint(t.Context(), &stdout, io.Discard, Options{Paths: paths}, cfg, "", false); err != nil {
 			t.Fatalf("runLint: %v", err)
 		}
 		issues := decodeJSONOutput(t, stdout.Bytes()).Issues
@@ -1064,7 +1104,7 @@ func TestRunLint_UnresolvableTarget(t *testing.T) {
 	}
 
 	var stdout bytes.Buffer
-	hasIssue, err := runLint(t.Context(), &stdout, io.Discard, Options{Paths: []string{"."}}, Config{Format: "json"}, "")
+	hasIssue, err := runLint(t.Context(), &stdout, io.Discard, Options{Paths: []string{"."}}, Config{Format: "json"}, "", false)
 	if err == nil || !strings.Contains(err.Error(), "resolve directory") {
 		t.Errorf("err = %v, want a directory resolution error", err)
 	}
@@ -1084,7 +1124,7 @@ func TestRunLint(t *testing.T) {
 		dir := writeDevcontainer(t, `{"image": "ubuntu:latest"}`)
 
 		var stdout bytes.Buffer
-		hasIssue, runErr := runLint(t.Context(), &stdout, io.Discard, Options{Paths: []string{dir}}, Config{}, "")
+		hasIssue, runErr := runLint(t.Context(), &stdout, io.Discard, Options{Paths: []string{dir}}, Config{}, "", false)
 		if runErr != nil || hasIssue {
 			t.Errorf("hasIssue = %v, err = %v, want false, nil; stdout: %s", hasIssue, runErr, stdout.String())
 		}
@@ -1097,7 +1137,7 @@ func TestRunLint(t *testing.T) {
 		var stdout bytes.Buffer
 		opts := Options{Paths: []string{dir}}
 		cfg := Config{Rules: map[string]linter.Severity{"no-image-latest": linter.SeverityError}}
-		hasIssue, runErr := runLint(t.Context(), &stdout, io.Discard, opts, cfg, "")
+		hasIssue, runErr := runLint(t.Context(), &stdout, io.Discard, opts, cfg, "", false)
 		if runErr != nil || !hasIssue {
 			t.Errorf("hasIssue = %v, err = %v, want true, nil; stdout: %s", hasIssue, runErr, stdout.String())
 		}
@@ -1110,7 +1150,7 @@ func TestRunLint(t *testing.T) {
 		var stdout bytes.Buffer
 		opts := Options{Paths: []string{dir}}
 		cfg := Config{Rules: map[string]linter.Severity{"missing-container-def": linter.SeverityOff}}
-		hasIssue, runErr := runLint(t.Context(), &stdout, io.Discard, opts, cfg, "")
+		hasIssue, runErr := runLint(t.Context(), &stdout, io.Discard, opts, cfg, "", false)
 		if runErr != nil || hasIssue {
 			t.Errorf("hasIssue = %v, err = %v, want false, nil; stdout: %s", hasIssue, runErr, stdout.String())
 		}
@@ -1122,7 +1162,7 @@ func TestRunLint(t *testing.T) {
 		var stdout bytes.Buffer
 		opts := Options{}
 		cfg := Config{Rules: map[string]linter.Severity{"no-image-latst": linter.SeverityError}}
-		hasIssue, runErr := runLint(t.Context(), &stdout, io.Discard, opts, cfg, "")
+		hasIssue, runErr := runLint(t.Context(), &stdout, io.Discard, opts, cfg, "", false)
 		if runErr == nil || hasIssue {
 			t.Errorf("hasIssue = %v, err = %v, want false, non-nil", hasIssue, runErr)
 		}
@@ -1138,7 +1178,7 @@ func TestRunLint(t *testing.T) {
 		var stdout bytes.Buffer
 		opts := Options{Paths: []string{dir}}
 		cfg := Config{Categories: map[string]linter.Severity{"reproducibility": linter.SeverityError}}
-		hasIssue, runErr := runLint(t.Context(), &stdout, io.Discard, opts, cfg, "")
+		hasIssue, runErr := runLint(t.Context(), &stdout, io.Discard, opts, cfg, "", false)
 		if runErr != nil || !hasIssue {
 			t.Errorf("hasIssue = %v, err = %v, want true, nil; stdout: %s", hasIssue, runErr, stdout.String())
 		}
@@ -1150,7 +1190,7 @@ func TestRunLint(t *testing.T) {
 		var stdout bytes.Buffer
 		opts := Options{}
 		cfg := Config{Categories: map[string]linter.Severity{"secure": linter.SeverityError}}
-		hasIssue, runErr := runLint(t.Context(), &stdout, io.Discard, opts, cfg, "")
+		hasIssue, runErr := runLint(t.Context(), &stdout, io.Discard, opts, cfg, "", false)
 		if runErr == nil || hasIssue {
 			t.Errorf("hasIssue = %v, err = %v, want false, non-nil", hasIssue, runErr)
 		}
@@ -1165,7 +1205,7 @@ func TestRunLint(t *testing.T) {
 		file := filepath.Join(dir, ".devcontainer", "devcontainer.json")
 
 		var stdout bytes.Buffer
-		hasIssue, runErr := runLint(t.Context(), &stdout, io.Discard, Options{Paths: []string{file}}, Config{}, "")
+		hasIssue, runErr := runLint(t.Context(), &stdout, io.Discard, Options{Paths: []string{file}}, Config{}, "", false)
 		if runErr == nil || hasIssue {
 			t.Errorf("hasIssue = %v, err = %v, want false, 'not a directory'", hasIssue, runErr)
 		}
@@ -1178,7 +1218,7 @@ func TestRunLint(t *testing.T) {
 		var stdout bytes.Buffer
 		opts := Options{Paths: []string{dir}}
 		cfg := Config{Rules: map[string]linter.Severity{"no-bind-mount": linter.SeverityError}}
-		hasIssue, runErr := runLint(t.Context(), &stdout, io.Discard, opts, cfg, "")
+		hasIssue, runErr := runLint(t.Context(), &stdout, io.Discard, opts, cfg, "", false)
 		if runErr != nil || hasIssue {
 			t.Errorf("hasIssue = %v, err = %v, want false, nil; stdout: %s", hasIssue, runErr, stdout.String())
 		}
@@ -1196,7 +1236,7 @@ func TestRun_Merge(t *testing.T) {
 
 		var stdout, stderr bytes.Buffer
 		args := []string{"-format=json", "-merge", "-config=testdata/e2e/merge.jsonc", dir}
-		exitCode := run(t.Context(), args, &stdout, &stderr)
+		exitCode := run(t.Context(), args, &stdout, &stderr, emptyEnv)
 		if exitCode != 1 {
 			t.Fatalf("exit code = %d, want 1; stderr: %s", exitCode, stderr.String())
 		}
@@ -1236,7 +1276,7 @@ func TestRun_Merge(t *testing.T) {
 				dir := copyFixture(t, "testdata/e2e/merge", map[string]string{"${BASE_IMAGE}": baseImageRef(t, host)})
 
 				var stdout, stderr bytes.Buffer
-				exitCode := run(t.Context(), append([]string{"-format=json"}, append(tt.args, dir)...), &stdout, &stderr)
+				exitCode := run(t.Context(), append([]string{"-format=json"}, append(tt.args, dir)...), &stdout, &stderr, emptyEnv)
 				if exitCode != tt.wantExitCode {
 					t.Errorf("exit code = %d, want %d; stdout: %s", exitCode, tt.wantExitCode, stdout.String())
 				}
@@ -1269,7 +1309,7 @@ func TestRun_Merge(t *testing.T) {
 
 		var stdout, stderr bytes.Buffer
 		args := []string{"-format=json", "-merge", "-config=testdata/e2e/merge.jsonc", dir}
-		exitCode := run(t.Context(), args, &stdout, &stderr)
+		exitCode := run(t.Context(), args, &stdout, &stderr, emptyEnv)
 		if exitCode != 1 {
 			t.Fatalf("exit code = %d, want 1; stderr: %s", exitCode, stderr.String())
 		}
@@ -1290,7 +1330,7 @@ func TestRun_Merge(t *testing.T) {
 		dir := writeDevcontainer(t, body)
 
 		var stdout, stderr bytes.Buffer
-		exitCode := run(t.Context(), []string{"-merge", dir}, &stdout, &stderr)
+		exitCode := run(t.Context(), []string{"-merge", dir}, &stdout, &stderr, emptyEnv)
 		if exitCode != 2 {
 			t.Errorf("exit code = %d, want 2; stdout: %s", exitCode, stdout.String())
 		}
@@ -1319,7 +1359,7 @@ func TestRun_Merge(t *testing.T) {
 		}
 
 		var stdout, stderr bytes.Buffer
-		exitCode := run(t.Context(), []string{"-merge", dir}, &stdout, &stderr)
+		exitCode := run(t.Context(), []string{"-merge", dir}, &stdout, &stderr, emptyEnv)
 		if exitCode != 2 {
 			t.Errorf("exit code = %d, want 2; stdout: %s", exitCode, stdout.String())
 		}
@@ -1334,7 +1374,7 @@ func TestRun_Merge(t *testing.T) {
 		dir := writeDevcontainer(t, fmt.Sprintf(`{"image": %q, "features": {"./missing": {}}}`, baseImageRef(t, host)))
 
 		var stdout, stderr bytes.Buffer
-		exitCode := run(t.Context(), []string{"-merge", dir}, &stdout, &stderr)
+		exitCode := run(t.Context(), []string{"-merge", dir}, &stdout, &stderr, emptyEnv)
 		if exitCode != 2 {
 			t.Errorf("exit code = %d, want 2", exitCode)
 		}
@@ -1358,7 +1398,7 @@ func TestRun_Merge(t *testing.T) {
 		}
 
 		var stdout, stderr bytes.Buffer
-		exitCode := run(t.Context(), []string{"-merge", dir}, &stdout, &stderr)
+		exitCode := run(t.Context(), []string{"-merge", dir}, &stdout, &stderr, emptyEnv)
 		if exitCode != 2 {
 			t.Errorf("exit code = %d, want 2; stdout: %s", exitCode, stdout.String())
 		}
@@ -1380,7 +1420,7 @@ func TestRun_Merge(t *testing.T) {
 
 		var stdout, stderr bytes.Buffer
 		args := []string{"-format=json", "-merge", "-config=testdata/e2e/merge.jsonc", dir}
-		exitCode := run(t.Context(), args, &stdout, &stderr)
+		exitCode := run(t.Context(), args, &stdout, &stderr, emptyEnv)
 		if exitCode != 1 {
 			t.Fatalf("exit code = %d, want 1; stderr: %s", exitCode, stderr.String())
 		}
@@ -1412,7 +1452,7 @@ func TestRun_Merge(t *testing.T) {
 		}
 
 		var stdout, stderr bytes.Buffer
-		exitCode := run(t.Context(), []string{"-merge", dir}, &stdout, &stderr)
+		exitCode := run(t.Context(), []string{"-merge", dir}, &stdout, &stderr, emptyEnv)
 		if exitCode != 2 {
 			t.Errorf("exit code = %d, want 2; stdout: %s", exitCode, stdout.String())
 		}
@@ -1434,7 +1474,7 @@ LABEL devcontainer.metadata='[{"privileged": true, "mounts": ["source=/var/run/d
 
 		var stdout, stderr bytes.Buffer
 		args := []string{"-format=json", "-merge", "-config=testdata/e2e/merge.jsonc", dir}
-		exitCode := run(t.Context(), args, &stdout, &stderr)
+		exitCode := run(t.Context(), args, &stdout, &stderr, emptyEnv)
 		if exitCode != 1 {
 			t.Fatalf("exit code = %d, want 1; stderr: %s", exitCode, stderr.String())
 		}
@@ -1464,7 +1504,7 @@ LABEL devcontainer.metadata='[{"privileged": true, "mounts": ["source=/var/run/d
 
 		var stdout, stderr bytes.Buffer
 		args := []string{"-format=json", "-merge", "-config=testdata/e2e/merge.jsonc", dir}
-		exitCode := run(t.Context(), args, &stdout, &stderr)
+		exitCode := run(t.Context(), args, &stdout, &stderr, emptyEnv)
 		if exitCode != 1 {
 			t.Fatalf("exit code = %d, want 1; stderr: %s", exitCode, stderr.String())
 		}
@@ -1483,7 +1523,7 @@ LABEL devcontainer.metadata='[{"privileged": true, "mounts": ["source=/var/run/d
 		writeDockerfile(t, dir, "FROM registry.invalid/base:1\n")
 
 		var stdout, stderr bytes.Buffer
-		exitCode := run(t.Context(), []string{"-merge", dir}, &stdout, &stderr)
+		exitCode := run(t.Context(), []string{"-merge", dir}, &stdout, &stderr, emptyEnv)
 		if exitCode != 2 {
 			t.Errorf("exit code = %d, want 2; stdout: %s", exitCode, stdout.String())
 		}
@@ -1505,7 +1545,7 @@ LABEL devcontainer.metadata='[{"privileged": true, "mounts": ["source=/var/run/d
 
 		var stdout, stderr bytes.Buffer
 		args := []string{"-format=json", "-merge", "-config=testdata/e2e/merge.jsonc", dir}
-		exitCode := run(t.Context(), args, &stdout, &stderr)
+		exitCode := run(t.Context(), args, &stdout, &stderr, emptyEnv)
 		if exitCode != 1 {
 			t.Fatalf("exit code = %d, want 1; stderr: %s", exitCode, stderr.String())
 		}
@@ -1537,7 +1577,7 @@ LABEL devcontainer.metadata='[{"privileged": true, "mounts": ["source=/var/run/d
 
 		var stdout, stderr bytes.Buffer
 		args := []string{"-format=json", "-merge", "-config=" + config, dir}
-		exitCode := run(t.Context(), args, &stdout, &stderr)
+		exitCode := run(t.Context(), args, &stdout, &stderr, emptyEnv)
 		if exitCode != 1 {
 			t.Fatalf("exit code = %d, want 1; stderr: %s", exitCode, stderr.String())
 		}
@@ -1560,7 +1600,7 @@ LABEL devcontainer.metadata='[{"privileged": true, "mounts": ["source=/var/run/d
 
 		var stdout, stderr bytes.Buffer
 		args := []string{"-format=json", "-merge", "-config=testdata/e2e/merge.jsonc", dir}
-		exitCode := run(t.Context(), args, &stdout, &stderr)
+		exitCode := run(t.Context(), args, &stdout, &stderr, emptyEnv)
 		if exitCode != 1 {
 			t.Fatalf("exit code = %d, want 1; stderr: %s", exitCode, stderr.String())
 		}
@@ -1587,7 +1627,7 @@ LABEL devcontainer.metadata='[{"privileged": true, "mounts": ["source=/var/run/d
 		writeComposeFile(t, dir, "services:\n  app:\n    image: registry.invalid/base:1\n")
 
 		var stdout, stderr bytes.Buffer
-		exitCode := run(t.Context(), []string{"-merge", dir}, &stdout, &stderr)
+		exitCode := run(t.Context(), []string{"-merge", dir}, &stdout, &stderr, emptyEnv)
 		if exitCode != 2 {
 			t.Errorf("exit code = %d, want 2; stdout: %s", exitCode, stdout.String())
 		}
@@ -1909,7 +1949,7 @@ func TestRun_Substitution(t *testing.T) {
 			t.Fatal(err)
 		}
 		var stdout, stderr bytes.Buffer
-		exitCode := run(t.Context(), []string{"-format=json", "-config=" + path, dir}, &stdout, &stderr)
+		exitCode := run(t.Context(), []string{"-format=json", "-config=" + path, dir}, &stdout, &stderr, emptyEnv)
 		if exitCode != 1 {
 			t.Fatalf("exit code = %d, want 1; stderr: %s", exitCode, stderr.String())
 		}

@@ -51,13 +51,14 @@ func main() {
 	)
 	defer stop()
 
-	os.Exit(run(ctx, os.Args[1:], os.Stdout, os.Stderr))
+	os.Exit(run(ctx, os.Args[1:], os.Stdout, os.Stderr, os.Getenv))
 }
 
 // run is the testable body of main: it parses args, executes the lint, writes all output to the
 // given writers, and returns the process exit code (0 = clean, 1 = issues found, 2 = usage or
-// runtime error).
-func run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
+// runtime error). getenv reads the environment, passed in so that a run depends on nothing outside
+// its arguments.
+func run(ctx context.Context, args []string, stdout, stderr io.Writer, getenv func(string) string) int {
 	opts, err := parseOptions(args, stderr)
 	if err != nil {
 		if errors.Is(err, flag.ErrHelp) {
@@ -96,7 +97,8 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 		return exitCodeSuccess
 	}
 
-	hasIssue, err := runLint(ctx, stdout, stderr, opts, cfg, cfgPath)
+	colored := useColor(opts.Color, isTerminal(stdout), getenv)
+	hasIssue, err := runLint(ctx, stdout, stderr, opts, cfg, cfgPath, colored)
 	if err != nil {
 		_, _ = fmt.Fprintln(stderr, progName+":", err)
 		return exitCodeError
@@ -231,11 +233,12 @@ Flags:
 	return nil
 }
 
-// runLint lints every directory in opts.Paths and writes the report to stdout in cfg's format.
-// cfgPath is the config file cfg was loaded from, empty when the run uses the defaults; it is
-// reported so the output says which settings were in effect.
-func runLint(ctx context.Context, stdout, stderr io.Writer, opts Options, cfg Config, cfgPath string) (bool, error) {
-	outputFormat, err := parseFormat(cfg)
+// runLint lints every directory in opts.Paths and writes the report to stdout in cfg's format,
+// colored by severity if colored and the format supports it (see parseFormat). cfgPath is the config
+// file cfg was loaded from, empty when the run uses the defaults; it is reported so the output says
+// which settings were in effect.
+func runLint(ctx context.Context, stdout, stderr io.Writer, opts Options, cfg Config, cfgPath string, colored bool) (bool, error) {
+	outputFormat, err := parseFormat(cfg, colored)
 	if err != nil {
 		return false, err
 	}

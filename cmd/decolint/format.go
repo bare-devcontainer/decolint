@@ -16,11 +16,13 @@ type Format interface {
 }
 
 // parseFormat resolves cfg.Format, matched case-insensitively, into a Format. An empty name yields
-// the text format. It returns an error if the name does not name a known format.
-func parseFormat(cfg Config) (Format, error) {
+// the text format. color applies to that format alone: the machine-readable ones are consumed by
+// other tools, which escape sequences would only corrupt. It returns an error if the name does not
+// name a known format.
+func parseFormat(cfg Config, color bool) (Format, error) {
 	switch strings.ToLower(cfg.Format) {
 	case "", "text":
-		return format.TextFormat{}, nil
+		return format.TextFormat{Color: color}, nil
 	case "json":
 		return format.JSONFormat{}, nil
 	case "github":

@@ -554,6 +554,24 @@ func TestRun_Flags(t *testing.T) {
 		}
 	})
 
+	t.Run("-rules ignores the config file's format", func(t *testing.T) {
+		t.Parallel()
+
+		var stdout, stderr bytes.Buffer
+		exitCode := run(t.Context(), []string{"-rules", "-config=testdata/e2e/format-sarif.jsonc"}, &stdout, &stderr, emptyEnv)
+		if exitCode != 0 {
+			t.Errorf("exit code = %d, want 0", exitCode)
+		}
+		if stderr.String() != "" {
+			t.Errorf("stderr = %q, want empty", stderr.String())
+		}
+
+		header := mdTableRow(t, stdout.String(), rulesTableHeader[0])
+		if diff := cmp.Diff(rulesTableHeader, header); diff != "" {
+			t.Errorf("header row mismatch (-want +got):\n%s", diff)
+		}
+	})
+
 	t.Run("-help", func(t *testing.T) {
 		t.Parallel()
 

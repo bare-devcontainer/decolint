@@ -92,7 +92,7 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer, getenv fu
 	cfg = mergeConfig(opts, cfg)
 
 	if opts.ListRules {
-		if err := listRules(stdout, cfg); err != nil {
+		if err := listRules(stdout, cfg, opts.Format); err != nil {
 			_, _ = fmt.Fprintln(stderr, progName+":", err)
 			return exitCodeError
 		}
@@ -125,7 +125,9 @@ var severityEmoji = map[linter.Severity]string{
 // rulesTableHeader is the header row of the -rules Markdown table.
 var rulesTableHeader = []string{"Rule ID", "Category", "Platform", "Current"}
 
-// listRules writes the built-in rules to output, in the format cfg.Format names:
+// listRules writes the built-in rules to output, in the format the format argument names (the raw
+// -format flag value, not cfg.Format: a config file's "format" selects the lint-findings format, and
+// has no bearing on -rules, which lists the catalog instead):
 //   - "" or "text" (the default): a Markdown table of each rule's ID, category, target platforms
 //     (or "(all)"), and current severity (its category's default, overridden by cfg if any). A
 //     rule's default severity is not listed separately since it is uniform within a category; see
@@ -135,14 +137,14 @@ var rulesTableHeader = []string{"Rule ID", "Category", "Platform", "Current"}
 //
 // "github" and "sarif" describe lint findings, not the rule catalog itself, so they are an error
 // here.
-func listRules(output io.Writer, cfg Config) error {
-	switch strings.ToLower(cfg.Format) {
+func listRules(output io.Writer, cfg Config, format string) error {
+	switch strings.ToLower(format) {
 	case "", "text":
 		return listRulesText(output, cfg)
 	case "json":
 		return listRulesJSON(output, cfg)
 	default:
-		return fmt.Errorf("unknown format %q for -rules (want one of: text, json)", cfg.Format)
+		return fmt.Errorf("unknown format %q for -rules (want one of: text, json)", format)
 	}
 }
 

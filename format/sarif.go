@@ -28,7 +28,9 @@ type SARIFRule struct {
 type SARIFFormat struct {
 	// Version is the tool version recorded in the run.
 	Version string
-	// Rules is the rule catalog used to describe the rules referenced by issues.
+	// Rules are the rules the run has enabled. They are declared in the log whether or not they
+	// produced a result, which is how a consumer tells a rule that ran clean from one that was
+	// switched off.
 	Rules []SARIFRule
 }
 
@@ -48,8 +50,13 @@ type sarifLog struct {
 }
 
 type sarifRun struct {
-	Tool    sarifTool     `json:"tool"`
-	Results []sarifResult `json:"results"`
+	Tool      sarifTool       `json:"tool"`
+	Artifacts []sarifArtifact `json:"artifacts"`
+	Results   []sarifResult   `json:"results"`
+}
+
+type sarifArtifact struct {
+	Location sarifArtifactLocation `json:"location"`
 }
 
 type sarifTool struct {
@@ -106,6 +113,9 @@ type sarifPhysicalLocation struct {
 
 type sarifArtifactLocation struct {
 	URI string `json:"uri"`
+	// Index points into the run's artifacts array. It is a pointer so that index 0, a valid
+	// reference, is not mistaken for "unset" and omitted.
+	Index *int `json:"index,omitzero"`
 }
 
 type sarifRegion struct {
@@ -113,23 +123,27 @@ type sarifRegion struct {
 	StartColumn int `json:"startColumn"`
 }
 
-// WriteIssues writes issues to w as a SARIF 2.1.0 log with a single run. It marshals into an
+// WriteReport writes report to w as a SARIF 2.1.0 log with a single run. It marshals into an
 // in-memory buffer first so that a failure never leaves partial output on w.
 //
-// The run's rule catalog lists only the rules referenced by issues, sorted by rule ID; a rule
-// missing from f.Rules is listed with its ID alone. Issue paths are reported as URIs; see
-// [artifactURIFor].
-func (f SARIFFormat) WriteIssues(w io.Writer, issues []linter.Issue) error {
+// The run's rule catalog lists f.Rules, sorted by rule ID, so the log declares the rules the run
+// covered and not just the ones that fired; a rule referenced by an issue but missing from f.Rules
+// is listed with its ID alone. The linted files become the run's artifacts, which each result
+// refers to by index. Paths are reported as URIs; see [artifactURIFor].
+func (f SARIFFormat) WriteReport(w io.Writer, report Report) error {
 	catalog := make(map[string]SARIFRule, len(f.Rules))
 	for _, r := range f.Rules {
 		catalog[r.ID] = r
 	}
 
-	referenced := make(map[string]bool)
-	for _, issue := range issues {
-		referenced[issue.RuleID] = true
+	listed := make(map[string]bool, len(f.Rules)+len(report.Issues))
+	for _, r := range f.Rules {
+		listed[r.ID] = true
 	}
-	ids := slices.Sorted(maps.Keys(referenced))
+	for _, issue := range report.Issues {
+		listed[issue.RuleID] = true
+	}
+	ids := slices.Sorted(maps.Keys(listed))
 
 	descriptors := make([]sarifRuleDescriptor, 0, len(ids))
 	index := make(map[string]int, len(ids))
@@ -145,11 +159,24 @@ func (f SARIFFormat) WriteIssues(w io.Writer, issues []linter.Issue) error {
 		descriptors = append(descriptors, desc)
 	}
 
-	results := make([]sarifResult, 0, len(issues))
-	for _, issue := range issues {
+	artifacts := make([]sarifArtifact, 0, len(report.Files))
+	artifactIndex := make(map[string]int, len(report.Files))
+	for i, file := range report.Files {
+		artifactIndex[file.Path] = i
+		artifacts = append(artifacts, sarifArtifact{
+			Location: sarifArtifactLocation{URI: artifactURIFor(file.Path)},
+		})
+	}
+
+	results := make([]sarifResult, 0, len(report.Issues))
+	for _, issue := range report.Issues {
 		level := "error"
 		if issue.Severity == linter.SeverityWarn {
 			level = "warning"
+		}
+		location := sarifArtifactLocation{URI: artifactURIFor(issue.Path)}
+		if i, ok := artifactIndex[issue.Path]; ok {
+			location.Index = &i
 		}
 		// startColumn is emitted as the issue's byte column even though SARIF defaults to UTF-16
 		// code units; the two agree on ASCII lines, and alerts anchor by line regardless.
@@ -160,7 +187,7 @@ func (f SARIFFormat) WriteIssues(w io.Writer, issues []linter.Issue) error {
 			Message:   sarifMessage{Text: issue.Message},
 			Locations: []sarifLocation{{
 				PhysicalLocation: sarifPhysicalLocation{
-					ArtifactLocation: sarifArtifactLocation{URI: artifactURIFor(issue.Path)},
+					ArtifactLocation: location,
 					Region:           sarifRegion{StartLine: issue.Line, StartColumn: issue.Col},
 				},
 			}},
@@ -177,7 +204,8 @@ func (f SARIFFormat) WriteIssues(w io.Writer, issues []linter.Issue) error {
 				InformationURI: informationURI,
 				Rules:          descriptors,
 			}},
-			Results: results,
+			Artifacts: artifacts,
+			Results:   results,
 		}},
 	}
 
@@ -187,7 +215,7 @@ func (f SARIFFormat) WriteIssues(w io.Writer, issues []linter.Issue) error {
 	}
 	buf.WriteByte('\n')
 	if _, err := w.Write(buf.Bytes()); err != nil {
-		return fmt.Errorf("write issues: %w", err)
+		return fmt.Errorf("write report: %w", err)
 	}
 	return nil
 }

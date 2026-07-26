@@ -85,6 +85,38 @@ func TestParseOptions_Format(t *testing.T) {
 	}
 }
 
+func TestParseOptions_Color(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name    string
+		args    []string
+		want    colorMode
+		wantErr bool
+	}{
+		{name: "no flag", want: colorAuto},
+		{name: "auto", args: []string{"-color=auto"}, want: colorAuto},
+		{name: "always", args: []string{"-color=always"}, want: colorAlways},
+		{name: "never", args: []string{"-color=never"}, want: colorNever},
+		{name: "unknown value is rejected", args: []string{"-color=bogus"}, wantErr: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			opts, err := parseOptions(tt.args, io.Discard)
+			if (err != nil) != tt.wantErr {
+				t.Fatalf("parseOptions(%v) error = %v, wantErr %v", tt.args, err, tt.wantErr)
+			}
+			if err != nil {
+				return
+			}
+			if opts.Color != tt.want {
+				t.Errorf("Color = %v, want %v", opts.Color, tt.want)
+			}
+		})
+	}
+}
+
 // dashPrefixes are the two ways a boolean flag can be spelled on the command line; the standard
 // flag package accepts either, so every bare boolean flag is tested with both automatically instead
 // of listing each variant as a separate table row.

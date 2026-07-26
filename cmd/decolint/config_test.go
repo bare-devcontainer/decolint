@@ -190,8 +190,19 @@ func TestLoadConfig_ExplicitPath(t *testing.T) {
 
 	t.Run("missing file", func(t *testing.T) {
 		t.Parallel()
-		if _, err := loadConfig(filepath.Join(t.TempDir(), "nonexistent.jsonc")); err == nil {
+		if _, _, err := loadConfig(filepath.Join(t.TempDir(), "nonexistent.jsonc")); err == nil {
 			t.Error("loadConfig: got nil error, want a read error")
+		}
+	})
+
+	t.Run("unparsable file", func(t *testing.T) {
+		t.Parallel()
+		path := filepath.Join(t.TempDir(), "decolint.jsonc")
+		if err := os.WriteFile(path, []byte(`{`), 0o644); err != nil {
+			t.Fatalf("WriteFile: %v", err)
+		}
+		if _, _, err := loadConfig(path); err == nil {
+			t.Error("loadConfig: got nil error, want a parse error")
 		}
 	})
 
@@ -201,7 +212,7 @@ func TestLoadConfig_ExplicitPath(t *testing.T) {
 		if err := os.WriteFile(path, []byte(`{"rules": {"no-image-latest": "error"}}`), 0o644); err != nil {
 			t.Fatalf("WriteFile: %v", err)
 		}
-		got, err := loadConfig(path)
+		got, gotPath, err := loadConfig(path)
 		if err != nil {
 			t.Fatalf("loadConfig: %v", err)
 		}
@@ -209,26 +220,32 @@ func TestLoadConfig_ExplicitPath(t *testing.T) {
 		if diff := cmp.Diff(want, got); diff != "" {
 			t.Errorf("loadConfig() mismatch (-want +got):\n%s", diff)
 		}
+		if gotPath != path {
+			t.Errorf("loadConfig() path = %q, want %q", gotPath, path)
+		}
 	})
 }
 
 func TestLoadConfig_Discovery(t *testing.T) {
 	// Uses t.Chdir, which cannot be combined with t.Parallel.
 	tests := []struct {
-		name  string
-		files map[string]string
-		want  Config
+		name     string
+		files    map[string]string
+		want     Config
+		wantPath string
 	}{
-		{"no default config present", nil, Config{}},
+		{"no default config present", nil, Config{}, ""},
 		{
 			".decolint.jsonc present",
 			map[string]string{".decolint.jsonc": `{"rules": {"no-image-latest": "error"}}`},
 			Config{Rules: map[string]linter.Severity{"no-image-latest": linter.SeverityError}},
+			".decolint.jsonc",
 		},
 		{
 			".decolint.json fallback",
 			map[string]string{".decolint.json": `{"rules": {"no-image-latest": "warn"}}`},
 			Config{Rules: map[string]linter.Severity{"no-image-latest": linter.SeverityWarn}},
+			".decolint.json",
 		},
 		{
 			".decolint.jsonc takes precedence over .decolint.json",
@@ -237,6 +254,7 @@ func TestLoadConfig_Discovery(t *testing.T) {
 				".decolint.json":  `{"rules": {"no-image-latest": "warn"}}`,
 			},
 			Config{Rules: map[string]linter.Severity{"no-image-latest": linter.SeverityError}},
+			".decolint.jsonc",
 		},
 	}
 	for _, tt := range tests {
@@ -247,12 +265,15 @@ func TestLoadConfig_Discovery(t *testing.T) {
 					t.Fatalf("WriteFile: %v", err)
 				}
 			}
-			got, err := loadConfig("")
+			got, gotPath, err := loadConfig("")
 			if err != nil {
 				t.Fatalf("loadConfig: %v", err)
 			}
 			if diff := cmp.Diff(tt.want, got); diff != "" {
 				t.Errorf("loadConfig() mismatch (-want +got):\n%s", diff)
+			}
+			if gotPath != tt.wantPath {
+				t.Errorf("loadConfig() path = %q, want %q", gotPath, tt.wantPath)
 			}
 		})
 	}

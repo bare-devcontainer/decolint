@@ -17,7 +17,7 @@ disableKinds = ["taxonomy", "term", "RSS"]
   repository = "https://github.com/bare-devcontainer/decolint"
 
 [markup.highlight]
-  # Emit token classes rather than inline styles, so the colours live in the site's own stylesheet
+  # Emit token classes rather than inline styles, so the colors live in the site's own stylesheet
   # and follow the reader's light or dark preference.
   noClasses = false
 

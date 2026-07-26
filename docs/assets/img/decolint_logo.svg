@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 268 64" width="268" height="64" fill="none" role="img" aria-label="decolint">
+  <mask id="cutlk" maskUnits="userSpaceOnUse" x="0" y="0" width="64" height="64">
+    <rect width="64" height="64" fill="#fff"></rect>
+    <circle cx="46" cy="46" r="10.5" fill="#000"></circle>
+  </mask>
+  <g mask="url(#cutlk)" stroke="#131A20" stroke-width="5" stroke-linejoin="round" stroke-linecap="round" fill="none">
+    <path d="M32 7 55 20v24L32 57 9 44V20Z"></path>
+    <path d="M9 20l23 13 23-13"></path>
+    <path d="M32 33v24"></path>
+  </g>
+  <g mask="url(#cutlk)" transform="matrix(0.9583 0.5417 0 1 9 20)">
+    <rect x="5" y="10.25" width="14" height="3.5" rx="1.75" fill="#38A3B8"></rect>
+  </g>
+  <circle cx="46" cy="46" r="7.5" fill="#38A3B8"></circle>
+  <path d="M42.4 46.3l2.9 2.7 4.7-5.3" stroke="#FDFCFA" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" fill="none"></path>
+  <text x="76" y="41.5" font-family="&#39;JetBrains Mono&#39;,&#39;SFMono-Regular&#39;,ui-monospace,monospace" font-size="30" font-weight="500" letter-spacing="-0.9" fill="#131A20">decolint</text>
+</svg>

@@ -234,7 +234,7 @@ func parseDocsPage(t *testing.T, name, src string) docsPage {
 
 	var section, fileName, fence string
 	var block strings.Builder
-	for _, line := range strings.Split(body, "\n") {
+	for line := range strings.SplitSeq(body, "\n") {
 		if fence != "" {
 			if strings.TrimSpace(line) == fence {
 				if fileName != "" {
@@ -283,7 +283,7 @@ func parseFrontMatter(t *testing.T, name, src string) map[string]string {
 
 	out := map[string]string{}
 	var folding string
-	for _, line := range strings.Split(src, "\n") {
+	for line := range strings.SplitSeq(src, "\n") {
 		if folding != "" {
 			if strings.HasPrefix(line, "  ") {
 				out[folding] = strings.TrimSpace(out[folding] + " " + strings.TrimSpace(line))

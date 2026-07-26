@@ -3,6 +3,7 @@ package main
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/bare-devcontainer/decolint/rules"
@@ -41,6 +42,19 @@ func TestRun(t *testing.T) {
 	}
 	if string(got) == fixtureReadme {
 		t.Error("run did not touch the README's rules table (fixture has a stale placeholder row)")
+	}
+
+	// reference.md is split from the README, so it must carry the table run just refreshed above,
+	// not the fixture's stale placeholder row that was on disk when run started.
+	reference, err := os.ReadFile(filepath.Join(contentDir, "reference.md"))
+	if err != nil {
+		t.Fatalf("read reference.md: %v", err)
+	}
+	if strings.Contains(string(reference), "`x`") {
+		t.Error("reference.md still has the fixture's stale placeholder row")
+	}
+	if !strings.Contains(string(reference), rules.Builtin()[0].Rule.ID) {
+		t.Errorf("reference.md missing rule ID %q from the refreshed table", rules.Builtin()[0].Rule.ID)
 	}
 }
 

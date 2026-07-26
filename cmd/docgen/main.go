@@ -32,11 +32,13 @@ func run(readmePath, contentDir string) error {
 	if err := writeRulePages(contentDir); err != nil {
 		return fmt.Errorf("generate rule pages: %w", err)
 	}
-	if err := writeReadmePages(readmePath, contentDir); err != nil {
-		return fmt.Errorf("generate pages from %s: %w", readmePath, err)
-	}
+	// Update the README's own table before splitting it into pages below, so a stale table (e.g.
+	// right after a rule is added or removed) doesn't get carried into the generated reference page.
 	if err := updateReadmeRulesTable(readmePath); err != nil {
 		return fmt.Errorf("update rules table in %s: %w", readmePath, err)
+	}
+	if err := writeReadmePages(readmePath, contentDir); err != nil {
+		return fmt.Errorf("generate pages from %s: %w", readmePath, err)
 	}
 	return nil
 }

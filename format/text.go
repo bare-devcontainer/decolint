@@ -7,14 +7,25 @@ import (
 	"github.com/bare-devcontainer/decolint/linter"
 )
 
-// TextFormat prints one line per issue, matching linter.Issue.String.
+// TextFormat prints a header naming the config file and the linted files, then one line per issue,
+// matching linter.Issue.String, and a summary.
 type TextFormat struct{}
 
-// WriteIssues writes issues to w, one line per issue.
-func (TextFormat) WriteIssues(w io.Writer, issues []linter.Issue) error {
+// WriteReport writes report to w.
+func (TextFormat) WriteReport(w io.Writer, report Report) error {
+	if err := writeConfigLine(w, report.ConfigPath); err != nil {
+		return err
+	}
+	if err := writeFileList(w, report.Files); err != nil {
+		return err
+	}
+	if _, err := fmt.Fprintln(w); err != nil {
+		return fmt.Errorf("write header: %w", err)
+	}
+
 	var numErrors, numWarnings int
 
-	for _, issue := range issues {
+	for _, issue := range report.Issues {
 		if _, err := fmt.Fprintln(w, issue); err != nil {
 			return fmt.Errorf("write issue: %w", err)
 		}
@@ -31,6 +42,20 @@ func (TextFormat) WriteIssues(w io.Writer, issues []linter.Issue) error {
 		return fmt.Errorf("write summary: %w", err)
 	}
 
+	return nil
+}
+
+// writeConfigLine names the config file the run's settings came from. Running without one is a
+// supported mode rather than a mistake, so an absent config file is reported as the defaults being
+// in effect, with the command that generates one.
+func writeConfigLine(w io.Writer, path string) error {
+	line := "Config: " + path
+	if path == "" {
+		line = `Config: none (defaults; run "decolint -init" to create .decolint.jsonc)`
+	}
+	if _, err := fmt.Fprintln(w, line); err != nil {
+		return fmt.Errorf("write config line: %w", err)
+	}
 	return nil
 }
 

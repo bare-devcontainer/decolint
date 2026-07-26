@@ -3,7 +3,7 @@ package main
 import (
 	"testing"
 
-	"github.com/bare-devcontainer/decolint/cmd/decolint/format"
+	"github.com/bare-devcontainer/decolint/format"
 	"github.com/bare-devcontainer/decolint/rules"
 	"github.com/google/go-cmp/cmp"
 )

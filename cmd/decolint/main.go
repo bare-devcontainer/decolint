@@ -16,11 +16,11 @@ import (
 	"strings"
 	"syscall"
 
-	"github.com/bare-devcontainer/decolint/cmd/decolint/discovery"
+	"github.com/bare-devcontainer/decolint/discovery"
 	"github.com/bare-devcontainer/decolint/feature"
 	"github.com/bare-devcontainer/decolint/linter"
 	"github.com/bare-devcontainer/decolint/rules"
-	"github.com/bare-devcontainer/decolint/cmd/decolint/substitute"
+	"github.com/bare-devcontainer/decolint/substitute"
 )
 
 // progName is the program name, used in the flag set, usage text, and error messages.

@@ -14,7 +14,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/bare-devcontainer/decolint/cmd/decolint/discovery"
+	"github.com/bare-devcontainer/decolint/discovery"
 	"github.com/bare-devcontainer/decolint/linter"
 	"github.com/bare-devcontainer/decolint/ocitest"
 	"github.com/bare-devcontainer/decolint/rules"

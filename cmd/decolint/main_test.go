@@ -11,16 +11,36 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
 	"github.com/bare-devcontainer/decolint/discovery"
+	"github.com/bare-devcontainer/decolint/format"
 	"github.com/bare-devcontainer/decolint/linter"
 	"github.com/bare-devcontainer/decolint/ocitest"
 	"github.com/bare-devcontainer/decolint/rules"
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 )
+
+// jsonOutput is the object the json format writes, as the tests that read decolint's own output
+// decode it.
+type jsonOutput struct {
+	Files  []format.File  `json:"files"`
+	Issues []linter.Issue `json:"issues"`
+}
+
+// decodeJSONOutput decodes the report decolint wrote to stdout in the json format.
+func decodeJSONOutput(t *testing.T, stdout []byte) jsonOutput {
+	t.Helper()
+
+	var out jsonOutput
+	if err := json.Unmarshal(stdout, &out); err != nil {
+		t.Fatalf("output is not a JSON report: %v\noutput: %s", err, stdout)
+	}
+	return out
+}
 
 func TestRun(t *testing.T) {
 	t.Parallel()
@@ -243,10 +263,7 @@ func TestRun(t *testing.T) {
 				t.Errorf("exit code = %d, want %d", exitCode, tt.wantExitCode)
 			}
 
-			var issues []linter.Issue
-			if err := json.Unmarshal(stdout.Bytes(), &issues); err != nil {
-				t.Fatalf("output is not a JSON issue array: %v\noutput: %s", err, stdout.String())
-			}
+			issues := decodeJSONOutput(t, stdout.Bytes()).Issues
 
 			var got []firing
 			for _, issue := range issues {
@@ -283,10 +300,7 @@ func TestRun_ReportedPathsAreWorkingDirectoryRelative(t *testing.T) {
 		t.Helper()
 		var stdout, stderr bytes.Buffer
 		run(t.Context(), []string{"-format=json", "-platform=codespaces", target}, &stdout, &stderr)
-		var issues []linter.Issue
-		if err := json.Unmarshal(stdout.Bytes(), &issues); err != nil {
-			t.Fatalf("output is not a JSON issue array: %v\noutput: %s", err, stdout.String())
-		}
+		issues := decodeJSONOutput(t, stdout.Bytes()).Issues
 		if len(issues) == 0 {
 			t.Fatalf("no findings for %s; the fixture is expected to trip codespaces rules", target)
 		}
@@ -526,8 +540,12 @@ type (
 		Runs    []sarifRun `json:"runs"`
 	}
 	sarifRun struct {
-		Tool    sarifTool     `json:"tool"`
-		Results []sarifResult `json:"results"`
+		Tool      sarifTool       `json:"tool"`
+		Artifacts []sarifArtifact `json:"artifacts"`
+		Results   []sarifResult   `json:"results"`
+	}
+	sarifArtifact struct {
+		Location sarifArtifactLocation `json:"location"`
 	}
 	sarifTool struct {
 		Driver sarifDriver `json:"driver"`
@@ -552,9 +570,37 @@ type (
 		ArtifactLocation sarifArtifactLocation `json:"artifactLocation"`
 	}
 	sarifArtifactLocation struct {
-		URI string `json:"uri"`
+		URI   string `json:"uri"`
+		Index *int   `json:"index"`
 	}
 )
+
+// checkSARIFRules asserts that run's catalog declares the rules the run enabled — including
+// wantClean, which must be enabled yet produce no result — and that every result's ruleIndex points
+// at its own catalog entry. It then clears the catalog and the indexes into it, so the caller can
+// diff the rest of the run without spelling out every enabled rule, which would churn whenever a
+// built-in rule is added.
+func checkSARIFRules(t *testing.T, run *sarifRun, wantClean string) {
+	t.Helper()
+
+	var ids []string
+	for _, r := range run.Tool.Driver.Rules {
+		ids = append(ids, r.ID)
+	}
+	if !slices.Contains(ids, wantClean) {
+		t.Errorf("sarif rule catalog = %v, want it to declare the enabled rule %q", ids, wantClean)
+	}
+	for i, res := range run.Results {
+		if res.RuleIndex < 0 || res.RuleIndex >= len(ids) {
+			t.Fatalf("result %q has ruleIndex %d, out of range for %d catalog entries", res.RuleID, res.RuleIndex, len(ids))
+		}
+		if got := ids[res.RuleIndex]; got != res.RuleID {
+			t.Errorf("result %q has ruleIndex %d, which is rule %q", res.RuleID, res.RuleIndex, got)
+		}
+		run.Results[i].RuleIndex = 0
+	}
+	run.Tool.Driver.Rules = nil
+}
 
 func TestRun_OutputFormat(t *testing.T) {
 	t.Parallel()
@@ -619,24 +665,26 @@ func TestRun_OutputFormat(t *testing.T) {
 			t.Fatalf("output is not a SARIF log: %v\noutput: %s", err, stdout.String())
 		}
 
-		// The fixture is inside the working directory, so it is reported relative to it.
+		// missing-container-def is enabled by default and the fixture does not trip it, so the
+		// catalog must declare it even though no result names it.
+		checkSARIFRules(t, &log.Runs[0], "missing-container-def")
+
+		// The fixture is inside the working directory, so it is reported relative to it. Every
+		// finding is in the one linted file, the run's only artifact.
+		firstArtifact := 0
 		locAt := func(uri string) []sarifLocation {
 			return []sarifLocation{{PhysicalLocation: sarifPhysicalLocation{
-				ArtifactLocation: sarifArtifactLocation{URI: uri},
+				ArtifactLocation: sarifArtifactLocation{URI: uri, Index: &firstArtifact},
 			}}}
 		}
-		// The catalog lists only referenced rules, sorted by ID, so each result's ruleIndex points at
-		// its like-named catalog entry.
 		want := sarifLog{
 			Version: "2.1.0",
 			Runs: []sarifRun{{
-				Tool: sarifTool{Driver: sarifDriver{
-					Name:  "decolint",
-					Rules: []sarifRule{{ID: "no-bind-mount"}, {ID: "no-host-port-format"}},
-				}},
+				Tool:      sarifTool{Driver: sarifDriver{Name: "decolint"}},
+				Artifacts: []sarifArtifact{{Location: sarifArtifactLocation{URI: violationsFile}}},
 				Results: []sarifResult{
-					{RuleID: "no-bind-mount", RuleIndex: 0, Level: "error", Locations: locAt(violationsFile)},
-					{RuleID: "no-host-port-format", RuleIndex: 1, Level: "error", Locations: locAt(violationsFile)},
+					{RuleID: "no-bind-mount", Level: "error", Locations: locAt(violationsFile)},
+					{RuleID: "no-host-port-format", Level: "error", Locations: locAt(violationsFile)},
 				},
 			}},
 		}
@@ -665,23 +713,25 @@ func TestRun_OutputFormat(t *testing.T) {
 			t.Fatalf("output is not a SARIF log: %v\noutput: %s", err, stdout.String())
 		}
 
+		// invalid-semver is enabled by default and applies to Features, which this fixture is not,
+		// so the catalog declares it without any result naming it.
+		checkSARIFRules(t, &log.Runs[0], "invalid-semver")
+
 		// A file URI's path carries exactly one leading slash, which a POSIX path already has and a
 		// Windows one does not.
 		config := filepath.Join(dir, ".devcontainer", "devcontainer.json")
 		uri := "file://" + path.Join("/", filepath.ToSlash(config))
+		firstArtifact := 0
 		want := sarifLog{
 			Version: "2.1.0",
 			Runs: []sarifRun{{
-				Tool: sarifTool{Driver: sarifDriver{
-					Name:  "decolint",
-					Rules: []sarifRule{{ID: "missing-container-def"}},
-				}},
+				Tool:      sarifTool{Driver: sarifDriver{Name: "decolint"}},
+				Artifacts: []sarifArtifact{{Location: sarifArtifactLocation{URI: uri}}},
 				Results: []sarifResult{{
-					RuleID:    "missing-container-def",
-					RuleIndex: 0,
-					Level:     "error",
+					RuleID: "missing-container-def",
+					Level:  "error",
 					Locations: []sarifLocation{{PhysicalLocation: sarifPhysicalLocation{
-						ArtifactLocation: sarifArtifactLocation{URI: uri},
+						ArtifactLocation: sarifArtifactLocation{URI: uri, Index: &firstArtifact},
 					}}},
 				}},
 			}},
@@ -694,16 +744,13 @@ func TestRun_OutputFormat(t *testing.T) {
 	t.Run("format selected by config file", func(t *testing.T) {
 		t.Parallel()
 
-		// format.jsonc sets "format": "json", so output is a JSON array with no -format flag.
+		// format.jsonc sets "format": "json", so output is a JSON report with no -format flag.
 		var stdout, stderr bytes.Buffer
 		exitCode := run(t.Context(), []string{"-config=testdata/e2e/format.jsonc", violationsDir}, &stdout, &stderr)
 		if exitCode != 1 {
 			t.Fatalf("exit code = %d, want 1; stderr: %s", exitCode, stderr.String())
 		}
-		var issues []linter.Issue
-		if err := json.Unmarshal(stdout.Bytes(), &issues); err != nil {
-			t.Fatalf("config-selected json format did not produce a JSON array: %v\noutput: %s", err, stdout.String())
-		}
+		decodeJSONOutput(t, stdout.Bytes())
 	})
 
 	t.Run("format flag overrides config file", func(t *testing.T) {
@@ -717,6 +764,107 @@ func TestRun_OutputFormat(t *testing.T) {
 		}
 		if !strings.Contains(stdout.String(), "Found 2 errors and 0 warnings.") {
 			t.Errorf("want text output; got:\n%s", stdout.String())
+		}
+	})
+}
+
+// TestRun_LintedFiles checks that a run reports every configuration file it linted, whether or not
+// the file produced a finding, along with the kind of configuration the directory was detected as.
+func TestRun_LintedFiles(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		args []string
+		want []format.File
+	}{
+		{
+			// Nothing fires here, which is exactly the case the file list exists for: without it a
+			// clean run says nothing about what it covered.
+			name: "clean directory",
+			args: []string{"testdata/e2e/clean"},
+			want: []format.File{
+				{Path: "testdata/e2e/clean/.devcontainer/devcontainer.json", Type: linter.Devcontainer},
+			},
+		},
+		{
+			name: "feature directory",
+			args: []string{"testdata/e2e/feature"},
+			want: []format.File{
+				{Path: "testdata/e2e/feature/devcontainer-feature.json", Type: linter.Feature},
+			},
+		},
+		{
+			// A Template directory yields both its metadata and the dev container configuration it
+			// ships, each with its own type.
+			name: "template directory",
+			args: []string{"testdata/e2e/template"},
+			want: []format.File{
+				{Path: "testdata/e2e/template/devcontainer-template.json", Type: linter.Template},
+				{Path: "testdata/e2e/template/.devcontainer/devcontainer.json", Type: linter.Devcontainer},
+			},
+		},
+		{
+			name: "several directories",
+			args: []string{"testdata/e2e/clean", "testdata/e2e/feature"},
+			want: []format.File{
+				{Path: "testdata/e2e/clean/.devcontainer/devcontainer.json", Type: linter.Devcontainer},
+				{Path: "testdata/e2e/feature/devcontainer-feature.json", Type: linter.Feature},
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			var stdout, stderr bytes.Buffer
+			run(t.Context(), append([]string{"-format=json"}, tt.args...), &stdout, &stderr)
+			got := decodeJSONOutput(t, stdout.Bytes()).Files
+
+			want := make([]format.File, len(tt.want))
+			for i, f := range tt.want {
+				want[i] = format.File{Path: filepath.FromSlash(f.Path), Type: f.Type}
+			}
+			if diff := cmp.Diff(want, got); diff != "" {
+				t.Errorf("linted files mismatch (-want +got):\n%s", diff)
+			}
+		})
+	}
+}
+
+// TestRun_ConfigSource checks that the text output names the config file the run's settings came
+// from, and points at -init when there is none.
+func TestRun_ConfigSource(t *testing.T) {
+	// Uses t.Chdir, which cannot be combined with t.Parallel.
+
+	t.Run("config file given", func(t *testing.T) {
+		var stdout, stderr bytes.Buffer
+		run(t.Context(), []string{"-config=testdata/e2e/security-warn.jsonc", "testdata/e2e/clean"}, &stdout, &stderr)
+
+		want := "Config: testdata/e2e/security-warn.jsonc\n"
+		if !strings.Contains(stdout.String(), want) {
+			t.Errorf("stdout = %q, want it to contain %q", stdout.String(), want)
+		}
+	})
+
+	t.Run("no config file found", func(t *testing.T) {
+		// The repository root holds no config file, but the working directory is moved anyway so
+		// that the case cannot start passing for the wrong reason.
+		dir := t.TempDir()
+		if err := os.MkdirAll(filepath.Join(dir, ".devcontainer"), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(dir, ".devcontainer", "devcontainer.json"), []byte(`{"image": "ubuntu:24.04"}`), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		t.Chdir(dir)
+
+		var stdout, stderr bytes.Buffer
+		run(t.Context(), []string{"."}, &stdout, &stderr)
+
+		want := `Config: none (defaults; run "decolint -init" to create .decolint.jsonc)` + "\n"
+		if !strings.Contains(stdout.String(), want) {
+			t.Errorf("stdout = %q, want it to contain %q", stdout.String(), want)
 		}
 	})
 }
@@ -739,10 +887,7 @@ func TestRun_BrokenConfig(t *testing.T) {
 
 	// A parse failure anywhere in a directory discards that directory's issues, so the JSON output
 	// is a well-formed empty array rather than a partial or truncated result.
-	var issues []linter.Issue
-	if err := json.Unmarshal(stdout.Bytes(), &issues); err != nil {
-		t.Fatalf("output is not a JSON issue array: %v\noutput: %s", err, stdout.String())
-	}
+	issues := decodeJSONOutput(t, stdout.Bytes()).Issues
 	if len(issues) != 0 {
 		t.Errorf("issues = %v, want none", issues)
 	}
@@ -765,10 +910,7 @@ func TestRun_DefaultDirectory(t *testing.T) {
 	if exitCode != 1 {
 		t.Fatalf("exit code = %d, want 1; stderr: %s", exitCode, stderr.String())
 	}
-	var issues []linter.Issue
-	if err := json.Unmarshal(stdout.Bytes(), &issues); err != nil {
-		t.Fatalf("output is not a JSON issue array: %v\noutput: %s", err, stdout.String())
-	}
+	issues := decodeJSONOutput(t, stdout.Bytes()).Issues
 	if len(issues) == 0 || issues[0].RuleID != "missing-container-def" {
 		t.Errorf("issues = %v, want missing-container-def from the current directory", issues)
 	}
@@ -894,13 +1036,10 @@ func TestRunLint_DeduplicatesTargets(t *testing.T) {
 	lint := func(t *testing.T, paths []string) int {
 		t.Helper()
 		var stdout bytes.Buffer
-		if _, err := runLint(t.Context(), &stdout, io.Discard, Options{Paths: paths}, cfg); err != nil {
+		if _, err := runLint(t.Context(), &stdout, io.Discard, Options{Paths: paths}, cfg, ""); err != nil {
 			t.Fatalf("runLint: %v", err)
 		}
-		var issues []linter.Issue
-		if err := json.Unmarshal(stdout.Bytes(), &issues); err != nil {
-			t.Fatalf("output is not a JSON issue array: %v\noutput: %s", err, stdout.String())
-		}
+		issues := decodeJSONOutput(t, stdout.Bytes()).Issues
 		return len(issues)
 	}
 
@@ -925,15 +1064,15 @@ func TestRunLint_UnresolvableTarget(t *testing.T) {
 	}
 
 	var stdout bytes.Buffer
-	hasIssue, err := runLint(t.Context(), &stdout, io.Discard, Options{Paths: []string{"."}}, Config{Format: "json"})
+	hasIssue, err := runLint(t.Context(), &stdout, io.Discard, Options{Paths: []string{"."}}, Config{Format: "json"}, "")
 	if err == nil || !strings.Contains(err.Error(), "resolve directory") {
 		t.Errorf("err = %v, want a directory resolution error", err)
 	}
 	if hasIssue {
 		t.Error("hasIssue = true, want false")
 	}
-	if got := strings.TrimSpace(stdout.String()); got != "[]" {
-		t.Errorf("stdout = %q, want an empty JSON issue array", got)
+	if got := strings.TrimSpace(stdout.String()); got != `{"files":[],"issues":[]}` {
+		t.Errorf("stdout = %q, want an empty JSON report", got)
 	}
 }
 
@@ -945,7 +1084,7 @@ func TestRunLint(t *testing.T) {
 		dir := writeDevcontainer(t, `{"image": "ubuntu:latest"}`)
 
 		var stdout bytes.Buffer
-		hasIssue, runErr := runLint(t.Context(), &stdout, io.Discard, Options{Paths: []string{dir}}, Config{})
+		hasIssue, runErr := runLint(t.Context(), &stdout, io.Discard, Options{Paths: []string{dir}}, Config{}, "")
 		if runErr != nil || hasIssue {
 			t.Errorf("hasIssue = %v, err = %v, want false, nil; stdout: %s", hasIssue, runErr, stdout.String())
 		}
@@ -958,7 +1097,7 @@ func TestRunLint(t *testing.T) {
 		var stdout bytes.Buffer
 		opts := Options{Paths: []string{dir}}
 		cfg := Config{Rules: map[string]linter.Severity{"no-image-latest": linter.SeverityError}}
-		hasIssue, runErr := runLint(t.Context(), &stdout, io.Discard, opts, cfg)
+		hasIssue, runErr := runLint(t.Context(), &stdout, io.Discard, opts, cfg, "")
 		if runErr != nil || !hasIssue {
 			t.Errorf("hasIssue = %v, err = %v, want true, nil; stdout: %s", hasIssue, runErr, stdout.String())
 		}
@@ -971,7 +1110,7 @@ func TestRunLint(t *testing.T) {
 		var stdout bytes.Buffer
 		opts := Options{Paths: []string{dir}}
 		cfg := Config{Rules: map[string]linter.Severity{"missing-container-def": linter.SeverityOff}}
-		hasIssue, runErr := runLint(t.Context(), &stdout, io.Discard, opts, cfg)
+		hasIssue, runErr := runLint(t.Context(), &stdout, io.Discard, opts, cfg, "")
 		if runErr != nil || hasIssue {
 			t.Errorf("hasIssue = %v, err = %v, want false, nil; stdout: %s", hasIssue, runErr, stdout.String())
 		}
@@ -983,7 +1122,7 @@ func TestRunLint(t *testing.T) {
 		var stdout bytes.Buffer
 		opts := Options{}
 		cfg := Config{Rules: map[string]linter.Severity{"no-image-latst": linter.SeverityError}}
-		hasIssue, runErr := runLint(t.Context(), &stdout, io.Discard, opts, cfg)
+		hasIssue, runErr := runLint(t.Context(), &stdout, io.Discard, opts, cfg, "")
 		if runErr == nil || hasIssue {
 			t.Errorf("hasIssue = %v, err = %v, want false, non-nil", hasIssue, runErr)
 		}
@@ -999,7 +1138,7 @@ func TestRunLint(t *testing.T) {
 		var stdout bytes.Buffer
 		opts := Options{Paths: []string{dir}}
 		cfg := Config{Categories: map[string]linter.Severity{"reproducibility": linter.SeverityError}}
-		hasIssue, runErr := runLint(t.Context(), &stdout, io.Discard, opts, cfg)
+		hasIssue, runErr := runLint(t.Context(), &stdout, io.Discard, opts, cfg, "")
 		if runErr != nil || !hasIssue {
 			t.Errorf("hasIssue = %v, err = %v, want true, nil; stdout: %s", hasIssue, runErr, stdout.String())
 		}
@@ -1011,7 +1150,7 @@ func TestRunLint(t *testing.T) {
 		var stdout bytes.Buffer
 		opts := Options{}
 		cfg := Config{Categories: map[string]linter.Severity{"secure": linter.SeverityError}}
-		hasIssue, runErr := runLint(t.Context(), &stdout, io.Discard, opts, cfg)
+		hasIssue, runErr := runLint(t.Context(), &stdout, io.Discard, opts, cfg, "")
 		if runErr == nil || hasIssue {
 			t.Errorf("hasIssue = %v, err = %v, want false, non-nil", hasIssue, runErr)
 		}
@@ -1026,7 +1165,7 @@ func TestRunLint(t *testing.T) {
 		file := filepath.Join(dir, ".devcontainer", "devcontainer.json")
 
 		var stdout bytes.Buffer
-		hasIssue, runErr := runLint(t.Context(), &stdout, io.Discard, Options{Paths: []string{file}}, Config{})
+		hasIssue, runErr := runLint(t.Context(), &stdout, io.Discard, Options{Paths: []string{file}}, Config{}, "")
 		if runErr == nil || hasIssue {
 			t.Errorf("hasIssue = %v, err = %v, want false, 'not a directory'", hasIssue, runErr)
 		}
@@ -1039,7 +1178,7 @@ func TestRunLint(t *testing.T) {
 		var stdout bytes.Buffer
 		opts := Options{Paths: []string{dir}}
 		cfg := Config{Rules: map[string]linter.Severity{"no-bind-mount": linter.SeverityError}}
-		hasIssue, runErr := runLint(t.Context(), &stdout, io.Discard, opts, cfg)
+		hasIssue, runErr := runLint(t.Context(), &stdout, io.Discard, opts, cfg, "")
 		if runErr != nil || hasIssue {
 			t.Errorf("hasIssue = %v, err = %v, want false, nil; stdout: %s", hasIssue, runErr, stdout.String())
 		}
@@ -1062,10 +1201,7 @@ func TestRun_Merge(t *testing.T) {
 			t.Fatalf("exit code = %d, want 1; stderr: %s", exitCode, stderr.String())
 		}
 
-		var issues []linter.Issue
-		if err := json.Unmarshal(stdout.Bytes(), &issues); err != nil {
-			t.Fatalf("output is not a JSON issue array: %v\noutput: %s", err, stdout.String())
-		}
+		issues := decodeJSONOutput(t, stdout.Bytes()).Issues
 		// The config references "./privileged-feature" on line 4; every merged-in property must be
 		// reported there rather than at the base image on line 2.
 		for _, issue := range issues {
@@ -1254,10 +1390,7 @@ func TestRun_Merge(t *testing.T) {
 			}
 		}
 		// The merged-in properties are reported at the "image" reference on line 1.
-		var issues []linter.Issue
-		if err := json.Unmarshal(stdout.Bytes(), &issues); err != nil {
-			t.Fatalf("output is not a JSON issue array: %v\noutput: %s", err, stdout.String())
-		}
+		issues := decodeJSONOutput(t, stdout.Bytes()).Issues
 		for _, issue := range issues {
 			if issue.Line != 1 {
 				t.Errorf("issue %s reported at line %d, want 1 (the image reference)", issue.RuleID, issue.Line)
@@ -1310,10 +1443,7 @@ LABEL devcontainer.metadata='[{"privileged": true, "mounts": ["source=/var/run/d
 				t.Errorf("want %s to fire on the merged Dockerfile metadata; output: %s", ruleID, stdout.String())
 			}
 		}
-		var issues []linter.Issue
-		if err := json.Unmarshal(stdout.Bytes(), &issues); err != nil {
-			t.Fatalf("output is not a JSON issue array: %v\noutput: %s", err, stdout.String())
-		}
+		issues := decodeJSONOutput(t, stdout.Bytes()).Issues
 		for _, issue := range issues {
 			if issue.Line != 3 {
 				t.Errorf("issue %s reported at line %d, want 3 (the dockerfile reference)", issue.RuleID, issue.Line)
@@ -1441,10 +1571,7 @@ LABEL devcontainer.metadata='[{"privileged": true, "mounts": ["source=/var/run/d
 		}
 		// The config references the Compose file on line 2; every merged-in property must be reported
 		// there rather than at the service or the Dockerfile.
-		var issues []linter.Issue
-		if err := json.Unmarshal(stdout.Bytes(), &issues); err != nil {
-			t.Fatalf("output is not a JSON issue array: %v\noutput: %s", err, stdout.String())
-		}
+		issues := decodeJSONOutput(t, stdout.Bytes()).Issues
 		for _, issue := range issues {
 			if issue.Line != 2 {
 				t.Errorf("issue %s reported at line %d, want 2 (the dockerComposeFile reference)", issue.RuleID, issue.Line)
@@ -1503,12 +1630,12 @@ func TestLintPath(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		issues, err := lintPath(t.Context(), newLinter(), noSubst, nil, absPath(dir))
+		result, err := lintPath(t.Context(), newLinter(), noSubst, nil, absPath(dir))
 		if err != nil {
 			t.Fatalf("lintPath: %v", err)
 		}
 		var got []string
-		for _, issue := range issues {
+		for _, issue := range result.issues {
 			got = append(got, issue.Path)
 		}
 		want := []string{
@@ -1517,6 +1644,14 @@ func TestLintPath(t *testing.T) {
 		}
 		if diff := cmp.Diff(want, got); diff != "" {
 			t.Errorf("issue paths mismatch (-want +got):\n%s", diff)
+		}
+		// Every file linted is reported, named the way its issues are.
+		wantFiles := []format.File{
+			{Path: want[0], Type: linter.Devcontainer},
+			{Path: want[1], Type: linter.Devcontainer},
+		}
+		if diff := cmp.Diff(wantFiles, result.files); diff != "" {
+			t.Errorf("linted files mismatch (-want +got):\n%s", diff)
 		}
 	})
 
@@ -1535,16 +1670,22 @@ func TestLintPath(t *testing.T) {
 			t.Fatal(err)
 		}
 		defer func() { _ = root.Close() }()
-		issues, err := lintDir(t.Context(), newLinter(), noSubst, nil, root)
+		result, err := lintDir(t.Context(), newLinter(), noSubst, nil, root)
 		if err == nil {
 			t.Fatal("got nil error, want a parse error for the broken config")
 		}
-		if len(issues) != 1 {
-			t.Fatalf("got %d issues %v, want 1", len(issues), issues)
+		if len(result.issues) != 1 {
+			t.Fatalf("got %d issues %v, want 1", len(result.issues), result.issues)
 		}
 		wantPath := filepath.Join(dir, ".devcontainer", "good", "devcontainer.json")
-		if issues[0].Path != wantPath {
-			t.Errorf("Path = %q, want %q", issues[0].Path, wantPath)
+		if result.issues[0].Path != wantPath {
+			t.Errorf("Path = %q, want %q", result.issues[0].Path, wantPath)
+		}
+		// The file that failed to parse was not linted, so only the good one is reported; the
+		// error already names the broken one.
+		wantFiles := []format.File{{Path: wantPath, Type: linter.Devcontainer}}
+		if diff := cmp.Diff(wantFiles, result.files); diff != "" {
+			t.Errorf("linted files mismatch (-want +got):\n%s", diff)
 		}
 	})
 
@@ -1677,18 +1818,23 @@ func TestLintPath_DirName(t *testing.T) {
 			l := linter.New()
 			l.RegisterRule(dirNameRule, linter.SeverityWarn)
 
-			issues, err := lintPath(t.Context(), l, nil, nil, absPath(target))
+			result, err := lintPath(t.Context(), l, nil, nil, absPath(target))
 			if err != nil {
 				t.Fatalf("lintPath: %v", err)
 			}
-			if len(issues) != 1 {
-				t.Fatalf("got %d issues %v, want 1", len(issues), issues)
+			if len(result.issues) != 1 {
+				t.Fatalf("got %d issues %v, want 1", len(result.issues), result.issues)
 			}
-			if issues[0].Message != "my-feature" {
-				t.Errorf("ctx.Dir.Name = %q, want %q", issues[0].Message, "my-feature")
+			if result.issues[0].Message != "my-feature" {
+				t.Errorf("ctx.Dir.Name = %q, want %q", result.issues[0].Message, "my-feature")
 			}
-			if issues[0].Path != tt.wantPath {
-				t.Errorf("Path = %q, want %q", issues[0].Path, tt.wantPath)
+			if result.issues[0].Path != tt.wantPath {
+				t.Errorf("Path = %q, want %q", result.issues[0].Path, tt.wantPath)
+			}
+			// The linted file is named the same way its findings are.
+			wantFiles := []format.File{{Path: tt.wantPath, Type: linter.Feature}}
+			if diff := cmp.Diff(wantFiles, result.files); diff != "" {
+				t.Errorf("linted files mismatch (-want +got):\n%s", diff)
 			}
 		})
 	}
@@ -1767,10 +1913,7 @@ func TestRun_Substitution(t *testing.T) {
 		if exitCode != 1 {
 			t.Fatalf("exit code = %d, want 1; stderr: %s", exitCode, stderr.String())
 		}
-		var issues []linter.Issue
-		if err := json.Unmarshal(stdout.Bytes(), &issues); err != nil {
-			t.Fatalf("output is not a JSON issue array: %v\noutput: %s", err, stdout.String())
-		}
+		issues := decodeJSONOutput(t, stdout.Bytes()).Issues
 		if len(issues) != 1 || issues[0].RuleID != "no-image-latest" {
 			t.Fatalf("issues = %v, want one no-image-latest", issues)
 		}
@@ -1794,14 +1937,10 @@ func TestRun_Substitution(t *testing.T) {
 	})
 }
 
-// hasRule reports whether the JSON issue array in data contains an issue for ruleID.
+// hasRule reports whether the JSON report in data contains an issue for ruleID.
 func hasRule(t *testing.T, data []byte, ruleID string) bool {
 	t.Helper()
-	var issues []linter.Issue
-	if err := json.Unmarshal(data, &issues); err != nil {
-		t.Fatalf("output is not a JSON issue array: %v\noutput: %s", err, data)
-	}
-	for _, issue := range issues {
+	for _, issue := range decodeJSONOutput(t, data).Issues {
 		if issue.RuleID == ruleID {
 			return true
 		}

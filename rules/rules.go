@@ -143,6 +143,23 @@ func Builtin() []Registration {
 	return slices.Clone(builtinRules)
 }
 
+// Enabled returns the built-in rules [RegisterRules] runs for the given platforms and overrides —
+// those it registers at a severity other than off — in the same deterministic order. Callers that
+// report which rules a run covered, rather than which ones fired, use this.
+func Enabled(platforms []linter.Platform, overrides Overrides) []Registration {
+	var enabled []Registration
+	for _, reg := range builtinRules {
+		if !platformEnabled(reg.Rule.Platforms, platforms) {
+			continue
+		}
+		if overrides.SeverityFor(reg) == linter.SeverityOff {
+			continue
+		}
+		enabled = append(enabled, reg)
+	}
+	return enabled
+}
+
 // unknownOverrides returns the sorted set of keys in overrides that do not match any built-in rule
 // ID. Platform filtering is deliberately ignored: a rule that exists but is filtered out by
 // platforms is still known (see [RegisterRules] for why that is not treated as an error).

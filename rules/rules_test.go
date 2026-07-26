@@ -1,6 +1,7 @@
 package rules_test
 
 import (
+	"slices"
 	"strings"
 	"testing"
 
@@ -178,5 +179,91 @@ func TestRegisterRules_SeverityOverride(t *testing.T) {
 				t.Errorf("issues mismatch (-want +got):\n%s", diff)
 			}
 		})
+	}
+}
+
+func TestEnabled(t *testing.T) {
+	t.Parallel()
+
+	// Each case names one rule that must be enabled and one that must not, rather than the whole
+	// list, so adding a built-in rule does not churn the test.
+	tests := []struct {
+		name        string
+		platforms   []linter.Platform
+		overrides   rules.Overrides
+		wantID      string
+		wantMissing string
+	}{
+		{
+			// missing-container-def is correctness, on by default; no-seccomp-override is security,
+			// off by default.
+			name:        "defaults enable correctness only",
+			wantID:      "missing-container-def",
+			wantMissing: "no-seccomp-override",
+		},
+		{
+			name:        "category override enables a whole category",
+			overrides:   rules.Overrides{Categories: map[string]linter.Severity{"security": linter.SeverityWarn}},
+			wantID:      "no-seccomp-override",
+			wantMissing: "no-image-latest",
+		},
+		{
+			name:        "per-rule override disables a rule that is on by default",
+			overrides:   rules.Overrides{Rules: map[string]linter.Severity{"missing-container-def": linter.SeverityOff}},
+			wantID:      "invalid-semver",
+			wantMissing: "missing-container-def",
+		},
+		{
+			// no-bind-mount is scoped to codespaces, so selecting no platform leaves it out even
+			// though its category is enabled.
+			name:        "platform-scoped rule needs its platform",
+			wantID:      "missing-container-def",
+			wantMissing: "no-bind-mount",
+		},
+		{
+			name:      "platform-scoped rule with its platform selected",
+			platforms: []linter.Platform{linter.PlatformCodespaces},
+			wantID:    "no-bind-mount",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			var ids []string
+			for _, reg := range rules.Enabled(tt.platforms, tt.overrides) {
+				ids = append(ids, reg.Rule.ID)
+			}
+			if !slices.Contains(ids, tt.wantID) {
+				t.Errorf("Enabled() = %v, want it to contain %q", ids, tt.wantID)
+			}
+			if tt.wantMissing != "" && slices.Contains(ids, tt.wantMissing) {
+				t.Errorf("Enabled() = %v, want it not to contain %q", ids, tt.wantMissing)
+			}
+		})
+	}
+}
+
+// TestEnabled_Order checks that Enabled preserves the built-in order, which the SARIF rule catalog
+// and any other report of the enabled rules inherit.
+func TestEnabled_Order(t *testing.T) {
+	t.Parallel()
+
+	enabled := rules.Enabled(nil, rules.Overrides{})
+	var builtinIDs []string
+	for _, reg := range rules.Builtin() {
+		builtinIDs = append(builtinIDs, reg.Rule.ID)
+	}
+
+	var last int
+	for _, reg := range enabled {
+		i := slices.Index(builtinIDs, reg.Rule.ID)
+		if i < 0 {
+			t.Fatalf("Enabled() returned %q, which is not a built-in rule", reg.Rule.ID)
+		}
+		if i < last {
+			t.Errorf("Enabled() returned %q out of built-in order", reg.Rule.ID)
+		}
+		last = i
 	}
 }

@@ -151,29 +151,34 @@ func mergeConfig(opts Options, cfg Config) Config {
 // when no explicit path is given, in precedence order (first match wins).
 var defaultConfigNames = []string{".decolint.jsonc", ".decolint.json"}
 
-// loadConfig loads the config file at path and returns the Config it declares. If path is empty,
-// the first of defaultConfigNames found in the current directory is used instead; if none exists,
-// loadConfig returns a zero Config and no error.
+// loadConfig loads the config file at path and returns the Config it declares along with the path
+// it was read from, which the run reports as the source of its settings. If path is empty, the
+// first of defaultConfigNames found in the current directory is used instead; if none exists,
+// loadConfig returns a zero Config, an empty path, and no error.
 //
 // It is an error if path is explicitly given and the file does not exist, can't be read, or fails
 // to parse.
-func loadConfig(path string) (Config, error) {
+func loadConfig(path string) (Config, string, error) {
 	if path == "" {
 		found, err := findDefaultConfig()
 		if err != nil {
-			return Config{}, err
+			return Config{}, "", err
 		}
 		if found == "" {
-			return Config{}, nil
+			return Config{}, "", nil
 		}
 		path = found
 	}
 
 	src, err := os.ReadFile(path)
 	if err != nil {
-		return Config{}, fmt.Errorf("read config %s: %w", path, err)
+		return Config{}, "", fmt.Errorf("read config %s: %w", path, err)
 	}
-	return parseConfig(path, src)
+	cfg, err := parseConfig(path, src)
+	if err != nil {
+		return Config{}, "", err
+	}
+	return cfg, path, nil
 }
 
 // findDefaultConfig returns the path of the first of defaultConfigNames that exists as a regular

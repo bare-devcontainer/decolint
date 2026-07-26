@@ -6,20 +6,19 @@ import (
 	"strings"
 
 	"github.com/bare-devcontainer/decolint/format"
-	"github.com/bare-devcontainer/decolint/linter"
 	"github.com/bare-devcontainer/decolint/rules"
 )
 
-// Format identifies how lint issues are written to stdout.
+// Format identifies how a lint report is written to stdout.
 type Format interface {
-	// WriteIssues writes issues to w in this format.
-	WriteIssues(w io.Writer, issues []linter.Issue) error
+	// WriteReport writes report to w in this format.
+	WriteReport(w io.Writer, report format.Report) error
 }
 
-// parseFormat parses a format name, matched case-insensitively, into a Format. An empty string
-// yields the text format. It returns an error if name does not name a known format.
-func parseFormat(name string) (Format, error) {
-	switch strings.ToLower(name) {
+// parseFormat resolves cfg.Format, matched case-insensitively, into a Format. An empty name yields
+// the text format. It returns an error if the name does not name a known format.
+func parseFormat(cfg Config) (Format, error) {
+	switch strings.ToLower(cfg.Format) {
 	case "", "text":
 		return format.TextFormat{}, nil
 	case "json":
@@ -27,16 +26,16 @@ func parseFormat(name string) (Format, error) {
 	case "github":
 		return format.GitHubFormat{}, nil
 	case "sarif":
-		return format.SARIFFormat{Version: version, Rules: sarifRules()}, nil
+		return format.SARIFFormat{Version: version, Rules: sarifRules(cfg)}, nil
 	default:
-		return nil, fmt.Errorf("unknown format %q (want one of: text, json, github, sarif)", name)
+		return nil, fmt.Errorf("unknown format %q (want one of: text, json, github, sarif)", cfg.Format)
 	}
 }
 
-// sarifRules adapts the built-in rule catalog into the shape [format.SARIFFormat] consumes, so the
+// sarifRules adapts the rules cfg enables into the shape [format.SARIFFormat] consumes, so the
 // format package does not depend on the rules package.
-func sarifRules() []format.SARIFRule {
-	regs := rules.Builtin()
+func sarifRules(cfg Config) []format.SARIFRule {
+	regs := rules.Enabled(cfg.Platforms, rules.Overrides{Categories: cfg.Categories, Rules: cfg.Rules})
 	out := make([]format.SARIFRule, len(regs))
 	for i, reg := range regs {
 		out[i] = format.SARIFRule{

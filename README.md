@@ -166,31 +166,50 @@ A few limits apply:
 
 ### Output formats
 
-By default, findings are printed one per line, with the rule's
-severity (`error` or `warn`):
+Every run reports the configuration files it linted, including those
+with no finding, and each finding with the rule's severity (`error` or
+`warn`). By default that looks like this:
 
 ```
+Config: .decolint.jsonc
+Linted 1 file:
+  .devcontainer/devcontainer.json (devcontainer)
+
 .devcontainer/devcontainer.json:4:12: warn: image "ubuntu:latest" uses the "latest" tag; pin a specific version (no-image-latest)
+Found 0 errors and 1 warning.
 ```
+
+The first line names the config file in use, or says that no config
+file was found and how to create one.
 
 Select a different output format to change this:
 
-- `text` (default) — the one-line-per-finding format shown above.
-- `json` — a JSON array of finding objects, for scripting:
+- `text` (default) — the format shown above.
+- `json` — a JSON object of the linted files and the findings, for
+  scripting:
   ```json
-  [{"path":".devcontainer/devcontainer.json","line":4,"col":12,"ruleId":"no-image-latest","message":"image \"ubuntu:latest\" uses the \"latest\" tag; pin a specific version","severity":"warn"}]
+  {"files":[{"path":".devcontainer/devcontainer.json","type":"devcontainer"}],"issues":[{"path":".devcontainer/devcontainer.json","line":4,"col":12,"ruleId":"no-image-latest","message":"image \"ubuntu:latest\" uses the \"latest\" tag; pin a specific version","severity":"warn"}]}
   ```
 - `github` — [GitHub Actions workflow
   commands](https://docs.github.com/en/actions/using-workflows/workflow-commands-for-github-actions#setting-a-notice-message),
   so findings show up as inline annotations on pull request diffs when
-  `decolint` is run from a GitHub Actions workflow:
+  `decolint` is run from a GitHub Actions workflow. The linted files go
+  into a collapsed group in the run log, so a file with no finding gets
+  no annotation:
   ```
+  ::group::decolint
+  Linted 1 file:
+    .devcontainer/devcontainer.json (devcontainer)
+  ::endgroup::
   ::warning file=.devcontainer/devcontainer.json,line=4,col=12,title=no-image-latest::image "ubuntu:latest" uses the "latest" tag; pin a specific version
   ```
 - `sarif` — a [SARIF 2.1.0](https://docs.oasis-open.org/sarif/sarif/v2.1.0/sarif-v2.1.0.html)
   log, for upload to [GitHub Code
   Scanning](https://docs.github.com/en/code-security/code-scanning/integrating-with-code-scanning/uploading-a-sarif-file-to-github)
-  so findings appear as alerts in the repository's Security tab:
+  so findings appear as alerts in the repository's Security tab. The log
+  declares every rule the run had enabled, so Code Scanning resolves the
+  alerts of a rule that ran and found nothing, while leaving those of a
+  rule you have turned off untouched:
   ```yaml
   - run: decolint -merge -format=sarif . > decolint.sarif
     continue-on-error: true # decolint exits 1 on findings; the upload must still run

@@ -17,6 +17,7 @@ import (
 
 	"github.com/bare-devcontainer/decolint/discovery"
 	"github.com/bare-devcontainer/decolint/feature"
+	"github.com/bare-devcontainer/decolint/format"
 	"github.com/bare-devcontainer/decolint/linter"
 	"github.com/bare-devcontainer/decolint/rules"
 	"github.com/bare-devcontainer/decolint/substitute"
@@ -79,7 +80,8 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 		return exitCodeSuccess
 	}
 
-	cfg, err := loadConfig(opts.ConfigPath)
+	// Named cfgPath, not configPath, so it does not shadow the function of that name.
+	cfg, cfgPath, err := loadConfig(opts.ConfigPath)
 	if err != nil {
 		_, _ = fmt.Fprintln(stderr, progName+":", err)
 		return exitCodeError
@@ -94,7 +96,7 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 		return exitCodeSuccess
 	}
 
-	hasIssue, err := runLint(ctx, stdout, stderr, opts, cfg)
+	hasIssue, err := runLint(ctx, stdout, stderr, opts, cfg, cfgPath)
 	if err != nil {
 		_, _ = fmt.Fprintln(stderr, progName+":", err)
 		return exitCodeError
@@ -229,8 +231,11 @@ Flags:
 	return nil
 }
 
-func runLint(ctx context.Context, stdout, stderr io.Writer, opts Options, cfg Config) (bool, error) {
-	outputFormat, err := parseFormat(cfg.Format)
+// runLint lints every directory in opts.Paths and writes the report to stdout in cfg's format.
+// cfgPath is the config file cfg was loaded from, empty when the run uses the defaults; it is
+// reported so the output says which settings were in effect.
+func runLint(ctx context.Context, stdout, stderr io.Writer, opts Options, cfg Config, cfgPath string) (bool, error) {
+	outputFormat, err := parseFormat(cfg)
 	if err != nil {
 		return false, err
 	}
@@ -263,7 +268,7 @@ func runLint(ctx context.Context, stdout, stderr io.Writer, opts Options, cfg Co
 		}
 	}
 
-	var allIssues []linter.Issue
+	report := format.Report{ConfigPath: cfgPath}
 	var worstSeverity linter.Severity
 	var lintErr error
 	// A directory named more than once is linted once, so its findings are not reported twice.
@@ -280,20 +285,21 @@ func runLint(ctx context.Context, stdout, stderr io.Writer, opts Options, cfg Co
 		}
 		seen[dir] = struct{}{}
 
-		issues, err := lintPath(ctx, l, subst, merge, dir)
-		for _, issue := range issues {
+		result, err := lintPath(ctx, l, subst, merge, dir)
+		for _, issue := range result.issues {
 			if issue.Severity > worstSeverity {
 				worstSeverity = issue.Severity
 			}
 		}
-		allIssues = append(allIssues, issues...)
+		report.Files = append(report.Files, result.files...)
+		report.Issues = append(report.Issues, result.issues...)
 		if err != nil {
 			lintErr = errors.Join(lintErr, err)
 		}
 	}
 
-	if err := outputFormat.WriteIssues(stdout, allIssues); err != nil {
-		return false, errors.Join(lintErr, fmt.Errorf("write issues: %w", err))
+	if err := outputFormat.WriteReport(stdout, report); err != nil {
+		return false, errors.Join(lintErr, fmt.Errorf("write report: %w", err))
 	}
 	if lintErr != nil {
 		return false, lintErr
@@ -330,19 +336,27 @@ func (p absPath) String() string {
 	return rel
 }
 
+// lintResult is what linting a directory produced: the configuration files that were linted, in
+// discovery order, and the issues found in them. A file that could not be linted is left out; the
+// accompanying error names it.
+type lintResult struct {
+	files  []format.File
+	issues []linter.Issue
+}
+
 // lintPath lints the devcontainer directory dir. It is opened as an os.Root, so every file the lint
 // reads is confined to it; because dir is absolute, so is every path derived from it. It is an error
 // if dir is not a directory.
-func lintPath(ctx context.Context, l *linter.Linter, subst substituteFn, merge mergeFn, dir absPath) ([]linter.Issue, error) {
+func lintPath(ctx context.Context, l *linter.Linter, subst substituteFn, merge mergeFn, dir absPath) (lintResult, error) {
 	root, err := os.OpenRoot(string(dir))
 	if err != nil {
 		// Pointing decolint straight at a devcontainer.json is a natural mistake, and "not a
 		// directory" alone does not say what to pass instead.
 		if info, statErr := os.Stat(string(dir)); statErr == nil && !info.IsDir() {
-			return nil, fmt.Errorf("%s is not a directory; pass the directory that contains the devcontainer configuration", dir)
+			return lintResult{}, fmt.Errorf("%s is not a directory; pass the directory that contains the devcontainer configuration", dir)
 		}
 		// os.OpenRoot's error already names the path.
-		return nil, fmt.Errorf("lint directory: %w", err)
+		return lintResult{}, fmt.Errorf("lint directory: %w", err)
 	}
 	// The root is only read from, so a close error is inconsequential.
 	defer func() { _ = root.Close() }()
@@ -351,12 +365,12 @@ func lintPath(ctx context.Context, l *linter.Linter, subst substituteFn, merge m
 
 // lintDir lints every configuration file in the devcontainer directory root is opened on. It is an
 // error if the directory contains no configuration.
-func lintDir(ctx context.Context, l *linter.Linter, subst substituteFn, merge mergeFn, root *os.Root) ([]linter.Issue, error) {
+func lintDir(ctx context.Context, l *linter.Linter, subst substituteFn, merge mergeFn, root *os.Root) (lintResult, error) {
 	dir := absPath(root.Name())
 	if err := ctx.Err(); err != nil {
-		return nil, fmt.Errorf("aborted %s: %w", dir, err)
+		return lintResult{}, fmt.Errorf("aborted %s: %w", dir, err)
 	}
-	var issues []linter.Issue
+	var result lintResult
 	var errs []error
 	found := false
 	err := discovery.VisitConfigs(root, func(f discovery.ConfigFile) error {
@@ -371,16 +385,18 @@ func lintDir(ctx context.Context, l *linter.Linter, subst substituteFn, merge me
 			errs = append(errs, err)
 			return nil
 		}
-		issues = append(issues, fileIssues...)
+		// The file is named the same way its findings are, so a report can match the two up.
+		result.files = append(result.files, format.File{Path: configPath(f).String(), Type: f.Type})
+		result.issues = append(result.issues, fileIssues...)
 		return nil
 	})
 	if err != nil {
-		return issues, errors.Join(append(errs, err)...)
+		return result, errors.Join(append(errs, err)...)
 	}
 	if !found {
-		return nil, fmt.Errorf("no devcontainer configuration found in %s", dir)
+		return lintResult{}, fmt.Errorf("no devcontainer configuration found in %s", dir)
 	}
-	return issues, errors.Join(errs...)
+	return result, errors.Join(errs...)
 }
 
 // configPath returns the location of the configuration file f. It is absolute because f.Root is the

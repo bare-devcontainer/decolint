@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
 )
 
@@ -14,15 +15,17 @@ import (
 // page must point there instead ("reference.md#config-file"), which the goldmark link render hook
 // enabled in hugo.toml resolves to that page's real address.
 
-// README section boundaries, matched as exact heading lines. A generator failing loudly when README
-// is restructured is the right failure mode; silently misplacing content is not.
+// readmePages are the pages splitReadme extracts from README.md, keyed by output file name (without
+// extension). Each must appear in README.md exactly once, delimited by
+// "<!-- decolint:page=NAME -->" and "<!-- decolint:end-page -->" (see splitReadme). Content outside
+// any marked page — the title, badges, the "---" before "# Reference", "## Contributing" — is left
+// where it is and never touched by docgen.
+var readmePages = []string{"_index", "getting-started", "reference"}
+
 const (
-	readmeWhyHeading      = "## Why decolint"
-	readmeTryHeading      = "## Try it"
-	readmeLintingHeading  = "## Linting a Feature or Template"
-	readmeReferenceH1     = "# Reference"
-	readmeContribHeading  = "## Contributing"
-	readmeHorizontalRule  = "---"
+	readmePageStartPrefix = "<!-- decolint:page="
+	readmePageStartSuffix = " -->"
+	readmePageEnd         = "<!-- decolint:end-page -->"
 	landingDescription    = "A linter for Dev Container configuration files."
 	gettingStartedSummary = "Install decolint, choose what it reports, and wire it into CI."
 	referenceSummary      = "Every flag, config file member, and output format decolint supports."
@@ -57,31 +60,9 @@ func writeReadmePages(readmePath, dir string) error {
 func splitReadme(src string) (map[string]string, error) {
 	lines := strings.Split(src, "\n")
 
-	titleIdx := findTitleLine(lines)
-	whyIdx := findHeadingLine(lines, readmeWhyHeading)
-	tryIdx := findHeadingLine(lines, readmeTryHeading)
-	lintingIdx := findHeadingLine(lines, readmeLintingHeading)
-	refIdx := findHeadingLine(lines, readmeReferenceH1)
-	contribIdx := findHeadingLine(lines, readmeContribHeading)
-	if titleIdx < 0 || whyIdx < 0 || tryIdx < 0 || lintingIdx < 0 || refIdx < 0 || contribIdx < 0 {
-		return nil, fmt.Errorf("could not find a title and all expected section headings (title=%d why=%d try=%d linting=%d reference=%d contributing=%d)",
-			titleIdx, whyIdx, tryIdx, lintingIdx, refIdx, contribIdx)
-	}
-	if titleIdx >= whyIdx || whyIdx >= tryIdx || tryIdx >= lintingIdx || lintingIdx >= refIdx || refIdx >= contribIdx {
-		return nil, fmt.Errorf("the title and section headings are not in the expected order (title=%d why=%d try=%d linting=%d reference=%d contributing=%d)",
-			titleIdx, whyIdx, tryIdx, lintingIdx, refIdx, contribIdx)
-	}
-
-	// Landing runs from the first content line after the title and badges through the end of "Why
-	// decolint"; getting-started picks up at "Try it" and runs to just before the "---" separator
-	// that precedes "# Reference"; reference runs from just after "# Reference" to just before
-	// "Contributing", which belongs to the project rather than to decolint's own documentation.
-	contentStart := skipTitleAndBadges(lines)
-
-	bodies := map[string]string{
-		"_index":          strings.Join(trimBlank(lines[contentStart:tryIdx]), "\n"),
-		"getting-started": strings.Join(trimHorizontalRule(trimBlank(lines[tryIdx:refIdx])), "\n"),
-		"reference":       strings.Join(stripRulesTableMarkers(trimBlank(lines[refIdx+1:contribIdx])), "\n"),
+	bodies, err := readmePageBodies(lines)
+	if err != nil {
+		return nil, err
 	}
 
 	// The heading -> page map spans all three bodies, so a link anywhere among them can be resolved
@@ -109,39 +90,44 @@ func splitReadme(src string) (map[string]string, error) {
 	return pages, nil
 }
 
-// findHeadingLine returns the index of the line in lines that is exactly the ATX heading want
-// (e.g. "## Why decolint"), or -1 if there is none.
-func findHeadingLine(lines []string, want string) int {
+// readmePageBodies extracts the body of each page in readmePages from lines, delimited by
+// "<!-- decolint:page=NAME -->" and "<!-- decolint:end-page -->" markers. A generator failing loudly
+// when a marker is missing, duplicated, unterminated, or names an unknown page is the right failure
+// mode; silently misplacing content is not.
+func readmePageBodies(lines []string) (map[string]string, error) {
+	bodies := map[string]string{}
+	openName, openStart := "", -1
 	for i, l := range lines {
-		if l == want {
-			return i
+		switch {
+		case l == readmePageEnd:
+			if openName == "" {
+				return nil, fmt.Errorf("line %d: %q with no page marker open", i+1, readmePageEnd)
+			}
+			bodies[openName] = strings.Join(stripRulesTableMarkers(trimBlank(lines[openStart:i])), "\n")
+			openName = ""
+		case strings.HasPrefix(l, readmePageStartPrefix) && strings.HasSuffix(l, readmePageStartSuffix):
+			name := strings.TrimSuffix(strings.TrimPrefix(l, readmePageStartPrefix), readmePageStartSuffix)
+			if openName != "" {
+				return nil, fmt.Errorf("line %d: page %q starts before page %q ends", i+1, name, openName)
+			}
+			if !slices.Contains(readmePages, name) {
+				return nil, fmt.Errorf("line %d: unknown page %q (want one of %v)", i+1, name, readmePages)
+			}
+			if _, ok := bodies[name]; ok {
+				return nil, fmt.Errorf("line %d: page %q marked more than once", i+1, name)
+			}
+			openName, openStart = name, i+1
 		}
 	}
-	return -1
-}
-
-// findTitleLine returns the index of the first "# " (h1) line in lines, or -1 if there is none.
-func findTitleLine(lines []string) int {
-	for i, l := range lines {
-		if strings.HasPrefix(l, "# ") {
-			return i
+	if openName != "" {
+		return nil, fmt.Errorf("page %q has no %q", openName, readmePageEnd)
+	}
+	for _, name := range readmePages {
+		if _, ok := bodies[name]; !ok {
+			return nil, fmt.Errorf("README.md has no %s%s%s ... %s for page %q", readmePageStartPrefix, name, readmePageStartSuffix, readmePageEnd, name)
 		}
 	}
-	return -1
-}
-
-// skipTitleAndBadges returns the index of the first line of body prose: past the "# " title and any
-// immediately following badge lines ("[![...").
-func skipTitleAndBadges(lines []string) int {
-	i := 0
-	for i < len(lines) && !strings.HasPrefix(lines[i], "# ") {
-		i++
-	}
-	i++ // past the title line itself
-	for i < len(lines) && (strings.TrimSpace(lines[i]) == "" || strings.HasPrefix(strings.TrimSpace(lines[i]), "[![")) {
-		i++
-	}
-	return i
+	return bodies, nil
 }
 
 // trimBlank drops leading and trailing blank lines from lines.
@@ -169,16 +155,6 @@ func stripRulesTableMarkers(lines []string) []string {
 		out = append(out, l)
 	}
 	return out
-}
-
-// trimHorizontalRule drops a trailing "---" line (and the blank lines around it, already stripped
-// by trimBlank) — the separator README.md draws between the guide and "# Reference", which has
-// nothing to do with the guide's own last section.
-func trimHorizontalRule(lines []string) []string {
-	if len(lines) > 0 && lines[len(lines)-1] == readmeHorizontalRule {
-		return trimBlank(lines[:len(lines)-1])
-	}
-	return lines
 }
 
 // anchorLink matches a Markdown link whose target is a same-document fragment, e.g. "(#config-file)".

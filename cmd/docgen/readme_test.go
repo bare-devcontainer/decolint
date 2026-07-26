@@ -7,19 +7,23 @@ import (
 	"testing"
 )
 
-// fixtureReadme is a minimal README.md with the section structure splitReadme requires: the
-// headings it splits on, a cross-page anchor link in each direction, and the rules table markers,
-// so a single fixture exercises the heading split, anchor rewriting and marker stripping together.
+// fixtureReadme is a minimal README.md with the page markers splitReadme requires, a cross-page
+// anchor link in each direction, and the rules table markers, so a single fixture exercises the
+// marker split, anchor rewriting and marker stripping together. It also has content outside any
+// page marker (the title, badges, the "---", "## Contributing") that must never reach a page.
 const fixtureReadme = `# example
 
 [![CI](https://example.invalid/badge.svg)](https://example.invalid)
 
+<!-- decolint:page=_index -->
 Intro paragraph. See [Config file](#config-file).
 
 ## Why decolint
 
 - A landing page bullet.
+<!-- decolint:end-page -->
 
+<!-- decolint:page=getting-started -->
 ## Try it
 
 Getting started body. Self link: [Try it](#try-it).
@@ -27,11 +31,13 @@ Getting started body. Self link: [Try it](#try-it).
 ## Linting a Feature or Template
 
 Last guide section.
+<!-- decolint:end-page -->
 
 ---
 
 # Reference
 
+<!-- decolint:page=reference -->
 ## What decolint lints
 
 Reference body.
@@ -43,6 +49,7 @@ Reference body.
 | --- |
 | ` + "`x`" + ` |
 <!-- /decolint:rules-table -->
+<!-- decolint:end-page -->
 
 ## Contributing
 
@@ -108,25 +115,47 @@ func TestSplitReadme(t *testing.T) {
 	}
 }
 
-func TestSplitReadme_MissingHeading(t *testing.T) {
+func TestSplitReadme_MarkerErrors(t *testing.T) {
 	t.Parallel()
 
-	_, err := splitReadme("# example\n\n## Try it\n\nno other headings\n")
-	if err == nil {
-		t.Fatal("splitReadme with missing headings: got nil error, want one")
+	tests := []struct {
+		name string
+		src  string
+	}{
+		{
+			name: "a page is never marked",
+			src:  "<!-- decolint:page=_index -->\nbody\n<!-- decolint:end-page -->\n",
+		},
+		{
+			name: "an unknown page name",
+			src:  "<!-- decolint:page=bogus -->\nbody\n<!-- decolint:end-page -->\n",
+		},
+		{
+			name: "end-page with no page marker open",
+			src:  "<!-- decolint:end-page -->\n",
+		},
+		{
+			name: "a page marker starts before the previous one ends",
+			src:  "<!-- decolint:page=_index -->\n<!-- decolint:page=reference -->\nbody\n<!-- decolint:end-page -->\n<!-- decolint:end-page -->\n",
+		},
+		{
+			name: "a page is marked twice",
+			src:  "<!-- decolint:page=_index -->\na\n<!-- decolint:end-page -->\n<!-- decolint:page=_index -->\nb\n<!-- decolint:end-page -->\n",
+		},
+		{
+			name: "a page marker is never closed",
+			src:  "<!-- decolint:page=_index -->\nbody\n",
+		},
 	}
-}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 
-// TestSplitReadme_MissingTitle guards against a panic: with no "# " title above the sections,
-// skipTitleAndBadges used to scan past the end of lines, and splitReadme sliced with that
-// out-of-bounds index.
-func TestSplitReadme_MissingTitle(t *testing.T) {
-	t.Parallel()
-
-	untitled := strings.Replace(fixtureReadme, "# example\n", "", 1)
-	_, err := splitReadme(untitled)
-	if err == nil {
-		t.Fatal("splitReadme with no title: got nil error, want one")
+			_, err := splitReadme(tt.src)
+			if err == nil {
+				t.Fatal("splitReadme: got nil error, want one")
+			}
+		})
 	}
 }
 

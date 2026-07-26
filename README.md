@@ -3,6 +3,7 @@
 [![CI](https://github.com/bare-devcontainer/decolint/actions/workflows/ci.yml/badge.svg)](https://github.com/bare-devcontainer/decolint/actions/workflows/ci.yml)
 [![Attestation Checks](https://github.com/bare-devcontainer/decolint/actions/workflows/attest-check.yml/badge.svg)](https://github.com/bare-devcontainer/decolint/actions/workflows/attest-check.yml)
 
+<!-- decolint:page=_index -->
 decolint is a linter for [Dev Container](https://containers.dev/) configuration
 files: `devcontainer.json`, `devcontainer-feature.json`, and
 `devcontainer-template.json`. It reports mistakes, container privileges, and
@@ -65,7 +66,9 @@ are quieter. See [Set up your project](#set-up-your-project).
   column, and come out as text, JSON, GitHub Actions annotations, or SARIF.
 - **One static binary.** No Node.js, no Docker daemon, no project
   dependencies.
+<!-- decolint:end-page -->
 
+<!-- decolint:page=getting-started -->
 ## Try it
 
 Run it against your own repository, without installing anything:
@@ -331,11 +334,13 @@ Found 3 errors and 0 warnings.
 A Template directory is linted the same way, and the dev container
 configuration the Template ships is linted along with it, including its
 `${templateOption:...}` references.
+<!-- decolint:end-page -->
 
 ---
 
 # Reference
 
+<!-- decolint:page=reference -->
 ## What decolint lints
 
 ```console
@@ -700,6 +705,7 @@ The container image carries the same kind of attestation:
 gh attestation verify oci://ghcr.io/bare-devcontainer/decolint:<version> \
   --repo bare-devcontainer/decolint
 ```
+<!-- decolint:end-page -->
 
 ## Contributing
 

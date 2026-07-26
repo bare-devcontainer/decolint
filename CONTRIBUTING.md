@@ -131,13 +131,18 @@ and fails if that changes `README.md`, which is what catches a
 generator or a rule declaration that drifted from the other.
 
 `README.md` itself is also this generator's input for the rest of the
-site: the landing page, Getting started, and Reference are the
-corresponding sections of `README.md`, split at their headings. A
-link within README.md to a heading that ends up on a different page
-(e.g. Getting started linking to `#config-file`, which lives on
-Reference) is rewritten to point there; write new cross-references the
-same way you already do (`[Config file](#config-file)`) and the
-generator will resolve them.
+site: the landing page, Getting started, and Reference are the content
+between `<!-- decolint:page=_index -->`, `<!-- decolint:page=getting-started -->`,
+and `<!-- decolint:page=reference -->` and their matching
+`<!-- decolint:end-page -->`. Content outside those markers — the
+title, badges, the `---` before `# Reference`, `## Contributing` — is
+README-only and never reaches the site, so restructure or rename
+headings freely as long as the markers stay put. A link within
+README.md to a heading that ends up on a different page (e.g. Getting
+started linking to `#config-file`, which lives on Reference) is
+rewritten to point there; write new cross-references the same way you
+already do (`[Config file](#config-file)`) and the generator will
+resolve them.
 
 When implementing or reviewing rules, consult the Dev Container
 specification at [containers.dev](https://containers.dev/) to confirm

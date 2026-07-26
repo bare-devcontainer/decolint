@@ -94,7 +94,7 @@ th {
 /* Header, footer */
 
 .site-header {
-  align-items: baseline;
+  align-items: center;
   border-bottom: 1px solid var(--border);
   display: flex;
   flex-wrap: wrap;
@@ -103,9 +103,30 @@ th {
 }
 
 .site-title {
-  color: var(--fg);
-  font-size: 1.15rem;
-  font-weight: 600;
+  display: inline-flex;
+}
+
+/* The logo's wordmark already renders "decolint", in a color chosen for one background; swap
+   which variant is visible instead of recoloring, matching how the rest of the site's colors
+   respond to prefers-color-scheme. */
+.site-logo {
+  display: block;
+  height: 28px;
+  width: auto;
+}
+
+.site-logo--dark {
+  display: none;
+}
+
+@media (prefers-color-scheme: dark) {
+  .site-logo--light {
+    display: none;
+  }
+
+  .site-logo--dark {
+    display: block;
+  }
 }
 
 .site-header nav {

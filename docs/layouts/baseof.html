@@ -6,6 +6,7 @@
     <title>{{ if .IsHome }}{{ site.Title }} — {{ site.Params.description }}{{ else }}{{ .Title }} — {{ site.Title }}{{ end }}</title>
     <meta name="description" content="{{ with .Description }}{{ . }}{{ else }}{{ site.Params.description }}{{ end }}">
     {{ with .OutputFormats.Get "html" }}<link rel="canonical" href="{{ .Permalink }}">{{ end }}
+    {{ with resources.Get "img/decolint.svg" | minify | fingerprint }}<link rel="icon" type="image/svg+xml" href="{{ .RelPermalink }}">{{ end }}
     {{ range slice "css/main.css" "css/syntax.css" }}
       {{ with resources.Get . | minify | fingerprint }}
         <link rel="stylesheet" href="{{ .RelPermalink }}" integrity="{{ .Data.Integrity }}">
@@ -14,7 +15,16 @@
   </head>
   <body>
     <header class="site-header">
-      <a class="site-title" href="{{ "/" | relURL }}">{{ site.Title }}</a>
+      <a class="site-title" href="{{ "/" | relURL }}">
+        {{/* Light/dark variants of the wordmark logo, one hidden by prefers-color-scheme in
+        main.css — matching how the rest of the site's colors switch. */}}
+        {{ with resources.Get "img/decolint_logo.svg" | minify | fingerprint }}
+          <img class="site-logo site-logo--light" src="{{ .RelPermalink }}" width="134" height="32" alt="{{ site.Title }}">
+        {{ end }}
+        {{ with resources.Get "img/decolint_logo_dark.svg" | minify | fingerprint }}
+          <img class="site-logo site-logo--dark" src="{{ .RelPermalink }}" width="134" height="32" alt="{{ site.Title }}">
+        {{ end }}
+      </a>
       <nav>
         {{ range site.Menus.main }}
           <a href="{{ .URL }}"{{ if $.IsMenuCurrent "main" . }} aria-current="page"{{ end }}>{{ .Name }}</a>

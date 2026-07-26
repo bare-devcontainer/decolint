@@ -14,9 +14,6 @@
         <dd>{{ with .Params.platforms }}{{ delimit . ", " }}{{ else }}all{{ end }}</dd>
       </dl>
     {{ end }}
-    {{ if .Params.toc }}
-      <nav class="toc">{{ .TableOfContents }}</nav>
-    {{ end }}
     {{ .Content }}
   </article>
 {{ end }}

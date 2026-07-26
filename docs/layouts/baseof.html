@@ -23,14 +23,21 @@
       </nav>
     </header>
 
-    <div class="layout{{ if eq .Section "rules" }} layout--with-sidebar{{ end }}">
-      {{ if eq .Section "rules" }}{{ partial "rule-nav.html" . }}{{ end }}
+    {{ $isRules := eq .Section "rules" }}
+    {{ $hasToc := .Params.toc }}
+    <div class="layout{{ if or $isRules $hasToc }} layout--with-sidebar{{ end }}">
+      {{ if $isRules }}
+        {{ partial "rule-nav.html" . }}
+      {{ else if $hasToc }}
+        {{ partial "page-toc.html" . }}
+      {{ end }}
       <main>
         {{ block "main" . }}{{ end }}
       </main>
     </div>
 
     <footer class="site-footer">
+      <p>&copy; {{ now.Year }} Bare Dev Container Project</p>
       <a href="{{ site.Params.repository }}">decolint on GitHub</a>
     </footer>
   </body>

@@ -78,8 +78,8 @@ func TestSplitReadme(t *testing.T) {
 	}
 
 	gs := pages["getting-started"]
-	if !strings.Contains(gs, "title: Getting started") {
-		t.Errorf("getting-started front matter missing title, got:\n%s", gs)
+	if !strings.Contains(gs, "title: Getting started") || !strings.Contains(gs, "toc: true") {
+		t.Errorf("getting-started front matter missing title/toc, got:\n%s", gs)
 	}
 	if strings.Contains(gs, "Reference body") || strings.Contains(gs, "Not part of the site") {
 		t.Errorf("getting-started leaked reference/contributing content, got:\n%s", gs)

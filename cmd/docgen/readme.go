@@ -92,12 +92,12 @@ func splitReadme(src string) (map[string]string, error) {
 		}
 	}
 
+	// Getting started and Reference are both long enough, with enough ## sections, to be worth a
+	// table of contents; see docs/layouts/baseof.html and page-toc.html.
 	frontMatter := map[string]string{
 		"_index":          "title: decolint\ndescription: " + yamlSingleQuoted(landingDescription),
-		"getting-started": "title: Getting started\ndescription: " + yamlSingleQuoted(gettingStartedSummary),
-		// Reference is long enough, and the flattest (mostly ## headings, few subsections), to be
-		// worth a table of contents; see docs/layouts/page.html.
-		"reference": "title: Reference\ndescription: " + yamlSingleQuoted(referenceSummary) + "\ntoc: true",
+		"getting-started": "title: Getting started\ndescription: " + yamlSingleQuoted(gettingStartedSummary) + "\ntoc: true",
+		"reference":       "title: Reference\ndescription: " + yamlSingleQuoted(referenceSummary) + "\ntoc: true",
 	}
 
 	pages := make(map[string]string, len(bodies))

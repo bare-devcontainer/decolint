@@ -52,9 +52,11 @@ disableKinds = ["taxonomy", "term", "RSS"]
   # Rule pages are written by contributors and rendered as-is; nothing needs raw HTML.
   unsafe = false
 
+# endLevel = 3 so Getting started's step-by-step h3 subsections ("### 1. Run it", ...) show in its
+# sidebar TOC; Reference has only one h3 ("### Rule categories"), so this costs it nothing.
 [markup.tableOfContents]
   startLevel = 2
-  endLevel = 2
+  endLevel = 3
 
 [[menus.main]]
   name = "Getting started"

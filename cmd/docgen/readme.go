@@ -57,18 +57,19 @@ func writeReadmePages(readmePath, dir string) error {
 func splitReadme(src string) (map[string]string, error) {
 	lines := strings.Split(src, "\n")
 
+	titleIdx := findTitleLine(lines)
 	whyIdx := findHeadingLine(lines, readmeWhyHeading)
 	tryIdx := findHeadingLine(lines, readmeTryHeading)
 	lintingIdx := findHeadingLine(lines, readmeLintingHeading)
 	refIdx := findHeadingLine(lines, readmeReferenceH1)
 	contribIdx := findHeadingLine(lines, readmeContribHeading)
-	if whyIdx < 0 || tryIdx < 0 || lintingIdx < 0 || refIdx < 0 || contribIdx < 0 {
-		return nil, fmt.Errorf("could not find all expected section headings (why=%d try=%d linting=%d reference=%d contributing=%d)",
-			whyIdx, tryIdx, lintingIdx, refIdx, contribIdx)
+	if titleIdx < 0 || whyIdx < 0 || tryIdx < 0 || lintingIdx < 0 || refIdx < 0 || contribIdx < 0 {
+		return nil, fmt.Errorf("could not find a title and all expected section headings (title=%d why=%d try=%d linting=%d reference=%d contributing=%d)",
+			titleIdx, whyIdx, tryIdx, lintingIdx, refIdx, contribIdx)
 	}
-	if whyIdx >= tryIdx || tryIdx >= lintingIdx || lintingIdx >= refIdx || refIdx >= contribIdx {
-		return nil, fmt.Errorf("section headings are not in the expected order (why=%d try=%d linting=%d reference=%d contributing=%d)",
-			whyIdx, tryIdx, lintingIdx, refIdx, contribIdx)
+	if titleIdx >= whyIdx || whyIdx >= tryIdx || tryIdx >= lintingIdx || lintingIdx >= refIdx || refIdx >= contribIdx {
+		return nil, fmt.Errorf("the title and section headings are not in the expected order (title=%d why=%d try=%d linting=%d reference=%d contributing=%d)",
+			titleIdx, whyIdx, tryIdx, lintingIdx, refIdx, contribIdx)
 	}
 
 	// Landing runs from the first content line after the title and badges through the end of "Why
@@ -113,6 +114,16 @@ func splitReadme(src string) (map[string]string, error) {
 func findHeadingLine(lines []string, want string) int {
 	for i, l := range lines {
 		if l == want {
+			return i
+		}
+	}
+	return -1
+}
+
+// findTitleLine returns the index of the first "# " (h1) line in lines, or -1 if there is none.
+func findTitleLine(lines []string) int {
+	for i, l := range lines {
+		if strings.HasPrefix(l, "# ") {
 			return i
 		}
 	}

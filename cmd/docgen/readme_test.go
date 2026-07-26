@@ -117,6 +117,19 @@ func TestSplitReadme_MissingHeading(t *testing.T) {
 	}
 }
 
+// TestSplitReadme_MissingTitle guards against a panic: with no "# " title above the sections,
+// skipTitleAndBadges used to scan past the end of lines, and splitReadme sliced with that
+// out-of-bounds index.
+func TestSplitReadme_MissingTitle(t *testing.T) {
+	t.Parallel()
+
+	untitled := strings.Replace(fixtureReadme, "# example\n", "", 1)
+	_, err := splitReadme(untitled)
+	if err == nil {
+		t.Fatal("splitReadme with no title: got nil error, want one")
+	}
+}
+
 func TestWriteReadmePages(t *testing.T) {
 	t.Parallel()
 

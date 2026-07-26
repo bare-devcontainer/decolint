@@ -13,10 +13,73 @@ import (
 var UnusedTemplateOption = &linter.Rule{
 	ID:          "unused-template-option",
 	Description: "disallow a Template option that no file in the Template references",
-	Category:    linter.CategoryStyle,
-	FileTypes:   []linter.FileType{linter.Template},
-	Paths:       []string{"/options"},
-	Check:       checkUnusedTemplateOption,
+	LongDescription: `An option only takes effect where a file substitutes it as "${templateOption:name}". One that nothing
+references is still presented to the user when the Template is applied, so it asks a question whose
+answer changes nothing — usually a leftover from a removed file or a renamed reference.`,
+	References: []string{
+		`https://containers.dev/implementors/templates/#the-options-property`,
+		`https://containers.dev/implementors/templates/#option-resolution`,
+	},
+	Category:  linter.CategoryStyle,
+	FileTypes: []linter.FileType{linter.Template},
+	Paths:     []string{"/options"},
+	Example: linter.Example{
+		Bad: linter.Snippet{
+			Files: []linter.ExampleFile{
+				{
+					Path: `devcontainer-template.json`,
+					Content: `{
+  "id": "dotnet",
+  "version": "1.0.0",
+  "name": "C# (.NET)",
+  "options": {
+    "imageVariant": {
+      "type": "string",
+      "proposals": ["8.0", "9.0"],
+      "default": "9.0"
+    }
+  }
+}
+`,
+				},
+				{
+					Path: `.devcontainer/devcontainer.json`,
+					Content: `{
+  "image": "mcr.microsoft.com/devcontainers/dotnet:9.0"
+}
+`,
+				},
+			},
+		},
+		Good: linter.Snippet{
+			Files: []linter.ExampleFile{
+				{
+					Path: `devcontainer-template.json`,
+					Content: `{
+  "id": "dotnet",
+  "version": "1.0.0",
+  "name": "C# (.NET)",
+  "options": {
+    "imageVariant": {
+      "type": "string",
+      "proposals": ["8.0", "9.0"],
+      "default": "9.0"
+    }
+  }
+}
+`,
+				},
+				{
+					Path: `.devcontainer/devcontainer.json`,
+					Content: `{
+  "image": "mcr.microsoft.com/devcontainers/dotnet:${templateOption:imageVariant}"
+}
+`,
+				},
+			},
+		},
+	},
+	Check: checkUnusedTemplateOption,
 }
 
 func checkUnusedTemplateOption(ctx *linter.Context, node *linter.Node) []linter.Finding {

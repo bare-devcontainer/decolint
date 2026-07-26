@@ -14,11 +14,46 @@ import (
 var FeatureInstallScriptNotExecutable = &linter.Rule{
 	ID:          "feature-install-script-not-executable",
 	Description: "disallow a Feature's `install.sh` that lacks executable permission bits",
-	Category:    linter.CategoryCorrectness,
-	FileTypes:   []linter.FileType{linter.Feature},
-	Paths:       []string{""},
-	Check:       checkFeatureInstallScriptNotExecutable,
+	LongDescription: `The specification has the installing tool invoke "install.sh" directly rather than through a shell, so
+that the script's own shebang selects the interpreter. That requires the execute bit: without it the
+Feature fails to install when a container is built. Run "chmod +x install.sh" and commit the mode change.`,
+	References: []string{
+		`https://containers.dev/implementors/features/#invoking-installsh`,
+	},
+	Category:  linter.CategoryCorrectness,
+	FileTypes: []linter.FileType{linter.Feature},
+	Paths:     []string{""},
+	Example: linter.Example{
+		Bad: linter.Snippet{
+			Files: []linter.ExampleFile{
+				{Path: "devcontainer-feature.json", Content: featureInstallScriptExampleFeature},
+				{Path: installScriptName, Content: featureInstallScriptExampleScript, Mode: 0o644},
+			},
+		},
+		Good: linter.Snippet{
+			Files: []linter.ExampleFile{
+				{Path: "devcontainer-feature.json", Content: featureInstallScriptExampleFeature},
+				{Path: installScriptName, Content: featureInstallScriptExampleScript, Mode: 0o755},
+			},
+		},
+		Note: "Git records the executable bit, so committing the mode change is what makes\n" +
+			"the fix stick. On Windows, where the filesystem has no executable bit, set it\n" +
+			"in the index directly: `git update-index --chmod=+x install.sh`.",
+	},
+	Check: checkFeatureInstallScriptNotExecutable,
 }
+
+const featureInstallScriptExampleFeature = `{
+  "id": "node",
+  "version": "1.0.0",
+  "name": "Node.js"
+}
+`
+
+const featureInstallScriptExampleScript = `#!/usr/bin/env bash
+set -e
+apt-get update && apt-get install -y nodejs
+`
 
 func checkFeatureInstallScriptNotExecutable(ctx *linter.Context, node *linter.Node) []linter.Finding {
 	// Windows working trees carry no executable bits (git does not set them there), so the check

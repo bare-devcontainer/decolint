@@ -16,10 +16,74 @@ import (
 var UndefinedTemplateOption = &linter.Rule{
 	ID:          "undefined-template-option",
 	Description: "disallow a `${templateOption:...}` reference to an option not declared in devcontainer-template.json",
-	Category:    linter.CategoryCorrectness,
-	FileTypes:   []linter.FileType{linter.Template},
-	Paths:       []string{""},
-	Check:       checkUndefinedTemplateOption,
+	LongDescription: `Applying a Template replaces each "${templateOption:name}" with the value the user chose for the option of
+that name. A reference to an option that "options" does not declare is never prompted for, and the
+reference implementation substitutes the empty string for it, so a typo silently produces an empty value
+in the applied files instead of an error.`,
+	References: []string{
+		`https://containers.dev/implementors/templates/#the-options-property`,
+		`https://github.com/devcontainers/cli`,
+	},
+	Category:  linter.CategoryCorrectness,
+	FileTypes: []linter.FileType{linter.Template},
+	Paths:     []string{""},
+	Example: linter.Example{
+		Bad: linter.Snippet{
+			Files: []linter.ExampleFile{
+				{
+					Path: `devcontainer-template.json`,
+					Content: `{
+  "id": "dotnet",
+  "version": "1.0.0",
+  "name": "C# (.NET)",
+  "options": {
+    "imageVariant": {
+      "type": "string",
+      "proposals": ["8.0", "9.0"],
+      "default": "9.0"
+    }
+  }
+}
+`,
+				},
+				{
+					Path: `.devcontainer/devcontainer.json`,
+					Content: `{
+  "image": "mcr.microsoft.com/devcontainers/dotnet:${templateOption:variant}"
+}
+`,
+				},
+			},
+		},
+		Good: linter.Snippet{
+			Files: []linter.ExampleFile{
+				{
+					Path: `devcontainer-template.json`,
+					Content: `{
+  "id": "dotnet",
+  "version": "1.0.0",
+  "name": "C# (.NET)",
+  "options": {
+    "imageVariant": {
+      "type": "string",
+      "proposals": ["8.0", "9.0"],
+      "default": "9.0"
+    }
+  }
+}
+`,
+				},
+				{
+					Path: `.devcontainer/devcontainer.json`,
+					Content: `{
+  "image": "mcr.microsoft.com/devcontainers/dotnet:${templateOption:imageVariant}"
+}
+`,
+				},
+			},
+		},
+	},
+	Check: checkUndefinedTemplateOption,
 }
 
 func checkUndefinedTemplateOption(ctx *linter.Context, node *linter.Node) []linter.Finding {

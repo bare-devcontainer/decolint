@@ -452,6 +452,108 @@ func TestRun_Flags(t *testing.T) {
 		}
 	})
 
+	t.Run("-rules -format=json", func(t *testing.T) {
+		t.Parallel()
+
+		var stdout, stderr bytes.Buffer
+		exitCode := run(t.Context(), []string{"-rules", "-format=json"}, &stdout, &stderr, emptyEnv)
+		if exitCode != 0 {
+			t.Errorf("exit code = %d, want 0", exitCode)
+		}
+		if stderr.String() != "" {
+			t.Errorf("stderr = %q, want empty", stderr.String())
+		}
+
+		var got []format.RuleDoc
+		if err := json.Unmarshal(stdout.Bytes(), &got); err != nil {
+			t.Fatalf("unmarshal -rules -format=json output: %v", err)
+		}
+
+		builtin := rules.Builtin()
+		if len(got) != len(builtin) {
+			t.Fatalf("got %d rule(s), want %d", len(got), len(builtin))
+		}
+
+		i := slices.IndexFunc(got, func(d format.RuleDoc) bool { return d.ID == "no-privileged-container" })
+		if i < 0 {
+			t.Fatalf("no-privileged-container missing from -rules -format=json output")
+		}
+		ri := slices.IndexFunc(builtin, func(reg rules.Registration) bool { return reg.Rule.ID == "no-privileged-container" })
+		if ri < 0 {
+			t.Fatalf("no built-in rule with ID %q", "no-privileged-container")
+		}
+		rule := builtin[ri].Rule
+		want := format.RuleDoc{
+			ID:              rule.ID,
+			Description:     rule.Description,
+			LongDescription: rule.LongDescription,
+			References:      rule.References,
+			Category:        rule.Category.String(),
+			Platforms:       []string{},
+			FileTypes:       []string{"devcontainer", "feature"},
+			DocsURL:         rules.DocsURL(rule.ID),
+			Severity:        linter.SeverityOff.String(),
+			Example: format.RuleExample{
+				Bad: format.RuleSnippet{
+					Files: []format.RuleExampleFile{
+						{Path: rule.Example.Bad.Files[0].Path, Content: rule.Example.Bad.Files[0].Content},
+					},
+				},
+				Good: format.RuleSnippet{
+					Files: []format.RuleExampleFile{
+						{Path: rule.Example.Good.Files[0].Path, Content: rule.Example.Good.Files[0].Content},
+					},
+				},
+				Note: rule.Example.Note,
+			},
+		}
+		if diff := cmp.Diff(want, got[i]); diff != "" {
+			t.Errorf("no-privileged-container doc mismatch (-want +got):\n%s", diff)
+		}
+	})
+
+	t.Run("-rules -format=json carries example file mode", func(t *testing.T) {
+		t.Parallel()
+
+		var stdout, stderr bytes.Buffer
+		exitCode := run(t.Context(), []string{"-rules", "-format=json"}, &stdout, &stderr, emptyEnv)
+		if exitCode != 0 {
+			t.Errorf("exit code = %d, want 0", exitCode)
+		}
+
+		var got []format.RuleDoc
+		if err := json.Unmarshal(stdout.Bytes(), &got); err != nil {
+			t.Fatalf("unmarshal -rules -format=json output: %v", err)
+		}
+		i := slices.IndexFunc(got, func(d format.RuleDoc) bool { return d.ID == "feature-install-script-not-executable" })
+		if i < 0 {
+			t.Fatalf("feature-install-script-not-executable missing from -rules -format=json output")
+		}
+		j := slices.IndexFunc(got[i].Example.Good.Files, func(f format.RuleExampleFile) bool { return f.Path == "install.sh" })
+		if j < 0 {
+			t.Fatalf("Good example has no install.sh file")
+		}
+		if got[i].Example.Good.Files[j].Mode != 0o755 {
+			t.Errorf("Good install.sh mode = %#o, want 0755", got[i].Example.Good.Files[j].Mode)
+		}
+	})
+
+	t.Run("-rules -format=sarif is an error", func(t *testing.T) {
+		t.Parallel()
+
+		var stdout, stderr bytes.Buffer
+		exitCode := run(t.Context(), []string{"-rules", "-format=sarif"}, &stdout, &stderr, emptyEnv)
+		if exitCode != 2 {
+			t.Errorf("exit code = %d, want 2", exitCode)
+		}
+		if stdout.String() != "" {
+			t.Errorf("stdout = %q, want empty", stdout.String())
+		}
+		if !strings.Contains(stderr.String(), "sarif") {
+			t.Errorf("stderr = %q, want it to mention the unsupported format", stderr.String())
+		}
+	})
+
 	t.Run("-help", func(t *testing.T) {
 		t.Parallel()
 

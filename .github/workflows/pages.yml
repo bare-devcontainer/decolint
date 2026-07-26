@@ -7,11 +7,19 @@ on:
     branches: [main]
     paths:
       - docs/**
+      - rules/**
+      - linter/rule.go
+      - cmd/docgen/**
+      - README.md
       - Makefile
       - .github/workflows/pages.yml
   pull_request:
     paths:
       - docs/**
+      - rules/**
+      - linter/rule.go
+      - cmd/docgen/**
+      - README.md
       - Makefile
       - .github/workflows/pages.yml
   workflow_dispatch:

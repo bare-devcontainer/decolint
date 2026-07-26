@@ -603,7 +603,7 @@ Only `correctness` runs by default; the rest are `off` until enabled:
 - `style` (default `off`) — discouraged or legacy configuration that still
   works.
 
-<!-- Keep this table sorted by Category (correctness, security, reproducibility, style), then ID, in that priority order. -->
+<!-- decolint:rules-table -->
 | ID | Category | Platform | Description |
 | --- | --- | --- | --- |
 | [`conflicting-container-def`](https://bare-devcontainer.github.io/decolint/rules/conflicting-container-def/) | `correctness` | (all) | disallow a devcontainer.json that defines more than one of "image", "build", or "dockerComposeFile" |
@@ -633,6 +633,7 @@ Only `correctness` runs by default; the rest are `off` until enabled:
 | [`pin-image-digest`](https://bare-devcontainer.github.io/decolint/rules/pin-image-digest/) | `reproducibility` | (all) | disallow an "image" property that does not pin the image by content digest (e.g. "image@sha256:...") |
 | [`no-app-port`](https://bare-devcontainer.github.io/decolint/rules/no-app-port/) | `style` | (all) | disallow the legacy "appPort" property in favor of "forwardPorts" |
 | [`unused-template-option`](https://bare-devcontainer.github.io/decolint/rules/unused-template-option/) | `style` | (all) | disallow a Template option that no file in the Template references |
+<!-- /decolint:rules-table -->
 
 ## Suppressing findings
 

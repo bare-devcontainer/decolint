@@ -21,10 +21,36 @@ var digestSuffix = regexp.MustCompile(`@[a-z0-9]+(?:[+._-][a-z0-9]+)*:[a-zA-Z0-9
 var PinImageDigest = &linter.Rule{
 	ID:          "pin-image-digest",
 	Description: `disallow an "image" property that does not pin the image by content digest (e.g. "image@sha256:...")`,
-	Category:    linter.CategoryReproducibility,
-	FileTypes:   []linter.FileType{linter.Devcontainer},
-	Paths:       []string{"/image"},
-	Check:       checkPinImageDigest,
+	LongDescription: `A tag is a mutable pointer: the publisher can move even a fully specified one to different bits, and a
+registry can serve a different image for the same tag on a different day. A digest names the content
+itself, so "image@sha256:..." always resolves to the exact image the project was tested with, and the
+client verifies what it pulled against it.`,
+	References: []string{
+		`https://containers.dev/implementors/json_reference/#image-or-dockerfile-specific-properties`,
+		`https://github.com/opencontainers/image-spec/blob/main/descriptor.md#digests`,
+	},
+	Category:  linter.CategoryReproducibility,
+	FileTypes: []linter.FileType{linter.Devcontainer},
+	Paths:     []string{"/image"},
+	Example: linter.Example{
+		Bad: linter.Snippet{
+			Files: []linter.ExampleFile{
+				{Path: `devcontainer.json`, Content: `{
+  "image": "mcr.microsoft.com/devcontainers/base:ubuntu-24.04"
+}
+`},
+			},
+		},
+		Good: linter.Snippet{
+			Files: []linter.ExampleFile{
+				{Path: `devcontainer.json`, Content: `{
+  "image": "mcr.microsoft.com/devcontainers/base:ubuntu-24.04@sha256:2a1d1e1a4b0c3f8e5c8a1e0a6d3b7c9f4e2d1a0b9c8d7e6f5a4b3c2d1e0f9a8b"
+}
+`},
+			},
+		},
+	},
+	Check: checkPinImageDigest,
 }
 
 func checkPinImageDigest(_ *linter.Context, node *linter.Node) []linter.Finding {

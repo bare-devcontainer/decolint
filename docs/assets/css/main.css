@@ -241,3 +241,24 @@ h3 {
     padding: 0 0 1rem;
   }
 }
+
+/* Table of contents (long pages, e.g. Reference) */
+
+.toc {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-size: 0.9rem;
+  margin: 0 0 2rem;
+  padding: 0.9rem 1.2rem;
+}
+
+.toc ul {
+  list-style: none;
+  margin: 0;
+  padding-left: 1rem;
+}
+
+.toc > ul {
+  padding-left: 0;
+}

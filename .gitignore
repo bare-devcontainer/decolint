@@ -19,8 +19,13 @@ profile.cov
 
 # Build output
 /bin/
+# A stray "go build ./cmd/docgen/..." from the repo root lands here; the Makefile always uses
+# "go run" for it instead, so this is never an intentional artifact.
+/docgen
 /docs/public/
 /docs/resources/
+# Rule pages and the README-derived pages; see cmd/docgen and "make site-content".
+/docs/.generated/
 # Hugo writes its build lock in the directory it runs from, which is not always docs/.
 .hugo_build.lock
 

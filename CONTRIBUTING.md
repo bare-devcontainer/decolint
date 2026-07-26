@@ -44,16 +44,15 @@ and calls `Check` for every value matching one of the paths; a `*`
 segment matches any object member name or array index, and the empty
 string matches the document root.
 
-The rule itself carries only the one-line `Description` of what it
-checks; the reasoning and the examples live on the documentation site
-(see [Documenting a rule](#documenting-a-rule) below), which every
-finding links to.
-
 A rule's default severity is not set individually; it comes entirely
 from its category (see `categoryDefaultSeverities` in
 [`rules.go`](rules/rules.go)) — only `CategoryCorrectness` runs by
 default, at `error`. Pick the category that matches the problem the
 rule reports, not the severity you'd like it to have.
+
+Besides the short `Description`, a rule carries the reasoning and an
+example directly on the [`linter.Rule`](linter/rule.go) value —
+nothing about a rule lives in a separate file:
 
 ```go
 package rules
@@ -63,11 +62,28 @@ import "github.com/bare-devcontainer/decolint/linter"
 var MyRule = &linter.Rule{
 	ID:          "my-rule",
 	Description: "...",
-	Category:    linter.CategoryCorrectness,
-	FileTypes:   []linter.FileType{linter.Devcontainer},
-	Platforms:   nil, // applies to every platform
-	Paths:       []string{"/mounts/*"},
-	Check:       checkMyRule,
+	LongDescription: `What goes wrong in the configuration this reports, and what to do
+instead.`,
+	References: []string{"https://containers.dev/implementors/json_reference/"},
+	Category:   linter.CategoryCorrectness,
+	FileTypes:  []linter.FileType{linter.Devcontainer},
+	Platforms:  nil, // applies to every platform
+	Paths:      []string{"/mounts/*"},
+	Example: linter.Example{
+		Bad: linter.Snippet{
+			Files: []linter.ExampleFile{
+				{Path: "devcontainer.json", Content: `{ ... }
+`},
+			},
+		},
+		Good: linter.Snippet{
+			Files: []linter.ExampleFile{
+				{Path: "devcontainer.json", Content: `{ ... }
+`},
+			},
+		},
+	},
+	Check: checkMyRule,
 }
 
 func checkMyRule(ctx *linter.Context, node *linter.Node) []linter.Finding {
@@ -78,71 +94,50 @@ func checkMyRule(ctx *linter.Context, node *linter.Node) []linter.Finding {
 }
 ```
 
+`LongDescription` is Markdown; write it for the user who just hit the
+finding, since `decolint -rules -format=json` and the SARIF output
+both carry it, and it is what the documentation site is built from
+(see below).
+
+`Example` is machine-checked, not just illustrative:
+[`rules/doc_test.go`](rules/doc_test.go) lints `Bad` with the rule as
+the only one active and requires a finding, then lints `Good` and
+requires none. `Snippet.Files` is one directory: the file named after
+the rule's first `FileTypes` entry (`devcontainer.json`,
+`devcontainer-feature.json`, or `devcontainer-template.json`) is the
+one linted, and any other files are context a rule reads from the
+directory (e.g. a Template's other files, for a
+`${templateOption:...}` reference). Set `Snippet.DirName` when the
+rule reads the directory's own name (`id-dir-mismatch`), and a file's
+`Mode` when the rule reads permission bits (`install.sh`'s executable
+bit) — `Bad` and `Good` can then differ in mode alone, with identical
+content. `Example.Note` is optional Markdown shown after `Good`, for
+context the two snippets alone don't convey.
+
 The existing rules in [`rules/`](rules/) are good references,
-including for the table-driven tests each rule ships with. When a new
-rule lands, also add a row for it to the table in
-[README.md](README.md#rules).
+including for the table-driven tests each rule ships with.
 
-## Documenting a rule
+## The documentation site and the README rules table
 
-Every rule has a page under [`docs/content/rules/`](docs/content/rules/),
-named after its ID, which is where the reasoning and the examples live.
-It is what the SARIF output, and so every code scanning alert, links
-to, so write it for the user who just hit the finding.
+Both are generated from `rules/*.go` and `README.md` by
+[`cmd/docgen`](cmd/docgen/), run as part of `make site` (see
+[Development](#development) above) and standalone as `make
+site-content`. Nothing under `docs/content/rules/` other than
+`_index.md`, and nothing in `README.md` between the
+`<!-- decolint:rules-table -->` markers, is hand-edited — a new rule
+or a changed `LongDescription`/`Example`/`References` needs no
+follow-up edit anywhere else. CI's `docs` job runs `make site-content`
+and fails if that changes `README.md`, which is what catches a
+generator or a rule declaration that drifted from the other.
 
-````markdown
----
-title: my-rule
-category: correctness
-platforms: []
-file_types: [devcontainer]
-description: >-
-  disallow ...
----
-
-## Why
-
-What goes wrong in the configuration this reports, and what to do
-instead.
-
-## Bad
-
-```jsonc
-{ ... }
-```
-
-## Good
-
-```jsonc
-{ ... }
-```
-
-## References
-
-- <https://containers.dev/implementors/json_reference/>
-````
-
-The front matter must match the rule's Go declaration, and the tests
-in [`rules/doc_test.go`](rules/doc_test.go) enforce it: they lint the
-Bad example and require it to report the rule, lint the Good example
-and require it to report nothing, and check that every rule has a page
-and every page at least one `https` reference.
-
-Two things to know when writing the examples:
-
-- An example needing more than one file names each with a
-  ``### `path` `` heading before its block; without one, a block is
-  linted as the rule's own file type. Set `example_dir` in the front
-  matter when the rule reads the name of the directory it is in.
-- An example whose Bad and Good differ in something other than file
-  contents — a permission bit, or a missing file — cannot be linted.
-  Write it in whatever form shows the difference, set
-  `example_verify: false`, and add the rule to `unverifiableExamples`
-  in the test.
-
-The rule index and the sidebar are built from the pages themselves, so
-there is no list to update by hand. Preview the site with `make
-site-serve`.
+`README.md` itself is also this generator's input for the rest of the
+site: the landing page, Getting started, and Reference are the
+corresponding sections of `README.md`, split at their headings. A
+link within README.md to a heading that ends up on a different page
+(e.g. Getting started linking to `#config-file`, which lives on
+Reference) is rewritten to point there; write new cross-references the
+same way you already do (`[Config file](#config-file)`) and the
+generator will resolve them.
 
 When implementing or reviewing rules, consult the Dev Container
 specification at [containers.dev](https://containers.dev/) to confirm

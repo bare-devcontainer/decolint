@@ -35,6 +35,23 @@ jobs:
           go-version-file: go.mod
       - run: make lint
 
+  docs:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
+        with:
+          go-version-file: go.mod
+      # cmd/docgen regenerates the site's content from rules/*.go and README.md, and rewrites
+      # README's rules table from the same rule catalog; a diff here means one of those drifted
+      # from the other and a commit forgot to run "make site-content".
+      - run: make site-content
+      - run: git diff --exit-code README.md
+
   dogfooding:
     runs-on: ubuntu-latest
     permissions:

@@ -45,14 +45,18 @@ lint: ## Run all lint rules
 	go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@$(GOLANGCI_LINT_VERSION) run
 
 .PHONY: site
-site: ## Build the documentation site into docs/public
+site: site-content ## Build the documentation site into docs/public
 	$(HUGO) --source docs --minify
 
 .PHONY: site-serve
-site-serve: ## Serve the documentation site with live reload
+site-serve: site-content ## Serve the documentation site with live reload
 	# hugo server keeps the path of the configured baseURL, which would serve the site under
 	# /decolint/ and leave http://localhost:$(SITE_PORT)/ a 404. Override it for local preview.
 	$(HUGO) server --source docs --port $(SITE_PORT) --baseURL http://localhost:$(SITE_PORT)/
+
+.PHONY: site-content
+site-content: ## Regenerate the rule pages, README-derived pages, and README rules table
+	go run ./cmd/docgen
 
 .PHONY: site-syntax
 site-syntax: ## Regenerate the syntax highlighting stylesheet
@@ -68,7 +72,7 @@ site-syntax: ## Regenerate the syntax highlighting stylesheet
 
 .PHONY: clean
 clean: ## Remove build artifacts
-	rm -rf bin coverage.out coverage.html docs/public docs/resources docs/.hugo_build.lock .hugo_build.lock
+	rm -rf bin coverage.out coverage.html docs/public docs/resources docs/.generated docs/.hugo_build.lock .hugo_build.lock
 
 .PHONY: install
 install: ## Install the decolint binary to GOPATH/bin

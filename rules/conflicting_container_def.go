@@ -11,10 +11,43 @@ import (
 var ConflictingContainerDef = &linter.Rule{
 	ID:          "conflicting-container-def",
 	Description: `disallow a devcontainer.json that defines more than one of "image", "build", or "dockerComposeFile"`,
-	Category:    linter.CategoryCorrectness,
-	FileTypes:   []linter.FileType{linter.Devcontainer},
-	Paths:       []string{""},
-	Check:       checkConflictingContainerDef,
+	LongDescription: `The specification defines three mutually exclusive ways to create the container: from an image, from a
+Dockerfile, or from a Docker Compose project. Which one wins when several are set is unspecified, so the
+container that gets built depends on the tool rather than on the configuration. Keep the variant the
+project actually uses and remove the others.`,
+	References: []string{
+		`https://containers.dev/implementors/spec/#orchestration-options`,
+		`https://containers.dev/implementors/json_reference/#scenario-specific-properties`,
+	},
+	Category:  linter.CategoryCorrectness,
+	FileTypes: []linter.FileType{linter.Devcontainer},
+	Paths:     []string{""},
+	Example: linter.Example{
+		Bad: linter.Snippet{
+			Files: []linter.ExampleFile{
+				{Path: `devcontainer.json`, Content: `{
+  "name": "my project",
+  "image": "mcr.microsoft.com/devcontainers/base:ubuntu",
+  "build": {
+    "dockerfile": "Dockerfile"
+  }
+}
+`},
+			},
+		},
+		Good: linter.Snippet{
+			Files: []linter.ExampleFile{
+				{Path: `devcontainer.json`, Content: `{
+  "name": "my project",
+  "build": {
+    "dockerfile": "Dockerfile"
+  }
+}
+`},
+			},
+		},
+	},
+	Check: checkConflictingContainerDef,
 }
 
 func checkConflictingContainerDef(_ *linter.Context, node *linter.Node) []linter.Finding {

@@ -12,10 +12,44 @@ import (
 var IDDirMismatch = &linter.Rule{
 	ID:          "id-dir-mismatch",
 	Description: `disallow a Feature's or Template's "id" that does not match the name of its containing directory`,
-	Category:    linter.CategoryCorrectness,
-	FileTypes:   []linter.FileType{linter.Feature, linter.Template},
-	Paths:       []string{"/id"},
-	Check:       checkIDDirMismatch,
+	LongDescription: `Both specifications require the "id" to match the name of the directory holding the metadata file, since
+that directory name is what packaging and distribution address the artifact by. When the two disagree the
+published reference does not resolve to what the directory contains; rename the directory or the "id" so
+they agree.`,
+	References: []string{
+		`https://containers.dev/implementors/features/#devcontainer-featurejson-properties`,
+		`https://containers.dev/implementors/templates/#devcontainer-templatejson-properties`,
+	},
+	Category:  linter.CategoryCorrectness,
+	FileTypes: []linter.FileType{linter.Feature, linter.Template},
+	Paths:     []string{"/id"},
+	Example: linter.Example{
+		Bad: linter.Snippet{
+			DirName: "node",
+			Files: []linter.ExampleFile{
+				{Path: `devcontainer-feature.json`, Content: `// src/node/devcontainer-feature.json
+{
+  "id": "nodejs",
+  "version": "1.0.0",
+  "name": "Node.js"
+}
+`},
+			},
+		},
+		Good: linter.Snippet{
+			DirName: "node",
+			Files: []linter.ExampleFile{
+				{Path: `devcontainer-feature.json`, Content: `// src/node/devcontainer-feature.json
+{
+  "id": "node",
+  "version": "1.0.0",
+  "name": "Node.js"
+}
+`},
+			},
+		},
+	},
+	Check: checkIDDirMismatch,
 }
 
 func checkIDDirMismatch(ctx *linter.Context, node *linter.Node) []linter.Finding {

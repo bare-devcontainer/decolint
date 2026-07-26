@@ -3,72 +3,363 @@
 [![CI](https://github.com/bare-devcontainer/decolint/actions/workflows/ci.yml/badge.svg)](https://github.com/bare-devcontainer/decolint/actions/workflows/ci.yml)
 [![Attestation Checks](https://github.com/bare-devcontainer/decolint/actions/workflows/attest-check.yml/badge.svg)](https://github.com/bare-devcontainer/decolint/actions/workflows/attest-check.yml)
 
-decolint is a linter for [Dev Container](https://containers.dev/) configuration files. The following file types are supported:
+decolint is a linter for [Dev Container](https://containers.dev/) configuration
+files: `devcontainer.json`, `devcontainer-feature.json`, and
+`devcontainer-template.json`. It reports mistakes, container privileges, and
+unpinned versions that the Dev Container tooling itself accepts without a word.
 
-- Dev Container definition (`devcontainer.json`)
-- Feature (`devcontainer-feature.json`)
-- Template (`devcontainer-template.json`)
+Take a `devcontainer.json` that opens cleanly in VS Code and builds without
+complaint:
 
-It checks for common mistakes, security issues, and best practices in these files. See [Rules](#rules) for the list of checks decolint performs.
+```jsonc
+// .devcontainer/devcontainer.json
+{
+  "name": "api",
+  "image": "mcr.microsoft.com/devcontainers/go:latest",
+  "features": {
+    "ghcr.io/devcontainers/features/docker-in-docker": {}
+  },
+  "runArgs": ["--privileged"],
+  "mounts": [
+    "source=/var/run/docker.sock,target=/var/run/docker.sock,type=bind"
+  ],
+  "forwardPorts": ["db:5432"]
+}
+```
 
-A container's final configuration comes not only from its own file but also from the base image and the Features it uses. With [`-merge`](#merging), decolint resolves all of these as they would be at runtime and lints the fully merged configuration.
+```console
+$ decolint .
+Config: .decolint.jsonc
+Linted 1 file:
+  .devcontainer/devcontainer.json (devcontainer)
 
-## Installation
+.devcontainer/devcontainer.json:1:1: error: "ALL" is not set via "runArgs", leaving the container with its default Linux capabilities (require-cap-drop-all)
+.devcontainer/devcontainer.json:1:1: error: "no-new-privileges" is not set via "securityOpt" or "runArgs", allowing container processes to gain additional privileges (require-no-new-privileges)
+.devcontainer/devcontainer.json:1:1: error: neither "remoteUser" nor "containerUser" is set, so the container defaults to running as root (require-non-root)
+.devcontainer/devcontainer.json:3:12: error: image "mcr.microsoft.com/devcontainers/go:latest" uses the "latest" tag; pin a specific version (no-image-latest)
+.devcontainer/devcontainer.json:3:12: error: image "mcr.microsoft.com/devcontainers/go:latest" is not pinned by digest; add an "@sha256:..." digest (pin-image-digest)
+.devcontainer/devcontainer.json:5:5: error: feature "ghcr.io/devcontainers/features/docker-in-docker" has no explicit version; pin a specific version (pin-feature-version)
+.devcontainer/devcontainer.json:7:15: error: "runArgs" contains "--privileged", disabling the container's isolation from the host (no-privileged-container)
+.devcontainer/devcontainer.json:9:5: error: "mounts" entry bind-mounts the Docker socket, which grants the container root-equivalent control over the host (no-docker-socket-mount)
+.devcontainer/devcontainer.json:11:20: error: "forwardPorts" entry "db:5432" uses "host:port" format; Codespaces only supports a bare port number (no-host-port-format)
+Found 9 errors and 0 warnings.
+```
 
-decolint can be installed as a prebuilt binary, as a container image, or
-from source with Go.
+That run has every category and both target platforms enabled; the defaults
+are quieter. See [Set up your project](#set-up-your-project).
 
-### Prebuilt binary (Recommended)
+## Why decolint
 
-Download a prebuilt binary from the
+- **A `devcontainer.json` is container runtime configuration, and nobody
+  reviews it that way.** `--privileged` and a bind-mounted Docker socket read
+  like ordinary setup lines, and they ship to every teammate and every CI run
+  that rebuilds the container.
+- **It lints what actually runs, not just what you wrote.** The Features you
+  reference and the base image you name contribute configuration of their own.
+  With [`-merge`](#4-lint-what-actually-runs), decolint resolves them the way
+  the real tooling does and lints the result.
+- **A silently ignored property is a mistake decolint names.** GitHub
+  Codespaces drops `bind` mounts and rejects `host:port` entries without
+  reporting anything; the container just comes up wrong.
+- **It goes where your other linters already are.** Findings carry a line and
+  column, and come out as text, JSON, GitHub Actions annotations, or SARIF.
+- **One static binary.** No Node.js, no Docker daemon, no project
+  dependencies.
+
+## Try it
+
+Run it against your own repository, without installing anything:
+
+```console
+docker run --rm -v "$PWD:/workspace" ghcr.io/bare-devcontainer/decolint
+```
+
+By default only the `correctness` checks run — configuration that is invalid
+or does not behave as written. The security, pinning, and style checks are
+opt-in, and one config file away.
+
+## Install
+
+### Prebuilt binary (recommended)
+
+Download a binary from the
 [releases page](https://github.com/bare-devcontainer/decolint/releases).
 Release artifacts are signed and carry build provenance; see
 [Verifying release artifacts](#verifying-release-artifacts).
 
-### Docker
+### Container image
 
 ```console
 docker run --rm -v "$PWD:/workspace" ghcr.io/bare-devcontainer/decolint [directory ...]
 ```
 
-Images are published for `linux/amd64` and `linux/arm64` and tagged
-`latest`, `<major>`, `<major>.<minor>`, and `<major>.<minor>.<patch>`.
-They carry the same build provenance attestation as the binaries; see
+Images are published for `linux/amd64` and `linux/arm64` and tagged `latest`,
+`<major>`, `<major>.<minor>`, and `<major>.<minor>.<patch>`. They carry the
+same build provenance attestation as the binaries; see
 [Verifying release artifacts](#verifying-release-artifacts).
 
-### Install with Go
+### Go
 
 ```console
 GOEXPERIMENT=jsonv2 go install github.com/bare-devcontainer/decolint/cmd/decolint@latest
 ```
 
-`GOEXPERIMENT=jsonv2` is required because decolint uses the still
-experimental `encoding/json/v2` standard library package.
+`GOEXPERIMENT=jsonv2` is required because decolint uses the still experimental
+`encoding/json/v2` standard library package.
 
-## Usage
+## Set up your project
+
+### 1. Run it
+
+With no arguments the current directory is linted; name directories to lint
+those instead. Whatever you point it at is detected as a dev container
+definition, a Feature, or a Template — see
+[What decolint lints](#what-decolint-lints).
+
+Run it on the same file the demo above found nine problems in, and it comes
+back clean:
+
+```console
+$ decolint
+Config: none (defaults; run "decolint -init" to create .decolint.jsonc)
+Linted 1 file:
+  .devcontainer/devcontainer.json (devcontainer)
+
+Found 0 errors and 0 warnings.
+```
+
+The header says why: no config file, so only the defaults are in effect. It
+also lists what was covered, which is the other thing worth checking when a
+run reports nothing.
+
+### 2. Turn on the checks you want
+
+The defaults are `correctness` alone. Everything else — the container
+privileges, the unpinned versions, the legacy properties — is off until you
+ask for it. Write a `.decolint.jsonc` in your repository root:
+
+```jsonc
+// .decolint.jsonc
+{
+  "categories": {
+    "correctness": "error",
+    "security": "error",
+    "reproducibility": "error",
+    "style": "error"
+  }
+}
+```
+
+That is the strictest setting. Start narrower if a whole category is more than
+you want today, and set individual rules where a category is close but not
+right:
+
+```jsonc
+{
+  "categories": {
+    "security": "error"
+  },
+  "rules": {
+    "no-image-latest": "error",
+    "require-non-root": "off"
+  }
+}
+```
+
+Every severity is `error`, `warn`, or `off`, and a `rules` entry beats its
+category. Run `decolint -rules` to see every rule with the severity your
+config gives it, or `decolint -init` to generate a config that lists all of
+them explicitly. The full list is under [Rules](#rules), and everything the
+file accepts is under [Config file](#config-file).
+
+### 3. Name your platform
+
+Some rules only make sense on a particular platform — Codespaces ignoring
+`bind` mounts, VS Code pinning extension versions — and those stay off until
+you say which platforms you target:
+
+```jsonc
+{
+  "platforms": ["vscode", "codespaces"]
+}
+```
+
+### 4. Lint what actually runs
+
+Your `devcontainer.json` is not the whole configuration. Features and the base
+image contribute their own, and the tooling merges it all together before the
+container starts. Take a file that is careful about all of it — pinned by
+digest, capabilities dropped, no new privileges:
+
+```jsonc
+// .devcontainer/devcontainer.json
+{
+  "name": "api",
+  "image": "mcr.microsoft.com/devcontainers/go:1.24@sha256:8de3d5b3a3ce235671c7649f0b910414158a220d18cbd2714a4446cc0cc6acd3",
+  "runArgs": ["--cap-drop=ALL"],
+  "securityOpt": ["no-new-privileges"]
+}
+```
+
+Linted as written it reports one problem. Merging replaces it with four:
+
+```console
+$ decolint .
+Config: .decolint.jsonc
+Linted 1 file:
+  .devcontainer/devcontainer.json (devcontainer)
+
+.devcontainer/devcontainer.json:1:1: error: neither "remoteUser" nor "containerUser" is set, so the container defaults to running as root (require-non-root)
+Found 1 error and 0 warnings.
+
+$ decolint -merge .
+Downloading image metadata(mcr.microsoft.com/devcontainers/go:1.24@sha256:8de3d5b3a3ce235671c7649f0b910414158a220d18cbd2714a4446cc0cc6acd3)
+Config: .decolint.jsonc
+Linted 1 file:
+  .devcontainer/devcontainer.json (devcontainer)
+
+.devcontainer/devcontainer.json:3:3: error: "securityOpt" overrides the default seccomp profile (no-seccomp-override)
+.devcontainer/devcontainer.json:3:3: error: "securityOpt" contains "seccomp=unconfined", disabling the container's syscall filtering (no-seccomp-unconfined)
+.devcontainer/devcontainer.json:3:3: error: extension "golang.Go" has no explicit version; pin a specific version (pin-extension-version)
+.devcontainer/devcontainer.json:3:3: error: extension "dbaeumer.vscode-eslint" has no explicit version; pin a specific version (pin-extension-version)
+Found 4 errors and 0 warnings.
+```
+
+The one reported without merging was wrong: the base image sets a non-root
+user, so `require-non-root` never applied. The four reported with merging are
+in nothing you wrote — the image disables seccomp and installs two unpinned VS
+Code extensions. Findings that come from merged content are reported at the
+property that pulled it in, here the `image` line.
+
+Turn it on for good with `"merge": true`, or pass `-merge` per run. It fetches
+every referenced Feature and resolves the base image, so it needs network
+access; see [Merging](#merging) for what gets resolved and what does not.
+
+### 5. Fix it, or say why not
+
+When a finding is deliberate, suppress it in the configuration file itself so
+the reason lives next to the line:
+
+```jsonc
+{
+  // decolint-ignore-next-line no-image-latest
+  "image": "ubuntu:latest"
+}
+```
+
+See [Suppressing findings](#suppressing-findings) for file- and line-scoped
+directives.
+
+## Add it to CI
+
+decolint exits `1` when it reports an `error`, which is all a CI job needs to
+fail. Add `-format=github` and the findings also appear as annotations on the
+pull request diff:
+
+```yaml
+name: devcontainer
+on: pull_request
+permissions: {}
+
+jobs:
+  decolint:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - run: docker run --rm -v "$PWD:/workspace" ghcr.io/bare-devcontainer/decolint -format=github .
+```
+
+Only findings become annotations; the files that were linted go to a collapsed
+group in the run log, so a clean file does not annotate the diff. Warnings do
+not fail the build on their own; add `-deny-warnings` to make them count. See
+[Exit codes](#exit-codes).
+
+To have findings tracked as alerts in the repository's Security tab instead,
+emit [SARIF](#output-formats) and upload it. The upload writes to code
+scanning, so this job adds `security-events: write` to the permissions above:
+
+```yaml
+  decolint-sarif:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - run: docker run --rm -v "$PWD:/workspace" ghcr.io/bare-devcontainer/decolint -format=sarif . > decolint.sarif
+        continue-on-error: true # decolint exits 1 on findings; the upload must still run
+      - uses: github/codeql-action/upload-sarif@v4
+        with:
+          sarif_file: decolint.sarif
+```
+
+A pull request from a fork gets a read-only token whatever the job asks for,
+so the upload cannot succeed there; skip the job on fork pull requests, or run
+it only on pushes to your default branch.
+
+Run decolint from the repository root, so the reported paths resolve to files
+in the repository.
+
+## Linting a Feature or Template
+
+If you publish a
+[Feature](https://containers.dev/implementors/features/) or a
+[Template](https://containers.dev/implementors/templates/), the mistakes that
+cost the most are the ones your consumers find after you have shipped: an `id`
+that does not match its directory, a version that is not semver, an
+`install.sh` that was committed without its executable bit. Point decolint at
+the directory — these are `correctness` rules, so they need no configuration:
+
+```console
+$ decolint src/go-tools
+Config: none (defaults; run "decolint -init" to create .decolint.jsonc)
+Linted 1 file:
+  src/go-tools/devcontainer-feature.json (feature)
+
+src/go-tools/devcontainer-feature.json:1:1: error: "install.sh" is not executable (mode 0644); run "chmod +x install.sh" (feature-install-script-not-executable)
+src/go-tools/devcontainer-feature.json:2:9: error: id "gotools" does not match containing directory "go-tools" (id-dir-mismatch)
+src/go-tools/devcontainer-feature.json:3:14: error: version "1.0" is not a valid semantic version (see https://semver.org/) (invalid-semver)
+Found 3 errors and 0 warnings.
+```
+
+A Template directory is linted the same way, and the dev container
+configuration the Template ships is linted along with it, including its
+`${templateOption:...}` references.
+
+---
+
+# Reference
+
+## What decolint lints
 
 ```console
 decolint [directory ...]
 ```
 
-Each directory is detected as one of the following based on its
-layout, and the configuration files it contains are linted:
+Each directory is detected as one of the following based on its layout, and
+the configuration files it contains are linted:
 
 - **Dev container definition** — the `devcontainer.json` files at the
   locations defined by the devcontainer specification:
   `.devcontainer/devcontainer.json`, `.devcontainer.json`, and
   `.devcontainer/<folder>/devcontainer.json`
 - **Feature** (contains `devcontainer-feature.json`) — that file
-- **Template** (contains `devcontainer-template.json`) — that file,
-  plus the dev container configuration the template ships
+- **Template** (contains `devcontainer-template.json`) — that file, plus the
+  dev container configuration the template ships
 
 With no arguments, the current directory is linted.
 
-### Configuration
+## Configuration
 
-Every linting setting can be declared in the [config file](#config-file).
-The four scalar settings additionally have a command-line flag, which
-overrides the config file when given:
+Every linting setting can be declared in the [config file](#config-file). The
+four scalar settings additionally have a command-line flag, which overrides
+the config file when given:
 
 | Setting | Config member | Flag |
 | --- | --- | --- |
@@ -80,12 +371,12 @@ overrides the config file when given:
 | [Rule severities](#rules) | `rules` | — |
 
 `-merge` and `-deny-warnings` override in either direction when given
-explicitly — e.g. `-merge=false` disables merging even if the config
-file sets `"merge": true`. Category and rule severities are config-file
-only, and [color](#color) is set by the `-color` flag only.
+explicitly — e.g. `-merge=false` disables merging even if the config file sets
+`"merge": true`. Category and rule severities are config-file only, and
+[color](#color) is set by the `-color` flag only.
 
-The remaining flags perform a one-off action and exit; run
-`decolint -help` for the full list:
+The remaining flags perform a one-off action and exit; run `decolint -help`
+for the full list:
 
 | Flag | Action |
 | --- | --- |
@@ -95,174 +386,17 @@ The remaining flags perform a one-off action and exit; run
 | `-version` | print version information |
 | `-help` | print usage |
 
-### Target platforms
+## Config file
 
-Each rule optionally targets specific platforms (`vscode`,
-`codespaces`, ...); a rule with no target platform applies to every
-platform and always runs. By default, only those platform-agnostic
-rules run; pass `-platform` with a comma-separated list to also run
-rules scoped to specific platforms:
+decolint looks for `.decolint.jsonc`, then `.decolint.json`, in the current
+directory; the first one found is used. Pass `-config <path>` to use a file at
+a different location instead. It is an error (exit code 2) if `-config` points
+at a file that doesn't exist or fails to parse, or if the config references an
+unknown rule ID or category name.
 
-```console
-decolint -platform=vscode,codespaces
-```
-
-### Merging
-
-The [Features](https://containers.dev/implementors/features/) a
-`devcontainer.json` references, and the base image it names, both
-contribute configuration of their own, which the Dev Container tooling
-merges into the effective configuration following the specification's
-[merge logic](https://containers.dev/implementors/spec/#merge-logic). By
-default decolint lints only the raw file, so an issue introduced by a
-Feature or inherited from the base image (say, one that sets
-`privileged: true` or bind-mounts the Docker socket) goes unnoticed.
-
-Enable merging to lint the merged configuration instead:
-
-```console
-decolint -merge
-```
-
-This fetches every referenced Feature and resolves the base image,
-including any metadata in the base image's
-[`devcontainer.metadata`](https://containers.dev/implementors/spec/#image-metadata)
-label. A Feature or image that cannot be fetched is an error (exit code
-2).
-
-Merging also resolves the `${...}`
-[variables](https://containers.dev/implementors/json_reference/#variables-in-devcontainerjson)
-in the `devcontainer.json` first, so the reference a Feature or image is
-fetched by, and the values the rules see, match what the real tooling
-would use:
-
-- `${localEnv:NAME}` (and `${env:NAME}`) resolves from the config
-  file's [`localEnv`](#config-file) map only — decolint never reads
-  environment variables. A name missing from the map resolves to the
-  default in `${localEnv:NAME:default}`, or to the empty string.
-- `${localWorkspaceFolder}` resolves to the linted directory's absolute
-  path, `${containerWorkspaceFolder}` to the configuration's
-  `workspaceFolder` (defaulting to `/workspaces/<folder name>`, or `/`
-  for Docker Compose); each has a `...Basename` variant.
-- `${devcontainerId}` resolves to a fixed placeholder with the format
-  of a real id, since the real value exists only once a container is
-  created.
-- Anything else, including `${containerEnv:NAME}`, resolves to the
-  empty string.
-
-A few limits apply:
-
-- For Docker Compose, `extends` and `include` are resolved as `docker
-  compose config` would, and later files override earlier ones. Compose
-  interpolation uses its own bare `${NAME}` syntax — not
-  devcontainer.json's `${localEnv:NAME}` — but reads the same values from
-  the config file's [`localEnv`](#config-file) map: an unset variable
-  resolves to its default (`${VAR:-default}`) or the empty string, and a
-  `${VAR:?}` requirement on an unset variable is an error. Compose
-  profiles, the `COMPOSE_FILE` environment variable, and `.env` files are
-  not applied.
-- Registries are accessed anonymously, so a private image that cannot be
-  pulled that way counts as a fetch failure.
-
-### Output formats
-
-Every run reports the configuration files it linted, including those
-with no finding, and each finding with the rule's severity (`error` or
-`warn`). By default that looks like this:
-
-```
-Config: .decolint.jsonc
-Linted 1 file:
-  .devcontainer/devcontainer.json (devcontainer)
-
-.devcontainer/devcontainer.json:4:12: warn: image "ubuntu:latest" uses the "latest" tag; pin a specific version (no-image-latest)
-Found 0 errors and 1 warning.
-```
-
-The first line names the config file in use, or says that no config
-file was found and how to create one. Written to a terminal, the report
-is colored by severity; see [Color](#color).
-
-Select a different output format to change this:
-
-- `text` (default) — the format shown above.
-- `json` — a JSON object of the linted files and the findings, for
-  scripting:
-  ```json
-  {"files":[{"path":".devcontainer/devcontainer.json","type":"devcontainer"}],"issues":[{"path":".devcontainer/devcontainer.json","line":4,"col":12,"ruleId":"no-image-latest","message":"image \"ubuntu:latest\" uses the \"latest\" tag; pin a specific version","severity":"warn"}]}
-  ```
-- `github` — [GitHub Actions workflow
-  commands](https://docs.github.com/en/actions/using-workflows/workflow-commands-for-github-actions#setting-a-notice-message),
-  so findings show up as inline annotations on pull request diffs when
-  `decolint` is run from a GitHub Actions workflow. The linted files go
-  into a collapsed group in the run log, so a file with no finding gets
-  no annotation:
-  ```
-  ::group::decolint
-  Linted 1 file:
-    .devcontainer/devcontainer.json (devcontainer)
-  ::endgroup::
-  ::warning file=.devcontainer/devcontainer.json,line=4,col=12,title=no-image-latest::image "ubuntu:latest" uses the "latest" tag; pin a specific version
-  ```
-- `sarif` — a [SARIF 2.1.0](https://docs.oasis-open.org/sarif/sarif/v2.1.0/sarif-v2.1.0.html)
-  log, for upload to [GitHub Code
-  Scanning](https://docs.github.com/en/code-security/code-scanning/integrating-with-code-scanning/uploading-a-sarif-file-to-github)
-  so findings appear as alerts in the repository's Security tab. The log
-  declares every rule the run had enabled, so Code Scanning resolves the
-  alerts of a rule that ran and found nothing, while leaving those of a
-  rule you have turned off untouched:
-  ```yaml
-  - run: decolint -merge -format=sarif . > decolint.sarif
-    continue-on-error: true # decolint exits 1 on findings; the upload must still run
-  - uses: github/codeql-action/upload-sarif@v3
-    with:
-      sarif_file: decolint.sarif
-  ```
-  Run `decolint` from the repository root, so that the paths in the log
-  resolve to files in the repository.
-
-Every format reports paths relative to the directory `decolint` runs in,
-whichever way the linted directory was named on the command line. A file
-outside that directory is reported with its absolute path.
-
-### Color
-
-The `text` format colors each finding by its severity when it is written
-to a terminal, and writes plain text otherwise — so a report piped into
-another command, or redirected to a file, stays free of escape
-sequences. The other formats are never colored.
-
-Pass `-color` to decide instead of leaving it to the terminal:
-
-```console
-decolint -color=always | less -R   # always color
-decolint -color=never              # never color
-```
-
-Those two decide on their own. Under the default `-color=auto`, the
-`NO_COLOR` and `FORCE_COLOR` environment variables apply instead: set
-`NO_COLOR` to any non-empty value to turn color off, or `FORCE_COLOR` to
-color output that does not go to a terminal, such as a CI log —
-`FORCE_COLOR=0` turns color off instead. `NO_COLOR` wins over
-`FORCE_COLOR`.
-
-### Exit codes
-
-- `0` — no `error`-severity findings (there may still be `warn`
-  findings)
-- `1` — at least one `error`-severity finding was reported
-- `2` — an error occurred (e.g. a file could not be parsed)
-
-Enable deny-warnings (the `-deny-warnings` flag or `"denyWarnings":
-true`) to also fail (exit code 1) on `warn`-severity findings. Exit
-codes are unaffected by the output format.
-
-### Config file
-
-Every setting from the [Configuration](#configuration) table can be
-declared per project in a JSON/JSONC config file. Run `decolint -init`
-to generate a starting `.decolint.jsonc` in the current directory,
-ready to edit:
+`categories` sets the severity (`error`, `warn`, or `off`) of every rule in a
+[category](#rule-categories) at once; `rules` sets an individual rule's
+severity and takes precedence over its category:
 
 ```jsonc
 // .decolint.jsonc
@@ -279,9 +413,6 @@ ready to edit:
 }
 ```
 
-`categories` sets the severity (`error`, `warn`, or `off`) of every
-rule in a [category](#rule-categories) at once; `rules` sets an
-individual rule's severity and takes precedence over its category.
 `localEnv` maps names to the values `${localEnv:NAME}` resolves to when
 [merging](#merging); it is also the environment Compose-file `${NAME}`
 interpolation reads (note the differing [syntax](#merging)):
@@ -293,48 +424,174 @@ interpolation reads (note the differing [syntax](#merging)):
 ```
 
 The remaining members mirror their flags: `platforms`, `merge`,
-`denyWarnings`, and `format` (see the [Configuration](#configuration)
-table).
+`denyWarnings`, and `format` (see the [Configuration](#configuration) table).
 
-For the strictest configuration, enable every category:
+## Target platforms
 
-```jsonc
-// .decolint.jsonc
-{
-  "categories": {
-    "security": "error",
-    "reproducibility": "error",
-    "style": "error"
-  }
-}
+Each rule optionally targets specific platforms (`vscode`, `codespaces`); a
+rule with no target platform applies to every platform and always runs. By
+default, only those platform-agnostic rules run; pass `-platform` with a
+comma-separated list to also run rules scoped to specific platforms:
+
+```console
+decolint -platform=vscode,codespaces
 ```
 
-decolint looks for `.decolint.jsonc`, then `.decolint.json`, in the current
-directory; the first one found is used. Pass `-config <path>` to use a
-file at a different location instead. It is an error (exit code 2) if
-`-config` points at a file that doesn't exist or fails to parse, or if
-the config references an unknown rule ID or category name.
+## Merging
+
+The [Features](https://containers.dev/implementors/features/) a
+`devcontainer.json` references, and the base image it names, both contribute
+configuration of their own, which the Dev Container tooling merges into the
+effective configuration following the specification's
+[merge logic](https://containers.dev/implementors/spec/#merge-logic). By
+default decolint lints only the raw file, so an issue introduced by a Feature
+or inherited from the base image (say, one that sets `privileged: true` or
+bind-mounts the Docker socket) goes unnoticed.
+
+Enable merging to lint the merged configuration instead:
+
+```console
+decolint -merge
+```
+
+This fetches every referenced Feature and resolves the base image, including
+any metadata in the base image's
+[`devcontainer.metadata`](https://containers.dev/implementors/spec/#image-metadata)
+label. A Feature or image that cannot be fetched is an error (exit code 2).
+
+Merging also resolves the `${...}`
+[variables](https://containers.dev/implementors/json_reference/#variables-in-devcontainerjson)
+in the `devcontainer.json` first, so the reference a Feature or image is
+fetched by, and the values the rules see, match what the real tooling would
+use:
+
+- `${localEnv:NAME}` (and `${env:NAME}`) resolves from the config file's
+  [`localEnv`](#config-file) map only — decolint never reads environment
+  variables. A name missing from the map resolves to the default in
+  `${localEnv:NAME:default}`, or to the empty string.
+- `${localWorkspaceFolder}` resolves to the linted directory's absolute path,
+  `${containerWorkspaceFolder}` to the configuration's `workspaceFolder`
+  (defaulting to `/workspaces/<folder name>`, or `/` for Docker Compose); each
+  has a `...Basename` variant.
+- `${devcontainerId}` resolves to a fixed placeholder with the format of a
+  real id, since the real value exists only once a container is created.
+- Anything else, including `${containerEnv:NAME}`, resolves to the empty
+  string.
+
+A few limits apply:
+
+- For Docker Compose, `extends` and `include` are resolved as `docker compose
+  config` would, and later files override earlier ones. Compose interpolation
+  uses its own bare `${NAME}` syntax — not devcontainer.json's
+  `${localEnv:NAME}` — but reads the same values from the config file's
+  [`localEnv`](#config-file) map: an unset variable resolves to its default
+  (`${VAR:-default}`) or the empty string, and a `${VAR:?}` requirement on an
+  unset variable is an error. Compose profiles, the `COMPOSE_FILE` environment
+  variable, and `.env` files are not applied.
+- Registries are accessed anonymously, so a private image that cannot be
+  pulled that way counts as a fetch failure.
+
+## Output formats
+
+Every format reports the configuration files that were linted, including those
+with no finding, alongside the findings themselves. The default `text` format
+additionally names the config file the settings came from:
+
+```
+Config: .decolint.jsonc
+Linted 1 file:
+  .devcontainer/devcontainer.json (devcontainer)
+
+.devcontainer/devcontainer.json:4:12: warn: image "ubuntu:latest" uses the "latest" tag; pin a specific version (no-image-latest)
+Found 0 errors and 1 warning.
+```
+
+With no config file, that first line says so and how to create one. It is
+specific to `text` — the machine-readable formats carry the linted files but
+not the config path. Written to a terminal, the report is colored by severity;
+see [Color](#color).
+
+Select a different output format to change this:
+
+- `text` (default) — the format shown above.
+- `json` — a JSON object of the linted files and the findings, for scripting:
+  ```json
+  {"files":[{"path":".devcontainer/devcontainer.json","type":"devcontainer"}],"issues":[{"path":".devcontainer/devcontainer.json","line":4,"col":12,"ruleId":"no-image-latest","message":"image \"ubuntu:latest\" uses the \"latest\" tag; pin a specific version","severity":"warn"}]}
+  ```
+- `github` — [GitHub Actions workflow
+  commands](https://docs.github.com/en/actions/using-workflows/workflow-commands-for-github-actions#setting-a-notice-message),
+  so findings show up as inline annotations on pull request diffs. The linted
+  files go into a collapsed group in the run log, so a file with no finding
+  gets no annotation:
+  ```
+  ::group::decolint
+  Linted 1 file:
+    .devcontainer/devcontainer.json (devcontainer)
+  ::endgroup::
+  ::warning file=.devcontainer/devcontainer.json,line=4,col=12,title=no-image-latest::image "ubuntu:latest" uses the "latest" tag; pin a specific version
+  ```
+- `sarif` — a [SARIF
+  2.1.0](https://docs.oasis-open.org/sarif/sarif/v2.1.0/sarif-v2.1.0.html)
+  log, for upload to [GitHub Code
+  Scanning](https://docs.github.com/en/code-security/code-scanning/integrating-with-code-scanning/uploading-a-sarif-file-to-github)
+  so findings appear as alerts in the repository's Security tab. The log
+  declares every rule the run had enabled, so Code Scanning resolves the alerts
+  of a rule that ran and found nothing, while leaving those of a rule you have
+  turned off untouched.
+
+Every format reports paths relative to the directory `decolint` runs in,
+whichever way the linted directory was named on the command line. A file
+outside that directory is reported with its absolute path.
+
+## Color
+
+The `text` format colors each finding by its severity when it is written to a
+terminal, and writes plain text otherwise — so a report piped into another
+command, or redirected to a file, stays free of escape sequences. The other
+formats are never colored.
+
+Pass `-color` to decide instead of leaving it to the terminal:
+
+```console
+decolint -color=always | less -R   # always color
+decolint -color=never              # never color
+```
+
+Those two decide on their own. Under the default `-color=auto`, the `NO_COLOR`
+and `FORCE_COLOR` environment variables apply instead: set `NO_COLOR` to any
+non-empty value to turn color off, or `FORCE_COLOR` to color output that does
+not go to a terminal, such as a CI log — `FORCE_COLOR=0` turns color off
+instead. `NO_COLOR` wins over `FORCE_COLOR`.
+
+## Exit codes
+
+- `0` — no `error`-severity findings (there may still be `warn` findings)
+- `1` — at least one `error`-severity finding was reported
+- `2` — an error occurred (e.g. a file could not be parsed)
+
+Enable deny-warnings (the `-deny-warnings` flag or `"denyWarnings": true`) to
+also fail (exit code 1) on `warn`-severity findings. Exit codes are unaffected
+by the output format.
 
 ## Rules
 
 Every rule belongs to one [category](#rule-categories), which sets its
-severity unless overridden by a [config file](#config-file). A rule
-can also optionally target specific platforms (see [Target
-platforms](#target-platforms)); a rule with no target platform applies
-to all platforms.
+severity unless overridden by a [config file](#config-file). A rule can also
+optionally target specific platforms (see [Target
+platforms](#target-platforms)); a rule with no target platform applies to all
+platforms.
 
 ### Rule categories
 
 Only `correctness` runs by default; the rest are `off` until enabled:
 
-- `correctness` (default `error`) — the configuration is invalid or
-  does not behave as written.
-- `security` (default `off`) — container runtime privileges and
-  hardening.
-- `reproducibility` (default `off`) — unpinned versions or digests
-  that make the environment change over time.
-- `style` (default `off`) — discouraged or legacy configuration that
-  still works.
+- `correctness` (default `error`) — the configuration is invalid or does not
+  behave as written.
+- `security` (default `off`) — container runtime privileges and hardening.
+- `reproducibility` (default `off`) — unpinned versions or digests that make
+  the environment change over time.
+- `style` (default `off`) — discouraged or legacy configuration that still
+  works.
 
 <!-- Keep this table sorted by Category (correctness, security, reproducibility, style), then ID, in that priority order. -->
 | ID | Category | Platform | Description |
@@ -371,14 +628,14 @@ Only `correctness` runs by default; the rest are `off` until enabled:
 
 Findings can be suppressed with comments in the configuration files:
 
-- `decolint-ignore-line` — suppress findings on the same line, typically
-  as a trailing comment
+- `decolint-ignore-line` — suppress findings on the same line, typically as a
+  trailing comment
 - `decolint-ignore-next-line` — suppress findings on the next line
 - `decolint-ignore-file` — suppress findings in the whole file
 
-Each directive optionally takes rule IDs, separated by commas or
-spaces; omitting them suppresses all rules. Block comments
-(`/* ... */`) work the same way.
+Each directive optionally takes rule IDs, separated by commas or spaces;
+omitting them suppresses all rules. Block comments (`/* ... */`) work the same
+way.
 
 ```jsonc
 // decolint-ignore-file no-app-port
@@ -396,9 +653,8 @@ includes a `decolint-<version>-checksums.txt` file listing the SHA-256
 checksum of every binary, plus a
 `decolint-<version>-checksums.txt.sigstore.json` file: a [Sigstore
 bundle](https://github.com/sigstore/cosign/blob/main/specs/BUNDLE_SPEC.md)
-containing the [cosign](https://github.com/sigstore/cosign) keyless
-signature (signed via GitHub Actions OIDC) and its Rekor transparency
-log entry.
+containing the [cosign](https://github.com/sigstore/cosign) keyless signature
+(signed via GitHub Actions OIDC) and its Rekor transparency log entry.
 
 To verify a downloaded binary:
 
@@ -412,9 +668,9 @@ cosign verify-blob \
 sha256sum --ignore-missing -c decolint-<version>-checksums.txt
 ```
 
-The first command confirms the checksums file was signed by this
-repository's release workflow; the second confirms the downloaded
-binary matches a checksum in that file.
+The first command confirms the checksums file was signed by this repository's
+release workflow; the second confirms the downloaded binary matches a checksum
+in that file.
 
 Each binary's provenance can also be verified with
 [`gh attestation verify`](https://cli.github.com/manual/gh_attestation_verify),

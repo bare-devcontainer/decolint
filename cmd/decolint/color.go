@@ -64,13 +64,13 @@ func useColor(mode colorMode, tty bool, getenv func(string) string) bool {
 	return tty && getenv("TERM") != "dumb"
 }
 
-// isTerminal reports whether w is a terminal. Anything else is not, including a character device
-// such as /dev/null, so a report piped into another command or redirected anywhere stays free of
-// escape sequences.
+// isTerminal reports whether w is a terminal that renders escape sequences. Anything else is not,
+// including a character device such as /dev/null, so a report piped into another command or
+// redirected anywhere stays free of escape sequences.
 func isTerminal(w io.Writer) bool {
 	f, ok := w.(*os.File)
 	if !ok {
 		return false
 	}
-	return term.IsTerminal(int(f.Fd()))
+	return term.IsTerminal(int(f.Fd())) && rendersEscapeSequences(f)
 }

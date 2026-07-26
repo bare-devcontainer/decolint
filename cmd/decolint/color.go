@@ -5,6 +5,8 @@ import (
 	"io"
 	"os"
 	"strings"
+
+	"golang.org/x/term"
 )
 
 // colorMode is when the text output should be colored, as given by the -color flag.
@@ -19,18 +21,6 @@ const (
 	// colorNever writes plain text.
 	colorNever
 )
-
-// String returns the mode's name, as used in the -color flag.
-func (m colorMode) String() string {
-	switch m {
-	case colorAlways:
-		return "always"
-	case colorNever:
-		return "never"
-	default:
-		return "auto"
-	}
-}
 
 // parseColorMode parses a color mode name, matched case-insensitively, into a colorMode. An empty
 // name yields colorAuto. It returns an error if name does not name a known mode.
@@ -52,8 +42,8 @@ func parseColorMode(name string) (colorMode, error) {
 //
 //   - NO_COLOR set to a non-empty value turns color off. It wins over FORCE_COLOR, so decolint never
 //     emits escape sequences where they were declared unwanted; -color=always still forces them.
-//   - FORCE_COLOR set to anything but "0" turns color on, for a destination that renders escape
-//     sequences without being a terminal, e.g. a CI log.
+//   - FORCE_COLOR decides on its own: "0" turns color off, any other non-empty value turns it on,
+//     for a destination that renders escape sequences without being a terminal, e.g. a CI log.
 //   - A "dumb" terminal, or a destination that is not a terminal at all, turns color off.
 //
 // tty reports whether the destination is a terminal (see isTerminal) and getenv reads the
@@ -68,19 +58,19 @@ func useColor(mode colorMode, tty bool, getenv func(string) string) bool {
 	if getenv("NO_COLOR") != "" {
 		return false
 	}
-	if force := getenv("FORCE_COLOR"); force != "" && force != "0" {
-		return true
+	if force := getenv("FORCE_COLOR"); force != "" {
+		return force != "0"
 	}
 	return tty && getenv("TERM") != "dumb"
 }
 
-// isTerminal reports whether w is a terminal. A writer that is not a file never is, so a report
-// captured in memory or piped into another command stays plain.
+// isTerminal reports whether w is a terminal. Anything else is not, including a character device
+// such as /dev/null, so a report piped into another command or redirected anywhere stays free of
+// escape sequences.
 func isTerminal(w io.Writer) bool {
 	f, ok := w.(*os.File)
 	if !ok {
 		return false
 	}
-	info, err := f.Stat()
-	return err == nil && info.Mode()&os.ModeCharDevice != 0
+	return term.IsTerminal(int(f.Fd()))
 }

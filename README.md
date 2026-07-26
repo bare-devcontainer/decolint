@@ -242,7 +242,8 @@ decolint -color=never              # never color
 Without the flag, the `NO_COLOR` and `FORCE_COLOR` environment variables
 apply: set `NO_COLOR` to any non-empty value to turn color off, or
 `FORCE_COLOR` to color output that does not go to a terminal, such as a
-CI log. `-color` overrides both.
+CI log — `FORCE_COLOR=0` turns color off instead. `-color` overrides
+both.
 
 ### Exit codes
 

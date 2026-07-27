@@ -23,10 +23,8 @@ func TestRun(t *testing.T) {
 		t.Fatalf("run: %v", err)
 	}
 
-	for _, name := range []string{"_index.md", "getting-started.md", "reference.md"} {
-		if _, err := os.Stat(filepath.Join(contentDir, name)); err != nil {
-			t.Errorf("run did not create %s: %v", name, err)
-		}
+	if _, err := os.Stat(filepath.Join(contentDir, "_index.md")); err != nil {
+		t.Errorf("run did not create _index.md: %v", err)
 	}
 	entries, err := os.ReadDir(filepath.Join(contentDir, "rules"))
 	if err != nil {
@@ -40,21 +38,11 @@ func TestRun(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read %s: %v", readmePath, err)
 	}
-	if string(got) == fixtureReadme {
-		t.Error("run did not touch the README's rules table (fixture has a stale placeholder row)")
+	if strings.Contains(string(got), "| `x` |") {
+		t.Error("run left the fixture's stale placeholder row in the README's category summary")
 	}
-
-	// reference.md is split from the README, so it must carry the table run just refreshed above,
-	// not the fixture's stale placeholder row that was on disk when run started.
-	reference, err := os.ReadFile(filepath.Join(contentDir, "reference.md"))
-	if err != nil {
-		t.Fatalf("read reference.md: %v", err)
-	}
-	if strings.Contains(string(reference), "`x`") {
-		t.Error("reference.md still has the fixture's stale placeholder row")
-	}
-	if !strings.Contains(string(reference), rules.Builtin()[0].Rule.ID) {
-		t.Errorf("reference.md missing rule ID %q from the refreshed table", rules.Builtin()[0].Rule.ID)
+	if !strings.Contains(string(got), rules.Builtin()[0].Rule.Category.String()) {
+		t.Errorf("README missing category %q from the refreshed summary", rules.Builtin()[0].Rule.Category)
 	}
 }
 

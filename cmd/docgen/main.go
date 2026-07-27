@@ -1,6 +1,7 @@
-// Command docgen generates the documentation site's content and the README's rules table from
-// rules/*.go and README.md, so neither has to be hand-kept in sync with the other. It is not part of
-// the decolint binary; "make docs" runs it before Hugo builds the site (see the Makefile).
+// Command docgen generates the documentation site's rule pages and landing page, and the README's
+// category summary, from rules/*.go and README.md, so none of them has to be hand-kept in sync with
+// the others. It is not part of the decolint binary; "make docs" runs it before Hugo builds the site
+// (see the Makefile).
 package main
 
 import (
@@ -9,8 +10,8 @@ import (
 )
 
 // generatedContentDir is where the generated site pages are written. It is mounted alongside
-// docs/content in hugo.toml and is never committed (see .gitignore); docs/content/rules/_index.md
-// is the only rules page that stays hand-written.
+// docs/content in hugo.toml and is never committed (see .gitignore); the pages that live in
+// docs/content — Getting started, Reference, and docs/content/rules/_index.md — are hand-written.
 const generatedContentDir = "docs/.generated/content"
 
 func main() {
@@ -20,8 +21,8 @@ func main() {
 	}
 }
 
-// run regenerates everything docgen owns: the rule pages and the README-derived pages into
-// contentDir, and the rules table in the README at readmePath, in place.
+// run regenerates everything docgen owns: the rule pages and the landing page into contentDir, and
+// the category summary in the README at readmePath, in place.
 func run(readmePath, contentDir string) error {
 	if err := os.RemoveAll(contentDir); err != nil {
 		return fmt.Errorf("clean %s: %w", contentDir, err)
@@ -32,10 +33,8 @@ func run(readmePath, contentDir string) error {
 	if err := writeRulePages(contentDir); err != nil {
 		return fmt.Errorf("generate rule pages: %w", err)
 	}
-	// Update the README's own table before splitting it into pages below, so a stale table (e.g.
-	// right after a rule is added or removed) doesn't get carried into the generated reference page.
-	if err := updateReadmeRulesTable(readmePath); err != nil {
-		return fmt.Errorf("update rules table in %s: %w", readmePath, err)
+	if err := updateReadmeCategories(readmePath); err != nil {
+		return fmt.Errorf("update category summary in %s: %w", readmePath, err)
 	}
 	if err := writeReadmePages(readmePath, contentDir); err != nil {
 		return fmt.Errorf("generate pages from %s: %w", readmePath, err)

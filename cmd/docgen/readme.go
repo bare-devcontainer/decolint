@@ -9,11 +9,15 @@ import (
 	"strings"
 )
 
-// readme.go turns README.md into the three top-level site pages that mirror it — the landing page,
-// Getting started, and Reference — so their prose has exactly one source. Splitting it means
-// rewriting the anchor links the README uses to jump within itself: an anchor now on a different
-// page must point there instead ("reference.md#config-file"), which the goldmark link render hook
-// enabled in hugo.toml resolves to that page's real address.
+// readme.go turns the marked part of README.md into the site's landing page, so the pitch the two
+// share has exactly one source. Everything the README does not carry — Getting started, Reference —
+// is hand-written under docs/content and never passes through here.
+//
+// The machinery is written for a set of pages rather than the single one readmePages currently
+// holds: rewriting the anchor links a page uses to jump within itself, so an anchor that ends up on
+// a different page points there instead ("reference.md#config-file"), which the goldmark link
+// render hook enabled in hugo.toml resolves to that page's real address. With one page it earns its
+// place as the check that the landing page never links to an anchor that is not its own.
 
 // readmePage is one page split out of README.md, as templates/readme-page.md.tmpl renders it: Name
 // is the output file name (without extension), the rest is the page's front matter and, once
@@ -29,25 +33,13 @@ type readmePage struct {
 
 // readmePages are the pages splitReadme extracts from README.md. Each must appear in README.md
 // exactly once, delimited by "<!-- decolint:page=NAME -->" and "<!-- decolint:end-page -->" (see
-// splitReadme). Content outside any marked page — the title, badges, the "---" before
-// "# Reference", "## Contributing" — is left where it is and never touched by docgen.
+// splitReadme). Content outside any marked page — the title, badges, "## Try it", "## Install",
+// the category summary, "## Contributing" — is README-only and never touched by docgen.
 var readmePages = []readmePage{
 	{
 		Name:        "_index",
 		Title:       "decolint",
 		Description: "A linter for Dev Container configuration files.",
-	},
-	{
-		Name:        "getting-started",
-		Title:       "Getting started",
-		Description: "Install decolint, choose what it reports, and wire it into CI.",
-		TOC:         true,
-	},
-	{
-		Name:        "reference",
-		Title:       "Reference",
-		Description: "Every flag, config file member, and output format decolint supports.",
-		TOC:         true,
 	},
 }
 
@@ -100,16 +92,16 @@ func splitReadme(src string) (map[string]string, error) {
 		return nil, err
 	}
 
-	// The heading -> page map spans all three bodies, so a link anywhere among them can be resolved
-	// to the page it actually lives on, or correctly left alone when it's already on the right one.
-	// Built in a fixed order (not a map range) and erroring on a repeat: two pages sharing a heading
-	// slug would otherwise resolve to whichever page Go's map iteration visited last, silently and
-	// differently from run to run.
+	// The heading -> page map spans every body, so a link anywhere among them can be resolved to the
+	// page it actually lives on, or correctly left alone when it's already on the right one. Built in
+	// a fixed order (not a map range) and erroring on a repeat: a slug claimed twice would otherwise
+	// resolve to whichever heading Go's map iteration visited last, silently and differently from run
+	// to run.
 	slugPage := map[string]string{}
 	for _, p := range readmePages {
 		for _, h := range scanHeadings(bodies[p.Name]) {
 			if existing, ok := slugPage[h.Slug]; ok {
-				return nil, fmt.Errorf("heading %q (slug %q) appears on both %q and %q", h.Text, h.Slug, existing, p.Name)
+				return nil, fmt.Errorf("heading %q (slug %q) is not unique: page %q already claims that slug", h.Text, h.Slug, existing)
 			}
 			slugPage[h.Slug] = p.Name
 		}
@@ -140,7 +132,7 @@ func readmePageBodies(lines []string) (map[string]string, error) {
 			if openName == "" {
 				return nil, fmt.Errorf("line %d: %q with no page marker open", i+1, readmePageEnd)
 			}
-			bodies[openName] = strings.Join(stripRulesTableMarkers(trimBlank(lines[openStart:i])), "\n")
+			bodies[openName] = strings.Join(trimBlank(lines[openStart:i]), "\n")
 			openName = ""
 		case strings.HasPrefix(l, readmePageStartPrefix) && strings.HasSuffix(l, readmePageStartSuffix):
 			name := strings.TrimSuffix(strings.TrimPrefix(l, readmePageStartPrefix), readmePageStartSuffix)
@@ -178,20 +170,6 @@ func trimBlank(lines []string) []string {
 		end--
 	}
 	return lines[start:end]
-}
-
-// stripRulesTableMarkers drops the rulesTableStart/rulesTableEnd lines: bookkeeping for
-// updateReadmeRulesTable, meaningless once the table is on its own page rather than sitting in
-// README.md.
-func stripRulesTableMarkers(lines []string) []string {
-	out := make([]string, 0, len(lines))
-	for _, l := range lines {
-		if l == rulesTableStart || l == rulesTableEnd {
-			continue
-		}
-		out = append(out, l)
-	}
-	return out
 }
 
 // anchorLink matches a Markdown link whose target is a same-document fragment, e.g. "(#config-file)".

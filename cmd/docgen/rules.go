@@ -139,30 +139,31 @@ func yamlSingleQuoted(s string) string {
 	return "'" + strings.ReplaceAll(s, "'", "''") + "'"
 }
 
-// rulesTableMarkers delimit the generated rules table in README.md, so updateReadmeRulesTable can
-// find and replace exactly that table and nothing else.
+// categoriesStart and categoriesEnd delimit the generated category summary in README.md, so
+// updateReadmeCategories can find and replace exactly that table and nothing else. The README
+// summarizes the rules by category and links out to the rule reference for the rules themselves.
 const (
-	rulesTableStart = "<!-- decolint:rules-table -->"
-	rulesTableEnd   = "<!-- /decolint:rules-table -->"
+	categoriesStart = "<!-- decolint:categories -->"
+	categoriesEnd   = "<!-- /decolint:categories -->"
 )
 
-// updateReadmeRulesTable rewrites the table between the rulesTableStart/rulesTableEnd markers in
-// the README at path to the current built-in rules, sorted by category (in the same order the
-// category list above the table uses) then ID. It is an error if the markers are missing.
-func updateReadmeRulesTable(path string) error {
+// updateReadmeCategories rewrites the table between the categoriesStart/categoriesEnd markers in
+// the README at path to the categories the current built-in rules use. It is an error if the
+// markers are missing.
+func updateReadmeCategories(path string) error {
 	src, err := os.ReadFile(path)
 	if err != nil {
 		return fmt.Errorf("read %s: %w", path, err)
 	}
 
-	start := strings.Index(string(src), rulesTableStart)
-	end := strings.Index(string(src), rulesTableEnd)
+	start := strings.Index(string(src), categoriesStart)
+	end := strings.Index(string(src), categoriesEnd)
 	if start < 0 || end < 0 || end < start {
-		return fmt.Errorf("%s: rules table markers %q/%q not found", path, rulesTableStart, rulesTableEnd)
+		return fmt.Errorf("%s: category markers %q/%q not found", path, categoriesStart, categoriesEnd)
 	}
-	end += len(rulesTableEnd)
+	end += len(categoriesEnd)
 
-	table := rulesTableStart + "\n" + renderRulesTable() + rulesTableEnd
+	table := categoriesStart + "\n" + renderCategories() + categoriesEnd
 	out := string(src[:start]) + table + string(src[end:])
 	if out == string(src) {
 		return nil
@@ -173,44 +174,36 @@ func updateReadmeRulesTable(path string) error {
 	return nil
 }
 
-// tableRow is one row of the README rules table, as templates/rules-table.md.tmpl renders it.
-type tableRow struct {
-	ID          string
-	URL         string
-	Category    string
-	Platform    string
-	Description string
+// categoryRow is one row of the README category summary, as templates/categories.md.tmpl renders
+// it: how many rules the category holds and the severity they run at unenabled.
+type categoryRow struct {
+	Name     string
+	URL      string
+	Severity string
+	Rules    int
 }
 
-// renderRulesTable renders every built-in rule as a Markdown table row, each ID linking to its
-// documentation page, sorted by category then ID.
-func renderRulesTable() string {
-	regs := slices.Clone(rules.Builtin())
-	slices.SortFunc(regs, func(a, b rules.Registration) int {
-		if c := cmp.Compare(a.Rule.Category, b.Rule.Category); c != 0 {
-			return c
+// renderCategories renders one Markdown table row per category a built-in rule belongs to, each
+// name linking to that category's listing in the rule reference, in category order. Every rule in a
+// category shares its default severity, so the row reports the severity of the rules it counted.
+func renderCategories() string {
+	var rows []categoryRow
+	index := map[linter.Category]int{}
+	for _, reg := range slices.SortedFunc(slices.Values(rules.Builtin()), func(a, b rules.Registration) int {
+		return cmp.Compare(a.Rule.Category, b.Rule.Category)
+	}) {
+		category := reg.Rule.Category
+		if i, ok := index[category]; ok {
+			rows[i].Rules++
+			continue
 		}
-		return cmp.Compare(a.Rule.ID, b.Rule.ID)
-	})
-
-	rows := make([]tableRow, len(regs))
-	for i, reg := range regs {
-		r := reg.Rule
-		platform := "(all)"
-		if names := platformNames(r.Platforms); len(names) > 0 {
-			quoted := make([]string, len(names))
-			for j, n := range names {
-				quoted[j] = "`" + n + "`"
-			}
-			platform = strings.Join(quoted, ", ")
-		}
-		rows[i] = tableRow{
-			ID:          r.ID,
-			URL:         rules.DocsURL(r.ID),
-			Category:    r.Category.String(),
-			Platform:    platform,
-			Description: r.Description,
-		}
+		index[category] = len(rows)
+		rows = append(rows, categoryRow{
+			Name:     category.String(),
+			URL:      rules.DocsCategoryURL(category.String()),
+			Severity: reg.DefaultSeverity.String(),
+			Rules:    1,
+		})
 	}
-	return mustRender("rules-table.md.tmpl", rows)
+	return mustRender("categories.md.tmpl", rows)
 }

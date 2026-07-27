@@ -48,8 +48,8 @@ jobs:
           go-version-file: go.mod
       # cmd/docgen regenerates the site's content from rules/*.go and README.md, and rewrites
       # README's rules table from the same rule catalog; a diff here means one of those drifted
-      # from the other and a commit forgot to run "make site-content".
-      - run: make site-content
+      # from the other and a commit forgot to run "make docs-content".
+      - run: make docs-content
       - run: git diff --exit-code README.md
 
   dogfooding:

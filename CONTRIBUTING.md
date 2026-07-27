@@ -20,8 +20,8 @@ The documentation site in [`docs/`](docs/) is built with
 pinned with the rest of them:
 
 ```console
-make site         # build into docs/public
-make site-serve   # serve with live reload at http://localhost:1313/
+make docs         # build into docs/public
+make docs-serve   # serve with live reload at http://localhost:1313/
 ```
 
 ## Adding a rule
@@ -120,13 +120,13 @@ including for the table-driven tests each rule ships with.
 ## The documentation site and the README rules table
 
 Both are generated from `rules/*.go` and `README.md` by
-[`cmd/docgen`](cmd/docgen/), run as part of `make site` (see
+[`cmd/docgen`](cmd/docgen/), run as part of `make docs` (see
 [Development](#development) above) and standalone as `make
-site-content`. Nothing under `docs/content/rules/` other than
+docs-content`. Nothing under `docs/content/rules/` other than
 `_index.md`, and nothing in `README.md` between the
 `<!-- decolint:rules-table -->` markers, is hand-edited — a new rule
 or a changed `LongDescription`/`Example`/`References` needs no
-follow-up edit anywhere else. CI's `docs` job runs `make site-content`
+follow-up edit anywhere else. CI's `docs` job runs `make docs-content`
 and fails if that changes `README.md`, which is what catches a
 generator or a rule declaration that drifted from the other.
 

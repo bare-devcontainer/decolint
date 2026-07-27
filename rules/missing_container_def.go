@@ -10,10 +10,38 @@ import (
 var MissingContainerDef = &linter.Rule{
 	ID:          "missing-container-def",
 	Description: `disallow a devcontainer.json that defines none of "image", "build", or "dockerComposeFile"`,
-	Category:    linter.CategoryCorrectness,
-	FileTypes:   []linter.FileType{linter.Devcontainer},
-	Paths:       []string{""},
-	Check:       checkMissingContainerDef,
+	LongDescription: `Every dev container is created from exactly one of "image", "build", or "dockerComposeFile", and each of
+the three is required in its own scenario. A configuration that sets none of them describes no container
+at all, so no tool can create one from it.`,
+	References: []string{
+		`https://containers.dev/implementors/spec/#orchestration-options`,
+		`https://containers.dev/implementors/json_reference/#scenario-specific`,
+	},
+	Category:  linter.CategoryCorrectness,
+	FileTypes: []linter.FileType{linter.Devcontainer},
+	Paths:     []string{""},
+	Example: linter.Example{
+		Bad: linter.Snippet{
+			Files: []linter.ExampleFile{
+				{Path: `devcontainer.json`, Content: `{
+  "name": "my project",
+  "forwardPorts": [3000]
+}
+`},
+			},
+		},
+		Good: linter.Snippet{
+			Files: []linter.ExampleFile{
+				{Path: `devcontainer.json`, Content: `{
+  "name": "my project",
+  "image": "mcr.microsoft.com/devcontainers/base:ubuntu",
+  "forwardPorts": [3000]
+}
+`},
+			},
+		},
+	},
+	Check: checkMissingContainerDef,
 }
 
 func checkMissingContainerDef(_ *linter.Context, node *linter.Node) []linter.Finding {

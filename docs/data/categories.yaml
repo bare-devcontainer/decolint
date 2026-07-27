@@ -1,0 +1,14 @@
+# The categories a rule can belong to, in the order the rule reference presents them, which is
+# decreasing order of how much a project is likely to want the category enabled. Each name must
+# match a linter.Category name, which the rule pages carry in their front matter.
+- name: correctness
+  blurb: >-
+    The configuration is invalid or does not behave as written. These run by
+    default, at `error`.
+- name: security
+  blurb: Container runtime privileges and hardening.
+- name: reproducibility
+  blurb: >-
+    Unpinned versions or digests that let the environment drift between builds.
+- name: style
+  blurb: Discouraged or legacy configuration that still works.

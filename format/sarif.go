@@ -20,6 +20,8 @@ type SARIFRule struct {
 	ID          string
 	Description string
 	Category    string
+	// HelpURI is where the rule is documented in full.
+	HelpURI string
 }
 
 // SARIFFormat prints a SARIF 2.1.0 log, suitable for upload to GitHub Code Scanning.
@@ -69,9 +71,11 @@ type sarifDriver struct {
 }
 
 type sarifRuleDescriptor struct {
-	ID               string          `json:"id"`
-	ShortDescription sarifMessage    `json:"shortDescription,omitzero"`
-	Properties       sarifProperties `json:"properties,omitzero"`
+	ID               string                  `json:"id"`
+	ShortDescription sarifMessage            `json:"shortDescription,omitzero"`
+	HelpURI          string                  `json:"helpUri,omitzero"`
+	Help             sarifMultiformatMessage `json:"help,omitzero"`
+	Properties       sarifProperties         `json:"properties,omitzero"`
 }
 
 type sarifProperties struct {
@@ -80,6 +84,14 @@ type sarifProperties struct {
 
 type sarifMessage struct {
 	Text string `json:"text"`
+}
+
+// sarifMultiformatMessage is SARIF's multiformatMessageString: a plain-text rendering plus an
+// optional Markdown one, which viewers prefer when they can render it. Text is required whenever
+// Markdown is present.
+type sarifMultiformatMessage struct {
+	Text     string `json:"text"`
+	Markdown string `json:"markdown,omitzero"`
 }
 
 type sarifResult struct {
@@ -140,6 +152,8 @@ func (f SARIFFormat) WriteReport(w io.Writer, report Report) error {
 		desc := sarifRuleDescriptor{ID: id}
 		if r, ok := catalog[id]; ok {
 			desc.ShortDescription = sarifMessage{Text: r.Description}
+			desc.HelpURI = r.HelpURI
+			desc.Help = sarifHelpFor(r)
 			desc.Properties = sarifProperties{Tags: []string{r.Category}}
 		}
 		descriptors = append(descriptors, desc)
@@ -204,6 +218,20 @@ func (f SARIFFormat) WriteReport(w io.Writer, report Report) error {
 		return fmt.Errorf("write report: %w", err)
 	}
 	return nil
+}
+
+// sarifHelpFor returns a link to the rule's documentation as SARIF help, the text a viewer shows
+// when a reader asks why an alert was raised. GitHub Code Scanning renders the Markdown form on the
+// alert but does not surface helpUri, so the link has to be in the message to be reachable. It is
+// the zero value, and so omitted, for a rule with nowhere to link to.
+func sarifHelpFor(r SARIFRule) sarifMultiformatMessage {
+	if r.HelpURI == "" {
+		return sarifMultiformatMessage{}
+	}
+	return sarifMultiformatMessage{
+		Text:     "Documentation: " + r.HelpURI,
+		Markdown: "[Rule documentation](" + r.HelpURI + ")",
+	}
 }
 
 // artifactURIFor returns the SARIF location of the file at path, which must be a URI rather than a

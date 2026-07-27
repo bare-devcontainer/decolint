@@ -262,6 +262,13 @@ type Rule struct {
 	ID string
 	// Description is a short human-readable description of what the rule checks.
 	Description string
+	// LongDescription explains why the rule exists: what goes wrong in the configuration it
+	// reports, and what to do instead. It is Markdown, and is shown wherever the rule is
+	// documented rather than merely named.
+	LongDescription string
+	// References are URLs to the specification, documentation, or implementation that justify the
+	// rule, most authoritative first.
+	References []string
 	// Category is the [Category] this rule reports; every rule must declare exactly one.
 	Category Category
 	// FileTypes are the kinds of configuration files this rule applies to.
@@ -274,8 +281,49 @@ type Rule struct {
 	// matches any object member name or array index (e.g. "/mounts/*"); the empty string matches the
 	// document root.
 	Paths []string
+	// Example shows the rule firing and not firing on realistic configuration. Tests lint both: Bad
+	// must report the rule, Good must not.
+	Example Example
 	// Check inspects one value matching Paths and returns any findings. It is called at most once per
 	// rule for a given value, even if several patterns match it. Check must be safe for concurrent
 	// use, since it may be called for multiple files.
 	Check func(ctx *Context, node *Node) []Finding
+}
+
+// Example pairs configuration that trips a rule with configuration that doesn't, for the rule's
+// documentation.
+type Example struct {
+	// Bad is configuration the rule reports.
+	Bad Snippet
+	// Good is configuration the rule does not report, typically Bad with the problem fixed.
+	Good Snippet
+	// Note is Markdown prose shown after Good, for context Bad and Good alone don't convey (e.g. why
+	// Good is scoped the way it is). It is optional.
+	Note string
+}
+
+// Snippet is the directory an example is linted in: one or more files, and optionally the
+// directory's own name, for a rule that reads it (e.g. [Dir.Name]).
+type Snippet struct {
+	// Files are the snippet's files. Exactly one must have the path a rule's first FileType is
+	// named at (e.g. "devcontainer.json" for [Devcontainer]); that is the file linted, and it is
+	// also the one shown first. The rest are context a rule reads from the directory, e.g. a
+	// devcontainer-template.json a devcontainer.json's ${templateOption:...} reference is checked
+	// against.
+	Files []ExampleFile
+	// DirName is the directory's own name, for a rule that reads [Dir.Name] (e.g. a Feature's or
+	// Template's id must match the directory containing it). It is empty when no rule needs it.
+	DirName string
+}
+
+// ExampleFile is one file of a [Snippet].
+type ExampleFile struct {
+	// Path is the file's path, relative to the directory the example is linted in (e.g.
+	// "devcontainer.json" or ".devcontainer/devcontainer.json").
+	Path string
+	// Content is the file's content.
+	Content string
+	// Mode is the file's permission bits. The zero value means a regular file at the default mode;
+	// set it for a rule that inspects permissions (e.g. whether install.sh is executable).
+	Mode fs.FileMode
 }

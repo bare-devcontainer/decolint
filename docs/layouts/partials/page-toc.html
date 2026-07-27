@@ -1,0 +1,7 @@
+{{/* The sidebar shown alongside a long page (Getting started, Reference): a table of contents
+built from the page's own ## headings, via Params.toc — see cmd/docgen and docs/hugo.toml's
+[markup.tableOfContents]. */}}
+<aside class="page-toc">
+  <p class="page-toc__label">On this page</p>
+  {{ .TableOfContents }}
+</aside>

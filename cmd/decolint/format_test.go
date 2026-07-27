@@ -6,8 +6,47 @@ import (
 
 	"github.com/bare-devcontainer/decolint/format"
 	"github.com/bare-devcontainer/decolint/linter"
+	"github.com/bare-devcontainer/decolint/rules"
 	"github.com/google/go-cmp/cmp"
 )
+
+// TestSarifRules_Fields checks that the adapter carries every field a SARIF consumer needs to
+// describe a rule, the address of its documentation included, so an alert can be traced back to
+// what the rule checks and why.
+func TestSarifRules_Fields(t *testing.T) {
+	t.Parallel()
+
+	const id = "no-image-latest"
+	var reg rules.Registration
+	for _, r := range rules.Builtin() {
+		if r.Rule.ID == id {
+			reg = r
+		}
+	}
+	if reg.Rule == nil {
+		t.Fatalf("built-in rule %s not found", id)
+	}
+
+	// A reproducibility rule is off by default, so its category has to be enabled for the catalog
+	// to describe it at all.
+	cfg := Config{Categories: map[string]linter.Severity{"reproducibility": linter.SeverityError}}
+	var got format.SARIFRule
+	for _, r := range sarifRules(cfg) {
+		if r.ID == id {
+			got = r
+		}
+	}
+
+	want := format.SARIFRule{
+		ID:          reg.Rule.ID,
+		Description: reg.Rule.Description,
+		Category:    reg.Rule.Category.String(),
+		HelpURI:     rules.DocsURL(reg.Rule.ID),
+	}
+	if diff := cmp.Diff(want, got); diff != "" {
+		t.Errorf("sarifRules() entry mismatch (-want +got):\n%s", diff)
+	}
+}
 
 func TestParseFormat(t *testing.T) {
 	t.Parallel()

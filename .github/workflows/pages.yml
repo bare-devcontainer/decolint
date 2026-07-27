@@ -1,0 +1,74 @@
+name: Pages
+
+# Builds the documentation site in docs/ and publishes it to GitHub Pages. A pull request builds it
+# too, without deploying, so a page that breaks the build is caught before it is merged.
+on:
+  push:
+    branches: [main]
+    paths:
+      - docs/**
+      - rules/**
+      - linter/rule.go
+      - cmd/docgen/**
+      - README.md
+      - Makefile
+      - go.mod
+      - go.sum
+      - .github/workflows/pages.yml
+  pull_request:
+    paths:
+      - docs/**
+      - rules/**
+      - linter/rule.go
+      - cmd/docgen/**
+      - README.md
+      - Makefile
+      - go.mod
+      - go.sum
+      - .github/workflows/pages.yml
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+
+      # Hugo is a tool dependency in go.mod, so the Go toolchain is all this needs: "make docs"
+      # builds it at the pinned version and caches it like any other dependency.
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
+        with:
+          go-version-file: go.mod
+
+      - run: make docs
+
+      - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
+        with:
+          path: docs/public
+
+  deploy:
+    needs: build
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    # One deployment at a time, and never cancel one in flight: a half-published site is worse than
+    # a late one. Scoped to this job alone, not the workflow: a PR's build must never queue behind,
+    # or get cancelled by, a push to main entering this group — only deploy needs the serialization,
+    # and only push events (never pull_request, per the "if" above) ever reach it.
+    concurrency:
+      group: pages
+      cancel-in-progress: false
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@cd2ce8fcbc39b97be8ca5fce6e763baed58fa128 # v5.0.0

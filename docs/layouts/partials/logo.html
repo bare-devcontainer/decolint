@@ -1,0 +1,9 @@
+{{/* The decolint wordmark: light/dark SVG variants, one hidden by prefers-color-scheme in
+main.css (see .site-logo) — matching how the rest of the site's colors switch. Params: width,
+height (the img "width"/"height" attributes, for the intrinsic aspect ratio), alt. */}}
+{{ with resources.Get "img/decolint_logo.svg" | minify | fingerprint }}
+  <img class="site-logo site-logo--light" src="{{ .RelPermalink }}" width="{{ $.width }}" height="{{ $.height }}" alt="{{ $.alt }}">
+{{ end }}
+{{ with resources.Get "img/decolint_logo_dark.svg" | minify | fingerprint }}
+  <img class="site-logo site-logo--dark" src="{{ .RelPermalink }}" width="{{ $.width }}" height="{{ $.height }}" alt="{{ $.alt }}">
+{{ end }}

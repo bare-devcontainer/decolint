@@ -1,0 +1,30 @@
+{{ define "main" }}
+  <h1>{{ .Title }}</h1>
+  {{ .Content }}
+
+  {{/* The table is built from the rule pages themselves, so it cannot fall behind them. That the
+  pages in turn match the rules decolint registers is what rules/doc_test.go checks. */}}
+  {{ $rules := where site.RegularPages "Section" "rules" }}
+  {{ range hugo.Data.categories }}
+    {{ $category := .name }}
+    {{ $blurb := .blurb }}
+    {{ with where $rules "Params.category" $category }}
+      <h2 id="{{ $category }}">{{ $category }}</h2>
+      <p>{{ $.RenderString $blurb }}</p>
+      <table>
+        <thead>
+          <tr><th>Rule</th><th>Platform</th><th>Checks</th></tr>
+        </thead>
+        <tbody>
+          {{ range sort . "Title" }}
+            <tr>
+              <td><a href="{{ .RelPermalink }}"><code>{{ .Title }}</code></a></td>
+              <td>{{ with .Params.platforms }}{{ delimit . ", " }}{{ else }}all{{ end }}</td>
+              <td>{{ $.RenderString .Description }}</td>
+            </tr>
+          {{ end }}
+        </tbody>
+      </table>
+    {{ end }}
+  {{ end }}
+{{ end }}

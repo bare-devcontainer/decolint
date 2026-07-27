@@ -12,10 +12,38 @@ import (
 var MissingRequiredProps = &linter.Rule{
 	ID:          "missing-required-props",
 	Description: `disallow a Feature's or Template's metadata that is missing a required property ("id", "version", or "name")`,
-	Category:    linter.CategoryCorrectness,
-	FileTypes:   []linter.FileType{linter.Feature, linter.Template},
-	Paths:       []string{""},
-	Check:       checkMissingRequiredProps,
+	LongDescription: `"id", "version", and "name" are the only properties either specification requires: the "id" addresses the
+artifact, the "version" is what consumers pin to, and the "name" is what a user recognizes it by in a
+list. Metadata missing any of them cannot be published as a usable Feature or Template.`,
+	References: []string{
+		`https://containers.dev/implementors/features/#devcontainer-feature-json-properties`,
+		`https://containers.dev/implementors/templates/#devcontainer-templatejson-properties`,
+	},
+	Category:  linter.CategoryCorrectness,
+	FileTypes: []linter.FileType{linter.Feature, linter.Template},
+	Paths:     []string{""},
+	Example: linter.Example{
+		Bad: linter.Snippet{
+			Files: []linter.ExampleFile{
+				{Path: `devcontainer-feature.json`, Content: `{
+  "id": "node",
+  "version": "1.0.0"
+}
+`},
+			},
+		},
+		Good: linter.Snippet{
+			Files: []linter.ExampleFile{
+				{Path: `devcontainer-feature.json`, Content: `{
+  "id": "node",
+  "version": "1.0.0",
+  "name": "Node.js"
+}
+`},
+			},
+		},
+	},
+	Check: checkMissingRequiredProps,
 }
 
 func checkMissingRequiredProps(_ *linter.Context, node *linter.Node) []linter.Finding {

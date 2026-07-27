@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{{ if .IsHome }}{{ site.Title }} — {{ site.Params.description }}{{ else }}{{ .Title }} — {{ site.Title }}{{ end }}</title>
+    <meta name="description" content="{{ with .Description }}{{ . }}{{ else }}{{ site.Params.description }}{{ end }}">
+    {{ with .OutputFormats.Get "html" }}<link rel="canonical" href="{{ .Permalink }}">{{ end }}
+    {{ with resources.Get "img/decolint.svg" | minify | fingerprint }}<link rel="icon" type="image/svg+xml" href="{{ .RelPermalink }}">{{ end }}
+    {{ range slice "css/main.css" "css/syntax.css" }}
+      {{ with resources.Get . | minify | fingerprint }}
+        <link rel="stylesheet" href="{{ .RelPermalink }}" integrity="{{ .Data.Integrity }}">
+      {{ end }}
+    {{ end }}
+  </head>
+  <body>
+    <header class="site-header">
+      <a class="site-title" href="{{ site.Home.RelPermalink }}">
+        {{ partial "logo.html" (dict "width" 134 "height" 32 "alt" site.Title) }}
+      </a>
+      <nav>
+        {{ range site.Menus.main }}
+          <a href="{{ .URL }}"{{ if $.IsMenuCurrent "main" . }} aria-current="page"{{ end }}>{{ .Name }}</a>
+        {{ end }}
+      </nav>
+      <a class="site-header__github" href="{{ site.Params.repository }}">decolint on GitHub</a>
+    </header>
+
+    {{ $isRules := eq .Section "rules" }}
+    {{ $hasToc := .Params.toc }}
+    <div class="layout{{ if or $isRules $hasToc }} layout--with-sidebar{{ end }}">
+      {{ if $isRules }}
+        {{ partial "rule-nav.html" . }}
+      {{ else if $hasToc }}
+        {{ partial "page-toc.html" . }}
+      {{ end }}
+      <main>
+        {{ block "main" . }}{{ end }}
+      </main>
+    </div>
+
+    <footer class="site-footer">
+      <p>&copy; {{ now.Year }} Bare Dev Container Project</p>
+      <a href="{{ site.Params.repository }}">decolint on GitHub</a>
+    </footer>
+  </body>
+</html>

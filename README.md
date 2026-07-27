@@ -3,6 +3,7 @@
 [![CI](https://github.com/bare-devcontainer/decolint/actions/workflows/ci.yml/badge.svg)](https://github.com/bare-devcontainer/decolint/actions/workflows/ci.yml)
 [![Attestation Checks](https://github.com/bare-devcontainer/decolint/actions/workflows/attest-check.yml/badge.svg)](https://github.com/bare-devcontainer/decolint/actions/workflows/attest-check.yml)
 
+<!-- decolint:page=_index -->
 decolint is a linter for [Dev Container](https://containers.dev/) configuration
 files: `devcontainer.json`, `devcontainer-feature.json`, and
 `devcontainer-template.json`. It reports mistakes, container privileges, and
@@ -65,7 +66,9 @@ are quieter. See [Set up your project](#set-up-your-project).
   column, and come out as text, JSON, GitHub Actions annotations, or SARIF.
 - **One static binary.** No Node.js, no Docker daemon, no project
   dependencies.
+<!-- decolint:end-page -->
 
+<!-- decolint:page=getting-started -->
 ## Try it
 
 Run it against your own repository, without installing anything:
@@ -331,11 +334,13 @@ Found 3 errors and 0 warnings.
 A Template directory is linted the same way, and the dev container
 configuration the Template ships is linted along with it, including its
 `${templateOption:...}` references.
+<!-- decolint:end-page -->
 
 ---
 
 # Reference
 
+<!-- decolint:page=reference -->
 ## What decolint lints
 
 ```console
@@ -581,6 +586,16 @@ optionally target specific platforms (see [Target
 platforms](#target-platforms)); a rule with no target platform applies to all
 platforms.
 
+Every rule has a page on the [documentation
+site](https://bare-devcontainer.github.io/decolint/rules/) covering
+why it exists, the configuration it accepts and rejects, and the
+specification it is based on. Each rule ID in the table below links to
+its page.
+
+The [SARIF output](#output-formats) links every rule it reports to the
+same page, so the reasoning is one click away from the alert in GitHub
+Code Scanning.
+
 ### Rule categories
 
 Only `correctness` runs by default; the rest are `off` until enabled:
@@ -593,36 +608,37 @@ Only `correctness` runs by default; the rest are `off` until enabled:
 - `style` (default `off`) — discouraged or legacy configuration that still
   works.
 
-<!-- Keep this table sorted by Category (correctness, security, reproducibility, style), then ID, in that priority order. -->
+<!-- decolint:rules-table -->
 | ID | Category | Platform | Description |
 | --- | --- | --- | --- |
-| `conflicting-container-def` | `correctness` | (all) | disallow a devcontainer.json that defines more than one of `image`, `build`, or `dockerComposeFile` |
-| `feature-install-script-not-executable` | `correctness` | (all) | disallow a Feature's `install.sh` that lacks executable permission bits |
-| `id-dir-mismatch` | `correctness` | (all) | disallow a Feature's or Template's `id` that does not match the name of its containing directory |
-| `invalid-semver` | `correctness` | (all) | disallow a Feature's or Template's `version` that is not a valid semantic version |
-| `missing-build-dockerfile` | `correctness` | (all) | disallow a devcontainer.json `build` object that is missing `dockerfile` |
-| `missing-compose-service` | `correctness` | (all) | disallow a devcontainer.json that sets `dockerComposeFile` without `service` |
-| `missing-container-def` | `correctness` | (all) | disallow a devcontainer.json that defines none of `image`, `build`, or `dockerComposeFile` |
-| `missing-feature-install-script` | `correctness` | (all) | disallow a Feature directory without the required `install.sh` install script |
-| `missing-required-props` | `correctness` | (all) | disallow a Feature's or Template's metadata that is missing a required property (`id`, `version`, or `name`) |
-| `missing-workspace-mount-folder` | `correctness` | (all) | disallow a devcontainer.json using `image` or `build` that sets only one of `workspaceMount` or `workspaceFolder` |
-| `no-bind-mount` | `correctness` | `codespaces` | disallow `bind` type entries in `mounts`, which GitHub Codespaces silently ignores except for the Docker socket |
-| `no-host-port-format` | `correctness` | `codespaces` | disallow `host:port` entries in `forwardPorts` and `portsAttributes`, which GitHub Codespaces does not support |
-| `undefined-template-option` | `correctness` | (all) | disallow a `${templateOption:...}` reference to an option not declared in devcontainer-template.json |
-| `no-cap-add-all` | `security` | (all) | disallow granting all Linux capabilities via an `ALL` entry in a devcontainer.json's or Feature's `capAdd` property, or a `--cap-add=ALL` entry in a devcontainer.json's `runArgs` |
-| `no-docker-socket-mount` | `security` | (all) | disallow bind-mounting the host's Docker socket via a devcontainer.json's `mounts` or `runArgs`, which grants the container root-equivalent control over the host |
-| `no-privileged-container` | `security` | (all) | disallow running the container in privileged mode via a devcontainer.json's or Feature's `privileged` property, or a `--privileged` entry in a devcontainer.json's `runArgs` |
-| `no-seccomp-override` | `security` | (all) | disallow overriding the container runtime's default seccomp profile via a devcontainer.json's or Feature's `securityOpt` property, or a `--security-opt seccomp=...` entry in a devcontainer.json's `runArgs` |
-| `no-seccomp-unconfined` | `security` | (all) | disallow disabling seccomp confinement via a devcontainer.json's or Feature's `securityOpt` property, or a `--security-opt seccomp=unconfined` entry in a devcontainer.json's `runArgs` |
-| `require-cap-drop-all` | `security` | (all) | require an `ALL` entry in a devcontainer.json's `capDrop` property, or a `--cap-drop=ALL` entry in `runArgs`, dropping every Linux capability |
-| `require-no-new-privileges` | `security` | (all) | require `no-new-privileges` to be set via a devcontainer.json's `securityOpt` property, or a `--security-opt no-new-privileges...` entry in `runArgs` |
-| `require-non-root` | `security` | (all) | require `remoteUser` or, if unset, `containerUser` to be set to a non-root user |
-| `no-image-latest` | `reproducibility` | (all) | disallow container images without an explicit tag or with the `latest` tag |
-| `pin-extension-version` | `reproducibility` | `vscode`, `codespaces` | disallow a `customizations.vscode.extensions` entry without an explicit pinned version |
-| `pin-feature-version` | `reproducibility` | (all) | disallow a Feature reference without an explicit version or with the `latest` version |
-| `pin-image-digest` | `reproducibility` | (all) | disallow an `image` property that does not pin the image by content digest (e.g. `image@sha256:...`) |
-| `no-app-port` | `style` | (all) | disallow the legacy `appPort` property in favor of `forwardPorts` |
-| `unused-template-option` | `style` | (all) | disallow a Template option that no file in the Template references |
+| [`conflicting-container-def`](https://bare-devcontainer.github.io/decolint/rules/conflicting-container-def/) | `correctness` | (all) | disallow a devcontainer.json that defines more than one of "image", "build", or "dockerComposeFile" |
+| [`feature-install-script-not-executable`](https://bare-devcontainer.github.io/decolint/rules/feature-install-script-not-executable/) | `correctness` | (all) | disallow a Feature's `install.sh` that lacks executable permission bits |
+| [`id-dir-mismatch`](https://bare-devcontainer.github.io/decolint/rules/id-dir-mismatch/) | `correctness` | (all) | disallow a Feature's or Template's "id" that does not match the name of its containing directory |
+| [`invalid-semver`](https://bare-devcontainer.github.io/decolint/rules/invalid-semver/) | `correctness` | (all) | disallow a Feature's or Template's "version" that is not a valid semantic version |
+| [`missing-build-dockerfile`](https://bare-devcontainer.github.io/decolint/rules/missing-build-dockerfile/) | `correctness` | (all) | disallow a devcontainer.json "build" object that is missing "dockerfile" |
+| [`missing-compose-service`](https://bare-devcontainer.github.io/decolint/rules/missing-compose-service/) | `correctness` | (all) | disallow a devcontainer.json that sets "dockerComposeFile" without "service" |
+| [`missing-container-def`](https://bare-devcontainer.github.io/decolint/rules/missing-container-def/) | `correctness` | (all) | disallow a devcontainer.json that defines none of "image", "build", or "dockerComposeFile" |
+| [`missing-feature-install-script`](https://bare-devcontainer.github.io/decolint/rules/missing-feature-install-script/) | `correctness` | (all) | disallow a Feature directory without the required `install.sh` install script |
+| [`missing-required-props`](https://bare-devcontainer.github.io/decolint/rules/missing-required-props/) | `correctness` | (all) | disallow a Feature's or Template's metadata that is missing a required property ("id", "version", or "name") |
+| [`missing-workspace-mount-folder`](https://bare-devcontainer.github.io/decolint/rules/missing-workspace-mount-folder/) | `correctness` | (all) | disallow a devcontainer.json using "image" or "build" that sets only one of "workspaceMount" or "workspaceFolder" |
+| [`no-bind-mount`](https://bare-devcontainer.github.io/decolint/rules/no-bind-mount/) | `correctness` | `codespaces` | disallow "bind" type entries in "mounts", which GitHub Codespaces silently ignores except for the Docker socket |
+| [`no-host-port-format`](https://bare-devcontainer.github.io/decolint/rules/no-host-port-format/) | `correctness` | `codespaces` | disallow "host:port" entries in "forwardPorts" and "portsAttributes", which GitHub Codespaces does not support |
+| [`undefined-template-option`](https://bare-devcontainer.github.io/decolint/rules/undefined-template-option/) | `correctness` | (all) | disallow a `${templateOption:...}` reference to an option not declared in devcontainer-template.json |
+| [`no-cap-add-all`](https://bare-devcontainer.github.io/decolint/rules/no-cap-add-all/) | `security` | (all) | disallow granting all Linux capabilities via an "ALL" entry in the "capAdd" property, or a "--cap-add=ALL" entry in a devcontainer.json's "runArgs" |
+| [`no-docker-socket-mount`](https://bare-devcontainer.github.io/decolint/rules/no-docker-socket-mount/) | `security` | (all) | disallow bind-mounting the host's Docker socket via a devcontainer.json's "mounts" or "runArgs", which grants the container root-equivalent control over the host |
+| [`no-privileged-container`](https://bare-devcontainer.github.io/decolint/rules/no-privileged-container/) | `security` | (all) | disallow running the container in privileged mode via the "privileged" property or a "--privileged" entry in "runArgs" |
+| [`no-seccomp-override`](https://bare-devcontainer.github.io/decolint/rules/no-seccomp-override/) | `security` | (all) | disallow overriding the container runtime's default seccomp profile via a devcontainer.json's or Feature's "securityOpt" property, or a "--security-opt seccomp=..." entry in a devcontainer.json's "runArgs" |
+| [`no-seccomp-unconfined`](https://bare-devcontainer.github.io/decolint/rules/no-seccomp-unconfined/) | `security` | (all) | disallow disabling seccomp confinement via a devcontainer.json's or Feature's "securityOpt" property, or a "--security-opt seccomp=unconfined" entry in a devcontainer.json's "runArgs" |
+| [`require-cap-drop-all`](https://bare-devcontainer.github.io/decolint/rules/require-cap-drop-all/) | `security` | (all) | require a "--cap-drop=ALL" entry in a devcontainer.json's "runArgs", dropping every Linux capability |
+| [`require-no-new-privileges`](https://bare-devcontainer.github.io/decolint/rules/require-no-new-privileges/) | `security` | (all) | require "no-new-privileges" to be set via a devcontainer.json's "securityOpt" property, or a "--security-opt no-new-privileges..." entry in "runArgs" |
+| [`require-non-root`](https://bare-devcontainer.github.io/decolint/rules/require-non-root/) | `security` | (all) | require "remoteUser" or, if unset, "containerUser" to be set to a non-root user |
+| [`no-image-latest`](https://bare-devcontainer.github.io/decolint/rules/no-image-latest/) | `reproducibility` | (all) | disallow container images without an explicit tag or with the "latest" tag |
+| [`pin-extension-version`](https://bare-devcontainer.github.io/decolint/rules/pin-extension-version/) | `reproducibility` | `vscode`, `codespaces` | disallow a "customizations.vscode.extensions" entry without an explicit pinned version |
+| [`pin-feature-version`](https://bare-devcontainer.github.io/decolint/rules/pin-feature-version/) | `reproducibility` | (all) | disallow a Feature reference without an explicit version or with the "latest" version |
+| [`pin-image-digest`](https://bare-devcontainer.github.io/decolint/rules/pin-image-digest/) | `reproducibility` | (all) | disallow an "image" property that does not pin the image by content digest (e.g. "image@sha256:...") |
+| [`no-app-port`](https://bare-devcontainer.github.io/decolint/rules/no-app-port/) | `style` | (all) | disallow the legacy "appPort" property in favor of "forwardPorts" |
+| [`unused-template-option`](https://bare-devcontainer.github.io/decolint/rules/unused-template-option/) | `style` | (all) | disallow a Template option that no file in the Template references |
+<!-- /decolint:rules-table -->
 
 ## Suppressing findings
 
@@ -689,6 +705,7 @@ The container image carries the same kind of attestation:
 gh attestation verify oci://ghcr.io/bare-devcontainer/decolint:<version> \
   --repo bare-devcontainer/decolint
 ```
+<!-- decolint:end-page -->
 
 ## Contributing
 

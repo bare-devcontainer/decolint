@@ -124,26 +124,18 @@ var severityEmoji = map[linter.Severity]string{
 var rulesTableHeader = []string{"Rule ID", "Category", "Platform", "Current"}
 
 // listRules writes a Markdown table of the built-in rules to output: each rule's ID, category,
-// target platforms (or "(all)"), and current severity (its category's default, overridden by cfg
-// if any), in the order rules.Builtin returns them. A rule's default severity is not listed
-// separately since it is uniform within a category; see the README's Rule categories section.
-// Columns are padded to a common width so the raw Markdown source itself reads as an aligned table.
+// target platforms (or "(all)"), and current severity (its category's default, overridden by cfg if
+// any). A rule's default severity is not listed separately since it is uniform within a category;
+// see the README's Rule categories section. Columns are padded to a common width so the raw Markdown
+// source itself reads as an aligned table.
 func listRules(output io.Writer, cfg Config) error {
 	overrides := rules.Overrides{Categories: cfg.Categories, Rules: cfg.Rules}
 	rows := [][]string{rulesTableHeader}
 	for _, reg := range rules.Builtin() {
-		platforms := "(all)"
-		if len(reg.Rule.Platforms) > 0 {
-			names := make([]string, len(reg.Rule.Platforms))
-			for i, p := range reg.Rule.Platforms {
-				names[i] = p.String()
-			}
-			platforms = strings.Join(names, ",")
-		}
 		rows = append(rows, []string{
 			reg.Rule.ID,
 			reg.Rule.Category.String(),
-			platforms,
+			platformNames(reg.Rule.Platforms, ","),
 			severityEmoji[overrides.SeverityFor(reg)],
 		})
 	}
@@ -165,6 +157,19 @@ func listRules(output io.Writer, cfg Config) error {
 		}
 	}
 	return nil
+}
+
+// platformNames renders the platforms a rule targets, separated by sep. A rule that targets none
+// applies to every platform, which is shown as "(all)".
+func platformNames(platforms []linter.Platform, sep string) string {
+	if len(platforms) == 0 {
+		return "(all)"
+	}
+	names := make([]string, len(platforms))
+	for i, p := range platforms {
+		names[i] = p.String()
+	}
+	return strings.Join(names, sep)
 }
 
 // columnWidths returns, for each column in rows, the display width of its widest cell, so every

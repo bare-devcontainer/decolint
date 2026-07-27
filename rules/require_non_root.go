@@ -16,10 +16,41 @@ import (
 var RequireNonRoot = &linter.Rule{
 	ID:          "require-non-root",
 	Description: `require "remoteUser" or, if unset, "containerUser" to be set to a non-root user`,
-	Category:    linter.CategorySecurity,
-	FileTypes:   []linter.FileType{linter.Devcontainer},
-	Paths:       []string{""},
-	Check:       checkRequireNonRoot,
+	LongDescription: `"remoteUser" defaults to whatever user the container runs as, which for most images is root. Everything
+the developer's session drives then runs as root: lifecycle scripts, terminals, and the language servers
+and build tools the editor starts, so a compromised dependency runs with full control of the container.
+Naming an unprivileged user — as the specification's own images do — costs nothing and contains it.`,
+	References: []string{
+		`https://containers.dev/implementors/json_reference/#remoteUser`,
+		`https://containers.dev/implementors/spec/#users`,
+	},
+	Category:  linter.CategorySecurity,
+	FileTypes: []linter.FileType{linter.Devcontainer},
+	Paths:     []string{""},
+	Example: linter.Example{
+		Bad: linter.Snippet{
+			Files: []linter.ExampleFile{
+				{Path: `devcontainer.json`, Content: `{
+  "image": "mcr.microsoft.com/devcontainers/base:ubuntu",
+  "remoteUser": "root"
+}
+`},
+			},
+		},
+		Good: linter.Snippet{
+			Files: []linter.ExampleFile{
+				{Path: `devcontainer.json`, Content: `{
+  "image": "mcr.microsoft.com/devcontainers/base:ubuntu",
+  "remoteUser": "vscode"
+}
+`},
+			},
+		},
+		Note: "`" + `remoteUser` + "`" + ` is what lifecycle scripts and the editor's remote session run as,
+and it wins over ` + "`" + `containerUser` + "`" + `; a rule that finds neither reports the
+container's default, which is ` + "`" + `root` + "`" + ` for most images.`,
+	},
+	Check: checkRequireNonRoot,
 }
 
 func checkRequireNonRoot(_ *linter.Context, node *linter.Node) []linter.Finding {

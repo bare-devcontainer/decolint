@@ -1,0 +1,6 @@
+{{ define "main" }}
+  <h1 class="landing-title">
+    {{ partial "logo.html" (dict "width" 268 "height" 64 "alt" .Title) }}
+  </h1>
+  {{ .Content }}
+{{ end }}

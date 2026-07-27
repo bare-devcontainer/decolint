@@ -129,6 +129,11 @@ th {
   }
 }
 
+/* The landing page's own <h1> is the wordmark too, larger than the header's copy of it. */
+.landing-title .site-logo {
+  height: 48px;
+}
+
 .site-header nav {
   display: flex;
   gap: 1.25rem;

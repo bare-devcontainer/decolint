@@ -16,14 +16,7 @@
   <body>
     <header class="site-header">
       <a class="site-title" href="{{ site.Home.RelPermalink }}">
-        {{/* Light/dark variants of the wordmark logo, one hidden by prefers-color-scheme in
-        main.css — matching how the rest of the site's colors switch. */}}
-        {{ with resources.Get "img/decolint_logo.svg" | minify | fingerprint }}
-          <img class="site-logo site-logo--light" src="{{ .RelPermalink }}" width="134" height="32" alt="{{ site.Title }}">
-        {{ end }}
-        {{ with resources.Get "img/decolint_logo_dark.svg" | minify | fingerprint }}
-          <img class="site-logo site-logo--dark" src="{{ .RelPermalink }}" width="134" height="32" alt="{{ site.Title }}">
-        {{ end }}
+        {{ partial "logo.html" (dict "width" 134 "height" 32 "alt" site.Title) }}
       </a>
       <nav>
         {{ range site.Menus.main }}

@@ -1,6 +1,6 @@
 // Command docgen generates the documentation site's content and the README's rules table from
 // rules/*.go and README.md, so neither has to be hand-kept in sync with the other. It is not part of
-// the decolint binary; "make site" runs it before Hugo builds the site (see the Makefile).
+// the decolint binary; "make docs" runs it before Hugo builds the site (see the Makefile).
 package main
 
 import (

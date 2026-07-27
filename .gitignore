@@ -24,7 +24,8 @@ profile.cov
 /docgen
 /docs/public/
 /docs/resources/
-# Rule pages and the README-derived pages; see cmd/docgen and "make site-content".
+# Rule pages, the README-derived pages, and the generated syntax stylesheet; see cmd/docgen and
+# "make docs-content"/"make docs-syntax".
 /docs/.generated/
 # Hugo writes its build lock in the directory it runs from, which is not always docs/.
 .hugo_build.lock

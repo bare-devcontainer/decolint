@@ -1,0 +1,9 @@
+---
+title: {{ .Title }}
+description: {{ yamlQuote .Description }}
+{{- if .TOC }}
+toc: true
+{{- end }}
+---
+
+{{ .Body }}

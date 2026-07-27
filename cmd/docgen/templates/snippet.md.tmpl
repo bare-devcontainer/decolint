@@ -1,0 +1,11 @@
+{{- define "snippet" -}}
+{{- /* Actions sit flush against the text so that the only newlines emitted are the ones shown here:
+one blank line between files, and none after the last fence, leaving the calling template in charge
+of the spacing around a snippet. */ -}}
+{{ range $i, $f := .Files }}{{ if $i }}
+
+{{ end }}{{ with $f.Heading }}### {{ . }}
+
+{{ end }}```{{ $f.Lang }}
+{{ $f.Content }}```{{ end }}
+{{- end -}}

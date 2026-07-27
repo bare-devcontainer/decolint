@@ -1,0 +1,4 @@
+| ID | Category | Platform | Description |
+| --- | --- | --- | --- |
+{{ range . }}| [`{{ .ID }}`]({{ .URL }}) | `{{ .Category }}` | {{ .Platform }} | {{ .Description }} |
+{{ end -}}

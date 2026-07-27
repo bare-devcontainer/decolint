@@ -15,20 +15,55 @@ import (
 // page must point there instead ("reference.md#config-file"), which the goldmark link render hook
 // enabled in hugo.toml resolves to that page's real address.
 
-// readmePages are the pages splitReadme extracts from README.md, keyed by output file name (without
-// extension). Each must appear in README.md exactly once, delimited by
-// "<!-- decolint:page=NAME -->" and "<!-- decolint:end-page -->" (see splitReadme). Content outside
-// any marked page — the title, badges, the "---" before "# Reference", "## Contributing" — is left
-// where it is and never touched by docgen.
-var readmePages = []string{"_index", "getting-started", "reference"}
+// readmePage is one page split out of README.md, as templates/readme-page.md.tmpl renders it: Name
+// is the output file name (without extension), the rest is the page's front matter and, once
+// splitReadme has extracted it, its Body. TOC asks the layout for a table of contents; see
+// docs/layouts/baseof.html and page-toc.html.
+type readmePage struct {
+	Name        string
+	Title       string
+	Description string
+	TOC         bool
+	Body        string
+}
+
+// readmePages are the pages splitReadme extracts from README.md. Each must appear in README.md
+// exactly once, delimited by "<!-- decolint:page=NAME -->" and "<!-- decolint:end-page -->" (see
+// splitReadme). Content outside any marked page — the title, badges, the "---" before
+// "# Reference", "## Contributing" — is left where it is and never touched by docgen.
+var readmePages = []readmePage{
+	{
+		Name:        "_index",
+		Title:       "decolint",
+		Description: "A linter for Dev Container configuration files.",
+	},
+	{
+		Name:        "getting-started",
+		Title:       "Getting started",
+		Description: "Install decolint, choose what it reports, and wire it into CI.",
+		TOC:         true,
+	},
+	{
+		Name:        "reference",
+		Title:       "Reference",
+		Description: "Every flag, config file member, and output format decolint supports.",
+		TOC:         true,
+	},
+}
+
+// readmePageNames returns the name of every page in readmePages, in order.
+func readmePageNames() []string {
+	names := make([]string, len(readmePages))
+	for i, p := range readmePages {
+		names[i] = p.Name
+	}
+	return names
+}
 
 const (
 	readmePageStartPrefix = "<!-- decolint:page="
 	readmePageStartSuffix = " -->"
 	readmePageEnd         = "<!-- decolint:end-page -->"
-	landingDescription    = "A linter for Dev Container configuration files."
-	gettingStartedSummary = "Install decolint, choose what it reports, and wire it into CI."
-	referenceSummary      = "Every flag, config file member, and output format decolint supports."
 )
 
 // writeReadmePages splits the README at readmePath into the landing, getting-started and reference
@@ -71,30 +106,23 @@ func splitReadme(src string) (map[string]string, error) {
 	// slug would otherwise resolve to whichever page Go's map iteration visited last, silently and
 	// differently from run to run.
 	slugPage := map[string]string{}
-	for _, name := range readmePages {
-		for _, h := range scanHeadings(bodies[name]) {
+	for _, p := range readmePages {
+		for _, h := range scanHeadings(bodies[p.Name]) {
 			if existing, ok := slugPage[h.Slug]; ok {
-				return nil, fmt.Errorf("heading %q (slug %q) appears on both %q and %q", h.Text, h.Slug, existing, name)
+				return nil, fmt.Errorf("heading %q (slug %q) appears on both %q and %q", h.Text, h.Slug, existing, p.Name)
 			}
-			slugPage[h.Slug] = name
+			slugPage[h.Slug] = p.Name
 		}
-	}
-
-	// Getting started and Reference are both long enough, with enough ## sections, to be worth a
-	// table of contents; see docs/layouts/baseof.html and page-toc.html.
-	frontMatter := map[string]string{
-		"_index":          "title: decolint\ndescription: " + yamlSingleQuoted(landingDescription),
-		"getting-started": "title: Getting started\ndescription: " + yamlSingleQuoted(gettingStartedSummary) + "\ntoc: true",
-		"reference":       "title: Reference\ndescription: " + yamlSingleQuoted(referenceSummary) + "\ntoc: true",
 	}
 
 	pages := make(map[string]string, len(bodies))
-	for _, name := range readmePages {
-		rewritten, err := rewriteAnchors(bodies[name], name, slugPage)
+	for _, p := range readmePages {
+		rewritten, err := rewriteAnchors(bodies[p.Name], p.Name, slugPage)
 		if err != nil {
 			return nil, err
 		}
-		pages[name] = "---\n" + frontMatter[name] + "\n---\n\n" + rewritten + "\n"
+		p.Body = rewritten
+		pages[p.Name] = mustRender("readme-page.md.tmpl", p)
 	}
 	return pages, nil
 }
@@ -119,8 +147,8 @@ func readmePageBodies(lines []string) (map[string]string, error) {
 			if openName != "" {
 				return nil, fmt.Errorf("line %d: page %q starts before page %q ends", i+1, name, openName)
 			}
-			if !slices.Contains(readmePages, name) {
-				return nil, fmt.Errorf("line %d: unknown page %q (want one of %v)", i+1, name, readmePages)
+			if !slices.Contains(readmePageNames(), name) {
+				return nil, fmt.Errorf("line %d: unknown page %q (want one of %v)", i+1, name, readmePageNames())
 			}
 			if _, ok := bodies[name]; ok {
 				return nil, fmt.Errorf("line %d: page %q marked more than once", i+1, name)
@@ -131,7 +159,7 @@ func readmePageBodies(lines []string) (map[string]string, error) {
 	if openName != "" {
 		return nil, fmt.Errorf("page %q has no %q", openName, readmePageEnd)
 	}
-	for _, name := range readmePages {
+	for _, name := range readmePageNames() {
 		if _, ok := bodies[name]; !ok {
 			return nil, fmt.Errorf("README.md has no %s%s%s ... %s for page %q", readmePageStartPrefix, name, readmePageStartSuffix, readmePageEnd, name)
 		}

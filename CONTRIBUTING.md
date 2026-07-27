@@ -145,6 +145,11 @@ rewritten to point there; write new cross-references the same way you
 already do (`[Config file](#config-file)`) and the generator will
 resolve them.
 
+The layout of everything the generator writes — the rule pages, the
+README rules table, and each split-out page's front matter — lives in
+[`cmd/docgen/templates/`](cmd/docgen/templates/), so changing how a
+page looks is an edit to a template rather than to Go code.
+
 When implementing or reviewing rules, consult the Dev Container
 specification at [containers.dev](https://containers.dev/) to confirm
 the behavior matches the spec:

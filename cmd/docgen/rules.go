@@ -30,47 +30,66 @@ func writeRulePages(dir string) error {
 	return nil
 }
 
+// rulePageData is what templates/rule.md.tmpl renders: one rule, with every list already formatted
+// as the string the page shows.
+type rulePageData struct {
+	ID              string
+	Category        string
+	Platforms       string
+	FileTypes       string
+	Description     string
+	LongDescription string
+	Bad             snippetData
+	Good            snippetData
+	Note            string
+	References      []string
+}
+
 // renderRulePage renders one rule's documentation page: front matter matching what
 // docs/layouts/page.html reads, the rationale, a Bad and a Good example, and its references.
 func renderRulePage(r *linter.Rule) string {
-	var b strings.Builder
-
-	fmt.Fprintf(&b, "---\n")
-	fmt.Fprintf(&b, "title: %s\n", r.ID)
-	fmt.Fprintf(&b, "category: %s\n", r.Category)
-	fmt.Fprintf(&b, "platforms: [%s]\n", strings.Join(platformNames(r.Platforms), ", "))
-	fmt.Fprintf(&b, "file_types: [%s]\n", strings.Join(fileTypeNames(r.FileTypes), ", "))
-	fmt.Fprintf(&b, "description: %s\n", yamlSingleQuoted(r.Description))
-	fmt.Fprintf(&b, "---\n\n")
-
-	fmt.Fprintf(&b, "## Why\n\n%s\n\n", r.LongDescription)
-
-	fmt.Fprintf(&b, "## Bad\n\n%s\n", strings.TrimRight(renderSnippet(r.Example.Bad), "\n"))
-	fmt.Fprintf(&b, "\n## Good\n\n%s\n", strings.TrimRight(renderSnippet(r.Example.Good), "\n"))
-	if r.Example.Note != "" {
-		fmt.Fprintf(&b, "\n%s\n", r.Example.Note)
+	data := rulePageData{
+		ID:              r.ID,
+		Category:        r.Category.String(),
+		Platforms:       strings.Join(platformNames(r.Platforms), ", "),
+		FileTypes:       strings.Join(fileTypeNames(r.FileTypes), ", "),
+		Description:     r.Description,
+		LongDescription: r.LongDescription,
+		Bad:             snippet(r.Example.Bad),
+		Good:            snippet(r.Example.Good),
+		Note:            r.Example.Note,
+		References:      r.References,
 	}
-
-	fmt.Fprintf(&b, "\n## References\n\n")
-	for _, ref := range r.References {
-		fmt.Fprintf(&b, "- <%s>\n", ref)
-	}
-
-	return b.String()
+	return mustRender("rule.md.tmpl", data)
 }
 
-// renderSnippet renders a [linter.Snippet] as one fenced code block per file, each preceded by a
-// "### `path`" heading when the snippet has more than one file, or when a non-default Mode is the
-// only thing distinguishing the file from its counterpart in the other half of the example (e.g. an
-// install.sh whose content is identical in Bad and Good).
-func renderSnippet(s linter.Snippet) string {
-	var b strings.Builder
-	for _, f := range s.Files {
+// snippetData is what the "snippet" template renders: one example's files, each a fenced code block
+// optionally introduced by a heading.
+type snippetData struct {
+	Files []snippetFile
+}
+
+// snippetFile is one file of an example: the text of its "### " heading (empty for none), the
+// fenced block's language, and its content, guaranteed to end in a newline.
+type snippetFile struct {
+	Heading string
+	Lang    string
+	Content string
+}
+
+// snippet builds the render data for a [linter.Snippet]. A file gets a heading when the snippet has
+// more than one file, or when a non-default Mode is the only thing distinguishing the file from its
+// counterpart in the other half of the example (e.g. an install.sh whose content is identical in Bad
+// and Good).
+func snippet(s linter.Snippet) snippetData {
+	files := make([]snippetFile, len(s.Files))
+	for i, f := range s.Files {
+		heading := ""
 		switch {
 		case f.Mode != 0:
-			fmt.Fprintf(&b, "### `%s` (mode %04o)\n\n", f.Path, f.Mode.Perm())
+			heading = fmt.Sprintf("`%s` (mode %04o)", f.Path, f.Mode.Perm())
 		case len(s.Files) > 1:
-			fmt.Fprintf(&b, "### `%s`\n\n", f.Path)
+			heading = fmt.Sprintf("`%s`", f.Path)
 		}
 		content := f.Content
 		if !strings.HasSuffix(content, "\n") {
@@ -79,9 +98,9 @@ func renderSnippet(s linter.Snippet) string {
 			// rest of the page.
 			content += "\n"
 		}
-		fmt.Fprintf(&b, "```%s\n%s```\n\n", codeLang(f.Path), content)
+		files[i] = snippetFile{Heading: heading, Lang: codeLang(f.Path), Content: content}
 	}
-	return b.String()
+	return snippetData{Files: files}
 }
 
 // codeLang returns the fenced-block language for a file named path, guessed from its extension.
@@ -154,6 +173,15 @@ func updateReadmeRulesTable(path string) error {
 	return nil
 }
 
+// tableRow is one row of the README rules table, as templates/rules-table.md.tmpl renders it.
+type tableRow struct {
+	ID          string
+	URL         string
+	Category    string
+	Platform    string
+	Description string
+}
+
 // renderRulesTable renders every built-in rule as a Markdown table row, each ID linking to its
 // documentation page, sorted by category then ID.
 func renderRulesTable() string {
@@ -165,20 +193,24 @@ func renderRulesTable() string {
 		return cmp.Compare(a.Rule.ID, b.Rule.ID)
 	})
 
-	var b strings.Builder
-	b.WriteString("| ID | Category | Platform | Description |\n")
-	b.WriteString("| --- | --- | --- | --- |\n")
-	for _, reg := range regs {
+	rows := make([]tableRow, len(regs))
+	for i, reg := range regs {
 		r := reg.Rule
 		platform := "(all)"
 		if names := platformNames(r.Platforms); len(names) > 0 {
 			quoted := make([]string, len(names))
-			for i, n := range names {
-				quoted[i] = "`" + n + "`"
+			for j, n := range names {
+				quoted[j] = "`" + n + "`"
 			}
 			platform = strings.Join(quoted, ", ")
 		}
-		fmt.Fprintf(&b, "| [`%s`](%s) | `%s` | %s | %s |\n", r.ID, rules.DocsURL(r.ID), r.Category, platform, r.Description)
+		rows[i] = tableRow{
+			ID:          r.ID,
+			URL:         rules.DocsURL(r.ID),
+			Category:    r.Category.String(),
+			Platform:    platform,
+			Description: r.Description,
+		}
 	}
-	return b.String()
+	return mustRender("rules-table.md.tmpl", rows)
 }

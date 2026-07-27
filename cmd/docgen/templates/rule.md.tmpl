@@ -1,0 +1,26 @@
+---
+title: {{ .ID }}
+category: {{ .Category }}
+platforms: [{{ .Platforms }}]
+file_types: [{{ .FileTypes }}]
+description: {{ yamlQuote .Description }}
+---
+
+## Why
+
+{{ .LongDescription }}
+
+## Bad
+
+{{ template "snippet" .Bad }}
+
+## Good
+
+{{ template "snippet" .Good }}
+{{ with .Note }}
+{{ . }}
+{{ end }}
+## References
+
+{{ range .References }}- <{{ . }}>
+{{ end -}}

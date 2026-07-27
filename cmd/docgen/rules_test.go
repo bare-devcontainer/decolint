@@ -149,33 +149,34 @@ func TestRenderRulePage_ModeCaption(t *testing.T) {
 	}
 }
 
-// TestRenderSnippet_ModeCaptionIsPermissionBitsOnly checks that the "(mode ####)" caption reports
-// only the POSIX permission bits, not the type bits fs.FileMode also carries (e.g. fs.ModeDir),
-// which would otherwise inflate the printed octal value beyond four digits.
-func TestRenderSnippet_ModeCaptionIsPermissionBitsOnly(t *testing.T) {
+// TestSnippet_ModeCaptionIsPermissionBitsOnly checks that the "(mode ####)" caption reports only
+// the POSIX permission bits, not the type bits fs.FileMode also carries (e.g. fs.ModeDir), which
+// would otherwise inflate the printed octal value beyond four digits.
+func TestSnippet_ModeCaptionIsPermissionBitsOnly(t *testing.T) {
 	t.Parallel()
 
-	got := renderSnippet(linter.Snippet{
+	got := snippet(linter.Snippet{
 		Files: []linter.ExampleFile{{Path: "some-dir", Content: "x\n", Mode: fs.ModeDir | 0o755}},
 	})
-	if !strings.Contains(got, "(mode 0755)") {
-		t.Errorf("renderSnippet() mode caption = %q, want it to contain \"(mode 0755)\"", got)
+	if want := "`some-dir` (mode 0755)"; got.Files[0].Heading != want {
+		t.Errorf("snippet() heading = %q, want %q", got.Files[0].Heading, want)
 	}
 }
 
-// TestRenderSnippet_ContentWithoutTrailingNewline guards against an unclosed fence: the closing
-// "```" has to start its own line (a markdown renderer does not recognize one run straight into the
-// preceding content as a close, and treats everything after as still inside the code block), so
-// content missing a trailing newline needs one added before it.
-func TestRenderSnippet_ContentWithoutTrailingNewline(t *testing.T) {
+// TestSnippet_ContentWithoutTrailingNewline guards against an unclosed fence: the closing "```" has
+// to start its own line (a markdown renderer does not recognize one run straight into the preceding
+// content as a close, and treats everything after as still inside the code block), so content
+// missing a trailing newline needs one added before it.
+func TestSnippet_ContentWithoutTrailingNewline(t *testing.T) {
 	t.Parallel()
 
-	got := renderSnippet(linter.Snippet{
+	data := snippet(linter.Snippet{
 		Files: []linter.ExampleFile{{Path: "devcontainer.json", Content: "{}"}},
 	})
-	want := "```jsonc\n{}\n```\n\n"
+	got := mustRender("snippet", data)
+	want := "```jsonc\n{}\n```"
 	if got != want {
-		t.Errorf("renderSnippet() = %q, want %q", got, want)
+		t.Errorf("mustRender(\"snippet\") = %q, want %q", got, want)
 	}
 }
 
@@ -203,6 +204,22 @@ func TestWriteRulePages(t *testing.T) {
 	}
 	if !strings.Contains(string(data), "title: no-image-latest") {
 		t.Errorf("%s missing expected title, got:\n%s", path, data)
+	}
+}
+
+// TestWriteRulePages_UnwritableDir checks that a rules directory that cannot be created is
+// reported: the site would otherwise be published with its whole rule reference silently missing.
+func TestWriteRulePages_UnwritableDir(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	// A plain file where the rules directory has to go: MkdirAll fails on it whatever the process
+	// runs as, unlike a permission bit root ignores.
+	if err := os.WriteFile(filepath.Join(dir, "rules"), nil, 0o644); err != nil {
+		t.Fatalf("write blocker file: %v", err)
+	}
+	if err := writeRulePages(dir); err == nil {
+		t.Error("writeRulePages into a dir whose rules path is a file: got nil error, want one")
 	}
 }
 
@@ -264,6 +281,14 @@ func TestUpdateReadmeRulesTable(t *testing.T) {
 	}
 	if string(got2) != string(got) {
 		t.Errorf("updateReadmeRulesTable is not idempotent:\nfirst:\n%s\nsecond:\n%s", got, got2)
+	}
+}
+
+func TestUpdateReadmeRulesTable_MissingFile(t *testing.T) {
+	t.Parallel()
+
+	if err := updateReadmeRulesTable(filepath.Join(t.TempDir(), "absent.md")); err == nil {
+		t.Fatal("updateReadmeRulesTable on a missing file: got nil error, want one")
 	}
 }
 

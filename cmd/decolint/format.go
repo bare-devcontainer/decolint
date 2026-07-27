@@ -52,8 +52,8 @@ func sarifRules(cfg Config) []format.SARIFRule {
 }
 
 // ruleDocs adapts every built-in rule, and the severity cfg currently gives it, into the shape
-// "decolint -rules -format=json" and cmd/docgen consume, so neither package depends on the rules
-// package.
+// "decolint -rules -format=json" prints ([format.RuleDoc]), so the format package itself does not
+// need to depend on the rules package to describe it.
 func ruleDocs(cfg Config) []format.RuleDoc {
 	overrides := rules.Overrides{Categories: cfg.Categories, Rules: cfg.Rules}
 	builtin := rules.Builtin()

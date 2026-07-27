@@ -132,8 +132,9 @@ var rulesTableHeader = []string{"Rule ID", "Category", "Platform", "Current"}
 //     (or "(all)"), and current severity (its category's default, overridden by cfg if any). A
 //     rule's default severity is not listed separately since it is uniform within a category; see
 //     the README's Rule categories section.
-//   - "json": the full catalog (description, rationale, references, example, docs address,
-//     current severity), for tooling — cmd/docgen builds the documentation site from it.
+//   - "json": the full catalog (description, rationale, references, example, docs address, current
+//     severity — see [format.RuleDoc]), for tooling outside this module; cmd/docgen, which builds
+//     the documentation site, does not use this and imports the rules package directly instead.
 //
 // "github" and "sarif" describe lint findings, not the rule catalog itself, so they are an error
 // here.

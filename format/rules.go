@@ -1,8 +1,10 @@
 package format
 
-// RuleDoc is the full documentation of one built-in rule. It is the wire shape of
-// "decolint -rules -format=json", and is what the documentation site is generated from (see
-// cmd/docgen), so a reader of the JSON and a reader of the site see the same data.
+// RuleDoc is the full documentation of one built-in rule: the wire shape of
+// "decolint -rules -format=json", for tooling outside this module that wants the rule catalog
+// without importing the rules package. cmd/docgen, which builds the documentation site, imports
+// rules directly instead of going through this JSON, so the two have no relationship to keep in
+// sync — a change to one has no bearing on the other.
 type RuleDoc struct {
 	ID              string      `json:"id"`
 	Description     string      `json:"description"`

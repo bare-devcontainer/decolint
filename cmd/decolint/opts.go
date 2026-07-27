@@ -68,7 +68,7 @@ func parseOptions(args []string, output io.Writer) (Options, error) {
 	fs.StringVar(&colorFlag, "color", "", "when to color the text output: auto (default; only when writing to a terminal), always, or never")
 	fs.BoolVar(&opts.Merge, "merge", false, "lint the merged (effective) configuration, including referenced Features and base image metadata; overrides the config file's \"merge\" member")
 	fs.BoolVar(&opts.Version, "version", false, "print version information and exit")
-	fs.BoolVar(&opts.ListRules, "rules", false, "print the built-in rules, then exit: a Markdown table (category, target platforms, current severity) by default, or the full catalog as JSON with -format=json; -format=github or =sarif is an error here")
+	fs.BoolVar(&opts.ListRules, "rules", false, "print the built-in rules as a Markdown table (category, target platforms, current severity), then exit")
 	fs.BoolVar(&opts.Init, "init", false, "write a new .decolint.jsonc config file listing every rule at its default severity, then exit")
 	fs.Usage = func() { _ = usage(fs) }
 	if err := fs.Parse(args); err != nil {

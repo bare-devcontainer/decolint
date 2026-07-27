@@ -6,7 +6,6 @@ import (
 	"strings"
 
 	"github.com/bare-devcontainer/decolint/format"
-	"github.com/bare-devcontainer/decolint/linter"
 	"github.com/bare-devcontainer/decolint/rules"
 )
 
@@ -49,60 +48,4 @@ func sarifRules(cfg Config) []format.SARIFRule {
 		}
 	}
 	return out
-}
-
-// ruleDocs adapts every built-in rule, and the severity cfg currently gives it, into the shape
-// "decolint -rules -format=json" prints ([format.RuleDoc]), so the format package itself does not
-// need to depend on the rules package to describe it.
-func ruleDocs(cfg Config) []format.RuleDoc {
-	overrides := rules.Overrides{Categories: cfg.Categories, Rules: cfg.Rules}
-	builtin := rules.Builtin()
-	out := make([]format.RuleDoc, len(builtin))
-	for i, reg := range builtin {
-		out[i] = format.RuleDoc{
-			ID:              reg.Rule.ID,
-			Description:     reg.Rule.Description,
-			LongDescription: reg.Rule.LongDescription,
-			References:      reg.Rule.References,
-			Category:        reg.Rule.Category.String(),
-			Platforms:       platformStrings(reg.Rule.Platforms),
-			FileTypes:       fileTypeStrings(reg.Rule.FileTypes),
-			Example:         ruleExample(reg.Rule.Example),
-			DocsURL:         rules.DocsURL(reg.Rule.ID),
-			Severity:        overrides.SeverityFor(reg).String(),
-		}
-	}
-	return out
-}
-
-func platformStrings(platforms []linter.Platform) []string {
-	out := make([]string, len(platforms))
-	for i, p := range platforms {
-		out[i] = p.String()
-	}
-	return out
-}
-
-func fileTypeStrings(fileTypes []linter.FileType) []string {
-	out := make([]string, len(fileTypes))
-	for i, ft := range fileTypes {
-		out[i] = string(ft)
-	}
-	return out
-}
-
-func ruleExample(ex linter.Example) format.RuleExample {
-	return format.RuleExample{
-		Bad:  ruleSnippet(ex.Bad),
-		Good: ruleSnippet(ex.Good),
-		Note: ex.Note,
-	}
-}
-
-func ruleSnippet(s linter.Snippet) format.RuleSnippet {
-	files := make([]format.RuleExampleFile, len(s.Files))
-	for i, f := range s.Files {
-		files[i] = format.RuleExampleFile{Path: f.Path, Content: f.Content, Mode: uint32(f.Mode.Perm())}
-	}
-	return format.RuleSnippet{Files: files, DirName: s.DirName}
 }

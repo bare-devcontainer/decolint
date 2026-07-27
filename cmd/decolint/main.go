@@ -2,9 +2,7 @@
 package main
 
 import (
-	"bytes"
 	"context"
-	"encoding/json/v2"
 	"errors"
 	"flag"
 	"fmt"
@@ -92,7 +90,7 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer, getenv fu
 	cfg = mergeConfig(opts, cfg)
 
 	if opts.ListRules {
-		if err := listRules(stdout, cfg, opts.Format); err != nil {
+		if err := listRules(stdout, cfg); err != nil {
 			_, _ = fmt.Fprintln(stderr, progName+":", err)
 			return exitCodeError
 		}
@@ -125,33 +123,12 @@ var severityEmoji = map[linter.Severity]string{
 // rulesTableHeader is the header row of the -rules Markdown table.
 var rulesTableHeader = []string{"Rule ID", "Category", "Platform", "Current"}
 
-// listRules writes the built-in rules to output, in the format the format argument names (the raw
-// -format flag value, not cfg.Format: a config file's "format" selects the lint-findings format, and
-// has no bearing on -rules, which lists the catalog instead):
-//   - "" or "text" (the default): a Markdown table of each rule's ID, category, target platforms
-//     (or "(all)"), and current severity (its category's default, overridden by cfg if any). A
-//     rule's default severity is not listed separately since it is uniform within a category; see
-//     the README's Rule categories section.
-//   - "json": the full catalog (description, rationale, references, example, docs address, current
-//     severity — see [format.RuleDoc]), for tooling outside this module; cmd/docgen, which builds
-//     the documentation site, does not use this and imports the rules package directly instead.
-//
-// "github" and "sarif" describe lint findings, not the rule catalog itself, so they are an error
-// here.
-func listRules(output io.Writer, cfg Config, format string) error {
-	switch strings.ToLower(format) {
-	case "", "text":
-		return listRulesText(output, cfg)
-	case "json":
-		return listRulesJSON(output, cfg)
-	default:
-		return fmt.Errorf("unknown format %q for -rules (want one of: text, json)", format)
-	}
-}
-
-// listRulesText writes a Markdown table of the built-in rules to output; see [listRules]. Columns
-// are padded to a common width so the raw Markdown source itself reads as an aligned table.
-func listRulesText(output io.Writer, cfg Config) error {
+// listRules writes a Markdown table of the built-in rules to output: each rule's ID, category,
+// target platforms (or "(all)"), and current severity (its category's default, overridden by cfg if
+// any). A rule's default severity is not listed separately since it is uniform within a category;
+// see the README's Rule categories section. Columns are padded to a common width so the raw Markdown
+// source itself reads as an aligned table.
+func listRules(output io.Writer, cfg Config) error {
 	overrides := rules.Overrides{Categories: cfg.Categories, Rules: cfg.Rules}
 	rows := [][]string{rulesTableHeader}
 	for _, reg := range rules.Builtin() {
@@ -178,21 +155,6 @@ func listRulesText(output io.Writer, cfg Config) error {
 		if err := writeTableRow(output, row, widths); err != nil {
 			return err
 		}
-	}
-	return nil
-}
-
-// listRulesJSON writes the full rule catalog (see [format.RuleDoc]) to output as a JSON array, one
-// entry per built-in rule in rules.Builtin order. It marshals into an in-memory buffer first so
-// that a failure never leaves partial JSON on output.
-func listRulesJSON(output io.Writer, cfg Config) error {
-	var buf bytes.Buffer
-	if err := json.MarshalWrite(&buf, ruleDocs(cfg)); err != nil {
-		return fmt.Errorf("marshal rules: %w", err)
-	}
-	buf.WriteByte('\n')
-	if _, err := output.Write(buf.Bytes()); err != nil {
-		return fmt.Errorf("write rules: %w", err)
 	}
 	return nil
 }

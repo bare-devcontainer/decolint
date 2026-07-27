@@ -95,9 +95,12 @@ func checkMyRule(ctx *linter.Context, node *linter.Node) []linter.Finding {
 ```
 
 `LongDescription` is Markdown; write it for the user who just hit the
-finding, since `decolint -rules -format=json` and the SARIF output
-both carry it, and it is what the documentation site is built from
-(see below).
+finding, since it is what the rule's own page on the documentation
+site is built from (see below), and what `decolint -rules
+-format=json` carries as the rule catalog. The SARIF output does not
+repeat it — each alert links to the rule's page instead, so a reader
+who wants the reasoning is one click away rather than seeing it
+duplicated inline.
 
 `Example` is machine-checked, not just illustrative:
 [`rules/doc_test.go`](rules/doc_test.go) lints `Bad` with the rule as

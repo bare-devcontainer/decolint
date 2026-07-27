@@ -30,12 +30,6 @@ on:
 
 permissions: {}
 
-# One deployment at a time, and never cancel one in flight: a half-published site is worse than a
-# late one.
-concurrency:
-  group: pages
-  cancel-in-progress: false
-
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -68,6 +62,13 @@ jobs:
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
+    # One deployment at a time, and never cancel one in flight: a half-published site is worse than
+    # a late one. Scoped to this job alone, not the workflow: a PR's build must never queue behind,
+    # or get cancelled by, a push to main entering this group — only deploy needs the serialization,
+    # and only push events (never pull_request, per the "if" above) ever reach it.
+    concurrency:
+      group: pages
+      cancel-in-progress: false
     steps:
       - id: deployment
         uses: actions/deploy-pages@cd2ce8fcbc39b97be8ca5fce6e763baed58fa128 # v5.0.0

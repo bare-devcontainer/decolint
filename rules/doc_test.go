@@ -16,7 +16,7 @@ import (
 // explaining why it exists, References that justify it, and an Example whose Bad configuration the
 // rule must report and whose Good configuration it must not. These tests are what keeps a new rule
 // from landing undocumented or shipping an example that doesn't actually demonstrate the rule, and
-// what the documentation site (see cmd/docgen) and "decolint -rules -format=json" are generated from.
+// what the documentation site (see cmd/docgen) is generated from.
 
 func TestBuiltin_Descriptions(t *testing.T) {
 	t.Parallel()

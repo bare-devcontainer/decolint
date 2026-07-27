@@ -1,5 +1,6 @@
 # decolint
 
+![GitHub Release](https://img.shields.io/github/v/release/bare-devcontainer/decolint)
 [![CI](https://github.com/bare-devcontainer/decolint/actions/workflows/ci.yml/badge.svg)](https://github.com/bare-devcontainer/decolint/actions/workflows/ci.yml)
 [![Attestation Checks](https://github.com/bare-devcontainer/decolint/actions/workflows/attest-check.yml/badge.svg)](https://github.com/bare-devcontainer/decolint/actions/workflows/attest-check.yml)
 

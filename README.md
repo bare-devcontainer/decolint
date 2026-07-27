@@ -387,9 +387,15 @@ for the full list:
 | --- | --- |
 | `-config <path>` | use the config file at `<path>` instead of [auto-discovery](#config-file) |
 | `-init` | write a new `.decolint.jsonc` listing every rule at its default severity |
-| `-rules` | print the built-in rules as a Markdown table |
+| `-rules` | print the built-in rules as a Markdown table, or as JSON with `-format=json` |
 | `-version` | print version information |
 | `-help` | print usage |
+
+`-rules` only recognizes `-format`'s `text` (the default) and `json`; the
+JSON catalog carries every field a rule's page does (rationale, references,
+example, docs address) plus the severity your config file currently gives
+it. `-format=github` and `-format=sarif` describe lint findings, not the
+rule catalog, so they are an error with `-rules`.
 
 ## Config file
 

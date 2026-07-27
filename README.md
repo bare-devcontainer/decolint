@@ -88,9 +88,7 @@ privileges:
 }
 ```
 
-Linted as written it reports one problem, and that one is wrong: the base image
-sets a non-root user, so `require-non-root` never applied. Merging replaces it
-with four that are real:
+Nothing in it is wrong. The problems are in what it pulls in:
 
 ```console
 $ decolint -merge .
@@ -106,10 +104,13 @@ Linted 1 file:
 Found 4 errors and 0 warnings.
 ```
 
-None of those is in the file above: the base image disables seccomp and
-installs two unpinned VS Code extensions. Each is reported at the property that
-pulled it in. Turn it on with `-merge`, or `"merge": true` in your config; see
-[Lint what actually
+Not one of those is in the file above. The base image disables seccomp and
+installs two unpinned VS Code extensions, and that configuration reaches the
+container whether or not anyone reads it. decolint reports each finding at the
+property that pulled it in.
+
+Turn it on with `-merge`, or `"merge": true` in your config; see [Lint what
+actually
 runs](https://bare-devcontainer.github.io/decolint/getting-started/#4-lint-what-actually-runs)
 for what gets resolved and what does not.
 <!-- decolint:end-page -->

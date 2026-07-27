@@ -59,11 +59,9 @@ project](https://bare-devcontainer.github.io/decolint/getting-started/#set-up-yo
   reviews it that way.** `--privileged` and a bind-mounted Docker socket read
   like ordinary setup lines, and they ship to every teammate and every CI run
   that rebuilds the container.
-- **It lints what actually runs, not just what you wrote.** The Features you
-  reference and the base image you name contribute configuration of their own.
-  With
-  [`-merge`](https://bare-devcontainer.github.io/decolint/getting-started/#4-lint-what-actually-runs),
-  decolint resolves them the way the real tooling does and lints the result.
+- **It lints what actually runs, not just what you wrote.** Features and the
+  base image contribute configuration of their own, and decolint resolves them
+  the way the real tooling does.
 - **A silently ignored property is a mistake decolint names.** GitHub
   Codespaces drops `bind` mounts and rejects `host:port` entries without
   reporting anything; the container just comes up wrong.
@@ -71,6 +69,49 @@ project](https://bare-devcontainer.github.io/decolint/getting-started/#set-up-yo
   column, and come out as text, JSON, GitHub Actions annotations, or SARIF.
 - **One static binary.** No Node.js, no Docker daemon, no project
   dependencies.
+
+## Lint what actually runs
+
+Your `devcontainer.json` is only part of the configuration. The Features it
+references and the base image it names contribute their own, and the tooling
+merges all of it before the container starts. Take a file that is careful about
+everything visible in it — pinned by digest, capabilities dropped, no new
+privileges:
+
+```jsonc
+// .devcontainer/devcontainer.json
+{
+  "name": "api",
+  "image": "mcr.microsoft.com/devcontainers/go:1.24@sha256:8de3d5b3a3ce235671c7649f0b910414158a220d18cbd2714a4446cc0cc6acd3",
+  "runArgs": ["--cap-drop=ALL"],
+  "securityOpt": ["no-new-privileges"]
+}
+```
+
+Linted as written it reports one problem, and that one is wrong: the base image
+sets a non-root user, so `require-non-root` never applied. Merging replaces it
+with four that are real:
+
+```console
+$ decolint -merge .
+Downloading image metadata(mcr.microsoft.com/devcontainers/go:1.24@sha256:8de3d5b3a3ce235671c7649f0b910414158a220d18cbd2714a4446cc0cc6acd3)
+Config: .decolint.jsonc
+Linted 1 file:
+  .devcontainer/devcontainer.json (devcontainer)
+
+.devcontainer/devcontainer.json:3:3: error: "securityOpt" overrides the default seccomp profile (no-seccomp-override)
+.devcontainer/devcontainer.json:3:3: error: "securityOpt" contains "seccomp=unconfined", disabling the container's syscall filtering (no-seccomp-unconfined)
+.devcontainer/devcontainer.json:3:3: error: extension "golang.Go" has no explicit version; pin a specific version (pin-extension-version)
+.devcontainer/devcontainer.json:3:3: error: extension "dbaeumer.vscode-eslint" has no explicit version; pin a specific version (pin-extension-version)
+Found 4 errors and 0 warnings.
+```
+
+None of those is in the file above: the base image disables seccomp and
+installs two unpinned VS Code extensions. Each is reported at the property that
+pulled it in. Turn it on with `-merge`, or `"merge": true` in your config; see
+[Lint what actually
+runs](https://bare-devcontainer.github.io/decolint/getting-started/#4-lint-what-actually-runs)
+for what gets resolved and what does not.
 <!-- decolint:end-page -->
 
 ## Try it

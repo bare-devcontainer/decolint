@@ -148,6 +148,22 @@ func TestRenderRulePage_ModeCaption(t *testing.T) {
 	}
 }
 
+// TestRenderSnippet_ContentWithoutTrailingNewline guards against an unclosed fence: the closing
+// "```" has to start its own line (a markdown renderer does not recognize one run straight into the
+// preceding content as a close, and treats everything after as still inside the code block), so
+// content missing a trailing newline needs one added before it.
+func TestRenderSnippet_ContentWithoutTrailingNewline(t *testing.T) {
+	t.Parallel()
+
+	got := renderSnippet(linter.Snippet{
+		Files: []linter.ExampleFile{{Path: "devcontainer.json", Content: "{}"}},
+	})
+	want := "```jsonc\n{}\n```\n\n"
+	if got != want {
+		t.Errorf("renderSnippet() = %q, want %q", got, want)
+	}
+}
+
 func TestWriteRulePages(t *testing.T) {
 	t.Parallel()
 

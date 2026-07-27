@@ -72,7 +72,14 @@ func renderSnippet(s linter.Snippet) string {
 		case len(s.Files) > 1:
 			fmt.Fprintf(&b, "### `%s`\n\n", f.Path)
 		}
-		fmt.Fprintf(&b, "```%s\n%s```\n\n", codeLang(f.Path), f.Content)
+		content := f.Content
+		if !strings.HasSuffix(content, "\n") {
+			// The closing fence must start its own line; without this, content missing a trailing
+			// newline would run straight into it, leaving the fence unclosed and swallowing the
+			// rest of the page.
+			content += "\n"
+		}
+		fmt.Fprintf(&b, "```%s\n%s```\n\n", codeLang(f.Path), content)
 	}
 	return b.String()
 }

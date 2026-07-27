@@ -1,26 +1,27 @@
 package main
 
-import (
-	"regexp"
-	"strings"
-)
+import "strings"
 
-// slugify computes a Markdown heading's anchor slug the way GitHub (and Hugo's default goldmark
-// auto-heading-id extension) does: lowercase, drop everything but letters, digits, spaces and
-// hyphens, then turn runs of spaces/hyphens into one hyphen. Verified against every heading in
-// README.md to match the anchors already written by hand there.
+// slugify computes a Markdown heading's anchor slug the way Hugo's default goldmark
+// auto-heading-id extension does for a heading made of ASCII letters, digits, underscores, hyphens
+// and spaces: lowercase, map each space to a hyphen, and drop every other character — with no
+// collapsing of repeated hyphens or spaces, and no trimming of a leading or trailing hyphen (a
+// heading like "-format" keeps its dash). Verified against Hugo's own output for every heading in
+// README.md, including edge cases (an underscore, a leading hyphen) that a heading there doesn't
+// currently exercise. Hugo's real algorithm also keeps non-ASCII letters (e.g. "ü"), which no
+// heading in this repository uses, so that case is intentionally out of scope here.
 func slugify(heading string) string {
 	var b strings.Builder
 	for _, r := range strings.ToLower(heading) {
 		switch {
-		case r >= 'a' && r <= 'z', r >= '0' && r <= '9', r == ' ', r == '-':
+		case r >= 'a' && r <= 'z', r >= '0' && r <= '9', r == '_', r == '-':
 			b.WriteRune(r)
+		case r == ' ':
+			b.WriteRune('-')
 		}
 	}
-	return strings.Trim(collapseHyphens.ReplaceAllString(b.String(), "-"), "-")
+	return b.String()
 }
-
-var collapseHyphens = regexp.MustCompile(`[\s-]+`)
 
 // heading is one ATX heading found by scanHeadings: its level (1 for "#", 2 for "##", ...), text,
 // and computed slug.

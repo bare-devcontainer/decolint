@@ -14,7 +14,13 @@ func TestSlugify(t *testing.T) {
 		{"4. Lint what actually runs", "4-lint-what-actually-runs"},
 		{"Prebuilt binary (recommended)", "prebuilt-binary-recommended"},
 		{"Config file", "config-file"},
-		{"  Extra   spaces  ", "extra-spaces"},
+		// Verified against Hugo's own heading-id output, not guessed: an underscore is kept, a
+		// leading or trailing hyphen is kept, and repeated spaces are not collapsed into one hyphen.
+		{"Local_env setting", "local_env-setting"},
+		{"-format", "-format"},
+		{"trailing-", "trailing-"},
+		{"foo__bar", "foo__bar"},
+		{"Extra   spaces", "extra---spaces"},
 	}
 	for _, tt := range tests {
 		if got := slugify(tt.heading); got != tt.want {
@@ -46,6 +52,21 @@ func TestRewriteAnchors(t *testing.T) {
 	body := "See [here](#local) and [there](#remote), plus [unknown](#nowhere)."
 	got := rewriteAnchors(body, "getting-started", slugPage)
 	want := "See [here](#local) and [there](reference.md#remote), plus [unknown](#nowhere)."
+	if got != want {
+		t.Errorf("rewriteAnchors() = %q, want %q", got, want)
+	}
+}
+
+// TestRewriteAnchors_UnderscoreSlug guards anchorLink's character class: a slug containing an
+// underscore (e.g. from a heading like "Local_env setting") has to be recognized as a same-document
+// link before it can be rewritten, the same as any other slug.
+func TestRewriteAnchors_UnderscoreSlug(t *testing.T) {
+	t.Parallel()
+
+	slugPage := map[string]string{"local_env-setting": "reference"}
+	body := "See [here](#local_env-setting)."
+	got := rewriteAnchors(body, "getting-started", slugPage)
+	want := "See [here](reference.md#local_env-setting)."
 	if got != want {
 		t.Errorf("rewriteAnchors() = %q, want %q", got, want)
 	}

@@ -164,7 +164,9 @@ func stripRulesTableMarkers(lines []string) []string {
 }
 
 // anchorLink matches a Markdown link whose target is a same-document fragment, e.g. "(#config-file)".
-var anchorLink = regexp.MustCompile(`\]\(#([a-z0-9-]+)\)`)
+// The character class matches slugify's, so a link to a slug containing an underscore (or a leading
+// hyphen, which this class permits at any position) is still recognized as a same-document link.
+var anchorLink = regexp.MustCompile(`\]\(#([a-z0-9_-]+)\)`)
 
 // rewriteAnchors rewrites every "(#slug)" link in body that names a heading living on a different
 // page than page, to "(<page>.md#slug)", fence-aware so a "#" shown inside an example is never

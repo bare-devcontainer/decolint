@@ -16,44 +16,45 @@
     ],
     "minimumReleaseAge": null
   },
-    "customManagers": [
-      {
-        "customType": "regex",
-        "managerFilePatterns": [
-          "**/devcontainer.json"
-        ],
-        "matchStrings": [
-          // JSON string following a `// renovate:` comment in the form `"tag@sha256:digest"`
-          // e.g. "ubuntu:22.04@sha256:abc123..."
-          "// renovate: datasource=(?<datasource>\\S+)( registryUrl=(?<registryUrl>\\S+))? depName=(?<depName>\\S+)( versioning=(?<versioning>\\S+))?[\\s\\S]*?\"(?<currentValue>[^\"@]+)@(?<currentDigest>sha256:[a-f0-9]+)\"",
-          // JSON string following a `// renovate:` comment in the form `"name@version"` (no sha256 digest)
-          // e.g. "anthropic.claude-code@2.1.168"
-          "// renovate: datasource=(?<datasource>\\S+)( registryUrl=(?<registryUrl>\\S+))? depName=(?<depName>\\S+)( versioning=(?<versioning>\\S+))?[\\s\\S]*?\"[^\"@]+@(?<currentValue>[^\":]+)\""
-        ],
-        "versioningTemplate": "{{#if versioning}}{{{versioning}}}{{else}}semver{{/if}}"
-      },
-      {
-        "customType": "regex",
-        "managerFilePatterns": [
-          "**/.github/workflows/*.yml"
-        ],
-        "matchStrings": [
-          // YAML key-value line following a `# renovate:` comment where the value is a plain version string (no digest)
-          // e.g. TRIVY_VERSION: "v0.71.2"
-          "# renovate: datasource=(?<datasource>\\S+)( registryUrl=(?<registryUrl>\\S+))? depName=(?<depName>\\S+)( versioning=(?<versioning>\\S+))?( extractVersion=(?<extractVersion>\\S+))?\\s+\\S+: \"(?<currentValue>[^@\"\\s]+)\""
-        ],
-        "versioningTemplate": "{{#if versioning}}{{{versioning}}}{{else}}semver{{/if}}"
-      },
-      {
-        "customType": "regex",
-        "managerFilePatterns": [
-          "**/Makefile"
-        ],
-        "matchStrings": [
-          // Makefile variable assignment following a `# renovate:` comment, e.g. FOO_VERSION := v1.2.3
-          "# renovate: datasource=(?<datasource>\\S+)( registryUrl=(?<registryUrl>\\S+))? depName=(?<depName>\\S+)( versioning=(?<versioning>\\S+))?( extractVersion=(?<extractVersion>\\S+))?\\s+\\S+\\s*:?=\\s*(?<currentValue>\\S+)"
-        ],
-        "versioningTemplate": "{{#if versioning}}{{{versioning}}}{{else}}semver{{/if}}"
-      }
-    ]
+  "postUpdateOptions": ["gomodTidy"],
+  "customManagers": [
+    {
+      "customType": "regex",
+      "managerFilePatterns": [
+        "**/devcontainer.json"
+      ],
+      "matchStrings": [
+        // JSON string following a `// renovate:` comment in the form `"tag@sha256:digest"`
+        // e.g. "ubuntu:22.04@sha256:abc123..."
+        "// renovate: datasource=(?<datasource>\\S+)( registryUrl=(?<registryUrl>\\S+))? depName=(?<depName>\\S+)( versioning=(?<versioning>\\S+))?[\\s\\S]*?\"(?<currentValue>[^\"@]+)@(?<currentDigest>sha256:[a-f0-9]+)\"",
+        // JSON string following a `// renovate:` comment in the form `"name@version"` (no sha256 digest)
+        // e.g. "anthropic.claude-code@2.1.168"
+        "// renovate: datasource=(?<datasource>\\S+)( registryUrl=(?<registryUrl>\\S+))? depName=(?<depName>\\S+)( versioning=(?<versioning>\\S+))?[\\s\\S]*?\"[^\"@]+@(?<currentValue>[^\":]+)\""
+      ],
+      "versioningTemplate": "{{#if versioning}}{{{versioning}}}{{else}}semver{{/if}}"
+    },
+    {
+      "customType": "regex",
+      "managerFilePatterns": [
+        "**/.github/workflows/*.yml"
+      ],
+      "matchStrings": [
+        // YAML key-value line following a `# renovate:` comment where the value is a plain version string (no digest)
+        // e.g. TRIVY_VERSION: "v0.71.2"
+        "# renovate: datasource=(?<datasource>\\S+)( registryUrl=(?<registryUrl>\\S+))? depName=(?<depName>\\S+)( versioning=(?<versioning>\\S+))?( extractVersion=(?<extractVersion>\\S+))?\\s+\\S+: \"(?<currentValue>[^@\"\\s]+)\""
+      ],
+      "versioningTemplate": "{{#if versioning}}{{{versioning}}}{{else}}semver{{/if}}"
+    },
+    {
+      "customType": "regex",
+      "managerFilePatterns": [
+        "**/Makefile"
+      ],
+      "matchStrings": [
+        // Makefile variable assignment following a `# renovate:` comment, e.g. FOO_VERSION := v1.2.3
+        "# renovate: datasource=(?<datasource>\\S+)( registryUrl=(?<registryUrl>\\S+))? depName=(?<depName>\\S+)( versioning=(?<versioning>\\S+))?( extractVersion=(?<extractVersion>\\S+))?\\s+\\S+\\s*:?=\\s*(?<currentValue>\\S+)"
+      ],
+      "versioningTemplate": "{{#if versioning}}{{{versioning}}}{{else}}semver{{/if}}"
+    }
+  ]
 }

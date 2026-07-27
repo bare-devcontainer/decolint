@@ -1,0 +1,4 @@
+| Category | Default | Rules |
+| --- | --- | --- |
+{{ range . }}| [`{{ .Name }}`]({{ .URL }}) | `{{ .Severity }}` | {{ .Rules }} |
+{{ end -}}

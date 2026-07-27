@@ -4,6 +4,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -223,40 +224,61 @@ func TestWriteRulePages_UnwritableDir(t *testing.T) {
 	}
 }
 
-func TestRenderRulesTable(t *testing.T) {
+func TestRenderCategories(t *testing.T) {
 	t.Parallel()
 
-	table := renderRulesTable()
-	if !strings.HasPrefix(table, "| ID | Category | Platform | Description |\n") {
-		t.Fatalf("renderRulesTable() does not start with the header row, got:\n%s", table)
+	table := renderCategories()
+	if !strings.HasPrefix(table, "| Category | Default | Rules |\n") {
+		t.Fatalf("renderCategories() does not start with the header row, got:\n%s", table)
 	}
 
 	rows := strings.Split(strings.TrimRight(table, "\n"), "\n")
-	if want := len(rules.Builtin()) + 2; len(rows) != want { // +2 for the header and separator rows
-		t.Errorf("renderRulesTable() produced %d row(s), want %d", len(rows), want)
+	categories := map[linter.Category]bool{}
+	total := 0
+	for _, reg := range rules.Builtin() {
+		categories[reg.Rule.Category] = true
+		total++
+	}
+	if want := len(categories) + 2; len(rows) != want { // +2 for the header and separator rows
+		t.Errorf("renderCategories() produced %d row(s), want %d", len(rows), want)
 	}
 
-	// Sorted by category (Correctness < Security < ... per the linter.Category iota order), then ID:
-	// the first data row must be a correctness rule, and the table must link to rules.DocsURL.
-	if !strings.Contains(rows[2], "`correctness`") {
-		t.Errorf("first data row is not a correctness rule, got: %s", rows[2])
+	// In category order (Correctness < Security < ... per the linter.Category iota order), so the
+	// first data row is correctness, at the severity its rules are registered with.
+	if !strings.Contains(rows[2], "`correctness`") || !strings.Contains(rows[2], "`error`") {
+		t.Errorf("first data row is not correctness at error, got: %s", rows[2])
 	}
-	if !strings.Contains(table, rules.DocsURL("no-image-latest")) {
-		t.Errorf("renderRulesTable() does not link to rules.DocsURL, got:\n%s", table)
+	if !strings.Contains(table, rules.DocsCategoryURL("security")) {
+		t.Errorf("renderCategories() does not link to rules.DocsCategoryURL, got:\n%s", table)
+	}
+
+	// Every built-in rule must be counted exactly once, or the summary understates what decolint
+	// ships.
+	counted := 0
+	for _, row := range rows[2:] {
+		fields := strings.Split(strings.Trim(row, "| "), " | ")
+		n, err := strconv.Atoi(strings.TrimSpace(fields[len(fields)-1]))
+		if err != nil {
+			t.Fatalf("row %q has a non-numeric rule count: %v", row, err)
+		}
+		counted += n
+	}
+	if counted != total {
+		t.Errorf("renderCategories() counted %d rule(s), want %d", counted, total)
 	}
 }
 
-func TestUpdateReadmeRulesTable(t *testing.T) {
+func TestUpdateReadmeCategories(t *testing.T) {
 	t.Parallel()
 
 	path := filepath.Join(t.TempDir(), "README.md")
-	original := "prose\n\n" + rulesTableStart + "\nstale\n" + rulesTableEnd + "\n\nmore prose\n"
+	original := "prose\n\n" + categoriesStart + "\nstale\n" + categoriesEnd + "\n\nmore prose\n"
 	if err := os.WriteFile(path, []byte(original), 0o644); err != nil {
 		t.Fatalf("write fixture: %v", err)
 	}
 
-	if err := updateReadmeRulesTable(path); err != nil {
-		t.Fatalf("updateReadmeRulesTable: %v", err)
+	if err := updateReadmeCategories(path); err != nil {
+		t.Fatalf("updateReadmeCategories: %v", err)
 	}
 
 	got, err := os.ReadFile(path)
@@ -264,42 +286,42 @@ func TestUpdateReadmeRulesTable(t *testing.T) {
 		t.Fatalf("read %s: %v", path, err)
 	}
 	if strings.Contains(string(got), "stale") {
-		t.Errorf("updateReadmeRulesTable did not replace the stale table, got:\n%s", got)
+		t.Errorf("updateReadmeCategories did not replace the stale summary, got:\n%s", got)
 	}
-	if !strings.HasPrefix(string(got), "prose\n\n"+rulesTableStart) || !strings.HasSuffix(string(got), "\n\nmore prose\n") {
-		t.Errorf("updateReadmeRulesTable disturbed content outside the markers, got:\n%s", got)
+	if !strings.HasPrefix(string(got), "prose\n\n"+categoriesStart) || !strings.HasSuffix(string(got), "\n\nmore prose\n") {
+		t.Errorf("updateReadmeCategories disturbed content outside the markers, got:\n%s", got)
 	}
 
 	// Running it again on its own output must be a no-op (the generator has to be idempotent, since
 	// CI fails the build if it finds anything left to regenerate).
-	if err := updateReadmeRulesTable(path); err != nil {
-		t.Fatalf("updateReadmeRulesTable (second run): %v", err)
+	if err := updateReadmeCategories(path); err != nil {
+		t.Fatalf("updateReadmeCategories (second run): %v", err)
 	}
 	got2, err := os.ReadFile(path)
 	if err != nil {
 		t.Fatalf("read %s: %v", path, err)
 	}
 	if string(got2) != string(got) {
-		t.Errorf("updateReadmeRulesTable is not idempotent:\nfirst:\n%s\nsecond:\n%s", got, got2)
+		t.Errorf("updateReadmeCategories is not idempotent:\nfirst:\n%s\nsecond:\n%s", got, got2)
 	}
 }
 
-func TestUpdateReadmeRulesTable_MissingFile(t *testing.T) {
+func TestUpdateReadmeCategories_MissingFile(t *testing.T) {
 	t.Parallel()
 
-	if err := updateReadmeRulesTable(filepath.Join(t.TempDir(), "absent.md")); err == nil {
-		t.Fatal("updateReadmeRulesTable on a missing file: got nil error, want one")
+	if err := updateReadmeCategories(filepath.Join(t.TempDir(), "absent.md")); err == nil {
+		t.Fatal("updateReadmeCategories on a missing file: got nil error, want one")
 	}
 }
 
-func TestUpdateReadmeRulesTable_MissingMarkers(t *testing.T) {
+func TestUpdateReadmeCategories_MissingMarkers(t *testing.T) {
 	t.Parallel()
 
 	path := filepath.Join(t.TempDir(), "README.md")
 	if err := os.WriteFile(path, []byte("no markers here\n"), 0o644); err != nil {
 		t.Fatalf("write fixture: %v", err)
 	}
-	if err := updateReadmeRulesTable(path); err == nil {
-		t.Fatal("updateReadmeRulesTable with no markers: got nil error, want one")
+	if err := updateReadmeCategories(path); err == nil {
+		t.Fatal("updateReadmeCategories with no markers: got nil error, want one")
 	}
 }

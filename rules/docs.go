@@ -10,3 +10,10 @@ const docsBaseURL = "https://bare-devcontainer.github.io/decolint/rules/"
 func DocsURL(id string) string {
 	return docsBaseURL + id + "/"
 }
+
+// DocsCategoryURL returns the address of the rule reference's listing for the named category. The
+// listing is an anchor on the reference's index rather than a page of its own, so the address is
+// returned for any name, including one no category has.
+func DocsCategoryURL(name string) string {
+	return docsBaseURL + "#" + name
+}

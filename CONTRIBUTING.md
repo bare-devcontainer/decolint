@@ -118,35 +118,39 @@ context the two snippets alone don't convey.
 The existing rules in [`rules/`](rules/) are good references,
 including for the table-driven tests each rule ships with.
 
-## The documentation site and the README rules table
+## Where documentation lives
 
-Both are generated from `rules/*.go` and `README.md` by
+The README and the site divide by what the reader is trying to decide:
+the README covers whether to use decolint at all, and the site covers
+how. So the walkthroughs and the reference are the site's, and adding
+to them is an edit to [`docs/content/`](docs/content/) — Getting
+started, Reference, and the rule index's `_index.md` are hand-written
+there.
+
+The rest is generated from `rules/*.go` and `README.md` by
 [`cmd/docgen`](cmd/docgen/), run as part of `make docs` (see
 [Development](#development) above) and standalone as `make
-docs-content`. Nothing under `docs/content/rules/` other than
-`_index.md`, and nothing in `README.md` between the
-`<!-- decolint:rules-table -->` markers, is hand-edited — a new rule
-or a changed `LongDescription`/`Example`/`References` needs no
-follow-up edit anywhere else. CI's `docs` job runs `make docs-content`
-and fails if that changes `README.md`, which is what catches a
-generator or a rule declaration that drifted from the other.
+docs-content`:
 
-`README.md` itself is also this generator's input for the rest of the
-site: the landing page, Getting started, and Reference are the content
-between `<!-- decolint:page=_index -->`, `<!-- decolint:page=getting-started -->`,
-and `<!-- decolint:page=reference -->` and their matching
-`<!-- decolint:end-page -->`. Content outside those markers — the
-title, badges, the `---` before `# Reference`, `## Contributing` — is
-README-only and never reaches the site, so restructure or rename
-headings freely as long as the markers stay put. A link within
-README.md to a heading that ends up on a different page (e.g. Getting
-started linking to `#config-file`, which lives on Reference) is
-rewritten to point there; write new cross-references the same way you
-already do (`[Config file](#config-file)`) and the generator will
-resolve them.
+- **A page per rule**, under `docs/content/rules/` on the published
+  site. A new rule or a changed
+  `LongDescription`/`Example`/`References` needs no follow-up edit
+  anywhere else.
+- **The site's landing page**, from the part of `README.md` between
+  `<!-- decolint:page=_index -->` and `<!-- decolint:end-page -->`, so
+  the pitch the two share has one source. Everything outside those
+  markers is README-only. A link inside them must resolve to a heading
+  inside them too; point anywhere else at its published address
+  (`https://bare-devcontainer.github.io/decolint/...`), which is what
+  the generator's dead-anchor check leaves you.
+- **The README's category summary**, between the
+  `<!-- decolint:categories -->` markers.
 
-The layout of everything the generator writes — the rule pages, the
-README rules table, and each split-out page's front matter — lives in
+Nothing generated is hand-edited. CI's `docs` job runs `make
+docs-content` and fails if that changes `README.md`, which is what
+catches a generator or a rule declaration that drifted from the other.
+
+The layout of everything the generator writes lives in
 [`cmd/docgen/templates/`](cmd/docgen/templates/), so changing how a
 page looks is an edit to a template rather than to Go code.
 

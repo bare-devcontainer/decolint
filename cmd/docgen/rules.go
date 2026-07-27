@@ -68,7 +68,7 @@ func renderSnippet(s linter.Snippet) string {
 	for _, f := range s.Files {
 		switch {
 		case f.Mode != 0:
-			fmt.Fprintf(&b, "### `%s` (mode %04o)\n\n", f.Path, f.Mode)
+			fmt.Fprintf(&b, "### `%s` (mode %04o)\n\n", f.Path, f.Mode.Perm())
 		case len(s.Files) > 1:
 			fmt.Fprintf(&b, "### `%s`\n\n", f.Path)
 		}

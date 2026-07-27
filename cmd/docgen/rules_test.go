@@ -1,6 +1,7 @@
 package main
 
 import (
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -145,6 +146,20 @@ func TestRenderRulePage_ModeCaption(t *testing.T) {
 	}
 	if !strings.Contains(page, "(mode 0755)") {
 		t.Errorf("renderRulePage() missing the Good file's mode caption, got:\n%s", page)
+	}
+}
+
+// TestRenderSnippet_ModeCaptionIsPermissionBitsOnly checks that the "(mode ####)" caption reports
+// only the POSIX permission bits, not the type bits fs.FileMode also carries (e.g. fs.ModeDir),
+// which would otherwise inflate the printed octal value beyond four digits.
+func TestRenderSnippet_ModeCaptionIsPermissionBitsOnly(t *testing.T) {
+	t.Parallel()
+
+	got := renderSnippet(linter.Snippet{
+		Files: []linter.ExampleFile{{Path: "some-dir", Content: "x\n", Mode: fs.ModeDir | 0o755}},
+	})
+	if !strings.Contains(got, "(mode 0755)") {
+		t.Errorf("renderSnippet() mode caption = %q, want it to contain \"(mode 0755)\"", got)
 	}
 }
 

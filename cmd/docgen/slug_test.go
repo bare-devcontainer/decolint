@@ -49,9 +49,12 @@ func TestRewriteAnchors(t *testing.T) {
 		"local":  "getting-started",
 		"remote": "reference",
 	}
-	body := "See [here](#local) and [there](#remote), plus [unknown](#nowhere)."
-	got := rewriteAnchors(body, "getting-started", slugPage)
-	want := "See [here](#local) and [there](reference.md#remote), plus [unknown](#nowhere)."
+	body := "See [here](#local) and [there](#remote)."
+	got, err := rewriteAnchors(body, "getting-started", slugPage)
+	if err != nil {
+		t.Fatalf("rewriteAnchors: %v", err)
+	}
+	want := "See [here](#local) and [there](reference.md#remote)."
 	if got != want {
 		t.Errorf("rewriteAnchors() = %q, want %q", got, want)
 	}
@@ -65,7 +68,10 @@ func TestRewriteAnchors_UnderscoreSlug(t *testing.T) {
 
 	slugPage := map[string]string{"local_env-setting": "reference"}
 	body := "See [here](#local_env-setting)."
-	got := rewriteAnchors(body, "getting-started", slugPage)
+	got, err := rewriteAnchors(body, "getting-started", slugPage)
+	if err != nil {
+		t.Fatalf("rewriteAnchors: %v", err)
+	}
 	want := "See [here](reference.md#local_env-setting)."
 	if got != want {
 		t.Errorf("rewriteAnchors() = %q, want %q", got, want)
@@ -77,9 +83,26 @@ func TestRewriteAnchors_SkipsFencedCode(t *testing.T) {
 
 	slugPage := map[string]string{"remote": "reference"}
 	body := "text [a](#remote)\n\n```\n[b](#remote)\n```\n"
-	got := rewriteAnchors(body, "getting-started", slugPage)
+	got, err := rewriteAnchors(body, "getting-started", slugPage)
+	if err != nil {
+		t.Fatalf("rewriteAnchors: %v", err)
+	}
 	want := "text [a](reference.md#remote)\n\n```\n[b](#remote)\n```\n"
 	if got != want {
 		t.Errorf("rewriteAnchors() = %q, want %q", got, want)
+	}
+}
+
+// TestRewriteAnchors_UnknownSlug guards against a dead link publishing silently: a "(#slug)" link to
+// a heading that exists nowhere among the marked pages (e.g. "#contributing", which is real content
+// in README.md but outside every page marker) has to fail the build, not pass through unrewritten.
+func TestRewriteAnchors_UnknownSlug(t *testing.T) {
+	t.Parallel()
+
+	slugPage := map[string]string{"remote": "reference"}
+	body := "See [there](#remote) and [nowhere](#contributing)."
+	_, err := rewriteAnchors(body, "getting-started", slugPage)
+	if err == nil {
+		t.Fatal("rewriteAnchors with a link to an unknown slug: got nil error, want one")
 	}
 }

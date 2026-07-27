@@ -89,8 +89,11 @@ func splitReadme(src string) (map[string]string, error) {
 	}
 
 	pages := make(map[string]string, len(bodies))
-	for name, body := range bodies {
-		rewritten := rewriteAnchors(body, name, slugPage)
+	for _, name := range readmePages {
+		rewritten, err := rewriteAnchors(bodies[name], name, slugPage)
+		if err != nil {
+			return nil, err
+		}
 		pages[name] = "---\n" + frontMatter[name] + "\n---\n\n" + rewritten + "\n"
 	}
 	return pages, nil
@@ -170,11 +173,14 @@ var anchorLink = regexp.MustCompile(`\]\(#([a-z0-9_-]+)\)`)
 
 // rewriteAnchors rewrites every "(#slug)" link in body that names a heading living on a different
 // page than page, to "(<page>.md#slug)", fence-aware so a "#" shown inside an example is never
-// touched. A slug not found in slugPage (nothing in README.md's current content triggers this; see
-// writeReadmePages) is left alone rather than guessed at.
-func rewriteAnchors(body, page string, slugPage map[string]string) string {
+// touched. It errors if a link names a slug that is not a heading on any marked page: left alone,
+// such a link would publish as a dead anchor once the page is split off from whatever the slug names
+// (e.g. a marked page linking to "#contributing", which lives outside every page marker) — the same
+// failure mode every other marker problem in this generator is caught by, not one exempt from it.
+func rewriteAnchors(body, page string, slugPage map[string]string) (string, error) {
 	lines := strings.Split(body, "\n")
 	fenced := false
+	var badSlug string
 	for i, line := range lines {
 		if strings.HasPrefix(strings.TrimSpace(line), "```") {
 			fenced = !fenced
@@ -186,11 +192,18 @@ func rewriteAnchors(body, page string, slugPage map[string]string) string {
 		lines[i] = anchorLink.ReplaceAllStringFunc(line, func(m string) string {
 			slug := anchorLink.FindStringSubmatch(m)[1]
 			target, ok := slugPage[slug]
-			if !ok || target == page {
+			if !ok {
+				badSlug = slug
+				return m
+			}
+			if target == page {
 				return m
 			}
 			return "](" + target + ".md#" + slug + ")"
 		})
+		if badSlug != "" {
+			return "", fmt.Errorf("page %q links to \"#%s\", which is not a heading on any page", page, badSlug)
+		}
 	}
-	return strings.Join(lines, "\n")
+	return strings.Join(lines, "\n"), nil
 }

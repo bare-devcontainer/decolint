@@ -128,6 +128,19 @@ func TestSplitReadme_DuplicateHeadingSlug(t *testing.T) {
 	}
 }
 
+// TestSplitReadme_LinkToUnmarkedContent guards against a dead link publishing silently: "Contributing"
+// is real content in README.md, but outside every page marker, so a link to it from within a marked
+// page has nowhere to resolve to once split onto a real site page.
+func TestSplitReadme_LinkToUnmarkedContent(t *testing.T) {
+	t.Parallel()
+
+	src := strings.Replace(fixtureReadme, "Last guide section.", "Last guide section. See [Contributing](#contributing).", 1)
+	_, err := splitReadme(src)
+	if err == nil {
+		t.Fatal("splitReadme with a link to unmarked content: got nil error, want one")
+	}
+}
+
 func TestSplitReadme_MarkerErrors(t *testing.T) {
 	t.Parallel()
 

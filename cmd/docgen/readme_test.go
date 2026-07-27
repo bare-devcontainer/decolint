@@ -203,3 +203,12 @@ func TestWriteReadmePages(t *testing.T) {
 		}
 	}
 }
+
+func TestWriteReadmePages_MissingReadme(t *testing.T) {
+	t.Parallel()
+
+	readmePath := filepath.Join(t.TempDir(), "absent.md")
+	if err := writeReadmePages(readmePath, t.TempDir()); err == nil {
+		t.Fatal("writeReadmePages with a missing README: got nil error, want one")
+	}
+}

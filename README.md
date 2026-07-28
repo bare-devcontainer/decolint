@@ -1,4 +1,9 @@
-# decolint
+<h1>
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/assets/img/decolint_logo_dark.svg">
+    <img src="docs/assets/img/decolint_logo.svg" alt="decolint" width="258" height="64">
+  </picture>
+</h1>
 
 ![GitHub Release](https://img.shields.io/github/v/release/bare-devcontainer/decolint)
 [![CI](https://github.com/bare-devcontainer/decolint/actions/workflows/ci.yml/badge.svg)](https://github.com/bare-devcontainer/decolint/actions/workflows/ci.yml)

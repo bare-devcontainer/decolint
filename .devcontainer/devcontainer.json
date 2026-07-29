@@ -33,7 +33,7 @@
         // renovate: datasource=github-tags depName=editorconfig/editorconfig-vscode
         "EditorConfig.EditorConfig@0.18.2",
         // renovate: datasource=github-tags depName=golang/vscode-go
-        "golang.go@0.54.0"
+        "golang.go@0.56.0"
       ],
       "settings": {
         "json.schemaDownload.trustedDomains": {

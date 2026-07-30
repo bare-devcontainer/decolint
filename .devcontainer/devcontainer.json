@@ -1,6 +1,6 @@
 {
   "name": "Go",
-  "image": "ghcr.io/bare-devcontainer/golang:1.26-trixie@sha256:5d5d270adfbf256c3d0eb4c38a6185ed61cfb3945b56c7be5ef3b241e3c47406",
+  "image": "ghcr.io/bare-devcontainer/golang:1.26-trixie@sha256:37eaf48886f6e9ac3a7327228af0c960d416cfdd9000bac2a34c26206853b779",
   "runArgs": [
     "--cap-drop=ALL"
   ],

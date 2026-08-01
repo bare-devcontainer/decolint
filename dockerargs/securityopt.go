@@ -12,6 +12,10 @@ const (
 	SeccompProfileUnconfined = "unconfined"
 )
 
+// AppArmorProfileUnconfined removes the container's AppArmor profile, as
+// [SeccompProfileUnconfined] removes its seccomp one.
+const AppArmorProfileUnconfined = "unconfined"
+
 // noNewPrivileges is the one security option that may be written without a value.
 const noNewPrivileges = "no-new-privileges"
 

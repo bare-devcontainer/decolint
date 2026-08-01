@@ -112,6 +112,15 @@ func runArgsHasFlagValue(obj *hujson.Object, flag string, match func(string) boo
 	return false
 }
 
+// underRunArgs reports whether node is a value inside a "runArgs" rather than the property a rule's
+// other paths name. Only a devcontainer.json's "runArgs" is a "docker run" argv: in a Feature or a
+// Template it is ordinary data, so a "/runArgs/--flag" path matches a member merely spelled like a
+// flag there, with [linter.Node.Arg] nil just as on the property. A rule reporting both a property
+// and a flag must ignore such a node.
+func underRunArgs(node *linter.Node) bool {
+	return strings.HasPrefix(node.Pointer, "/runArgs/")
+}
+
 // parseMountString extracts the "type" and "source" fields from s, a "--mount" value, as docker/cli
 // reads it:
 //   - the value is trimmed of surrounding whitespace and then read as a single CSV record, so a

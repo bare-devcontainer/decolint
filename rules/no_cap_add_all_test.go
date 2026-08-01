@@ -50,6 +50,8 @@ func TestNoCapAddAll(t *testing.T) {
 			{Path: "devcontainer.json", Line: 1, Col: 31, RuleID: "no-cap-add-all",
 				Message: `"runArgs" contains "--cap-add=ALL", granting every Linux capability to the container`},
 		}},
+		// An object "runArgs" is no command line, so a member named like a flag is not that flag.
+		{"runArgs object with a cap-add member", `{"runArgs": {"--cap-add": "ALL"}}`, nil},
 		{"runArgs with non-string entry before cap-add=ALL", `{"runArgs": [123, "--cap-add=ALL"]}`, []linter.Issue{
 			{Path: "devcontainer.json", Line: 1, Col: 19, RuleID: "no-cap-add-all",
 				Message: `"runArgs" contains "--cap-add=ALL", granting every Linux capability to the container`},
@@ -87,8 +89,9 @@ func TestNoCapAddAll_Feature(t *testing.T) {
 			{Path: "devcontainer-feature.json", Line: 1, Col: 27, RuleID: "no-cap-add-all",
 				Message: `"capAdd" contains "ALL", granting every Linux capability to the container`},
 		}},
-		// "runArgs" has no meaning in a Feature, so it's not flagged there.
+		// "runArgs" has no meaning in a Feature, so it's not flagged there, whatever it holds.
 		{"runArgs with cap-add=ALL is ignored", `{"id": "test", "runArgs": ["--cap-add=ALL"]}`, nil},
+		{"runArgs object with a cap-add member is ignored", `{"id": "test", "runArgs": {"--cap-add": "ALL"}}`, nil},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

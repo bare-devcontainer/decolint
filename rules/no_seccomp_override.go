@@ -63,6 +63,9 @@ func checkNoSeccompOverride(_ *linter.Context, node *linter.Node) []linter.Findi
 		}}
 	}
 
+	if underRunArgs(node) {
+		return nil
+	}
 	lit, ok := node.Value.Value.(hujson.Literal)
 	if !ok || lit.Kind() != '"' || !securityOptOverridesSeccomp(lit.String()) {
 		return nil

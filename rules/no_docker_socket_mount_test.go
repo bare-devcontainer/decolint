@@ -116,6 +116,9 @@ func TestNoDockerSocketMount(t *testing.T) {
 		// A -v value is colon-separated, so a comma in it is part of a field rather than a separator.
 		{"runArgs --volume with a comma in the container path", `{"runArgs": ["--volume", "myvol:/data,source=/var/run/docker.sock"]}`, nil},
 		{"runArgs not an array", `{"runArgs": "-v /var/run/docker.sock:/x"}`, nil},
+		// An object "runArgs" is no command line, so a member named like a flag is not that flag.
+		{"runArgs object with a volume member",
+			`{"runArgs": {"--volume": {"type": "bind", "source": "/var/run/docker.sock", "target": "/x"}}}`, nil},
 		{"runArgs duplicated, mounted by the first", `{"runArgs": ["-v", "/var/run/docker.sock:/x"], "runArgs": ["--init"]}`, []linter.Issue{
 			{Path: "devcontainer.json", Line: 1, Col: 20, RuleID: "no-docker-socket-mount",
 				Message: `"runArgs" bind-mounts the Docker socket, which grants the container root-equivalent control over the host`},

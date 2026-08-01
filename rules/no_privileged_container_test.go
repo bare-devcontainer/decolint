@@ -35,6 +35,8 @@ func TestNoPrivilegedContainer(t *testing.T) {
 		}},
 		{"runArgs with privileged set to false", `{"runArgs": ["--privileged=false"]}`, nil},
 		{"runArgs with privileged consumed as another flag's value", `{"runArgs": ["--label", "--privileged"]}`, nil},
+		// An object "runArgs" is no command line, so a member named like a flag is not that flag.
+		{"runArgs object with a privileged member", `{"runArgs": {"--privileged": true}}`, nil},
 		{"both privileged and runArgs flag", `{"privileged": true, "runArgs": ["--privileged"]}`, []linter.Issue{
 			{Path: "devcontainer.json", Line: 1, Col: 16, RuleID: "no-privileged-container",
 				Message: `"privileged" is set to true, disabling the container's isolation from the host`},
@@ -64,8 +66,9 @@ func TestNoPrivilegedContainer_Feature(t *testing.T) {
 			{Path: "devcontainer-feature.json", Line: 1, Col: 30, RuleID: "no-privileged-container",
 				Message: `"privileged" is set to true, disabling the container's isolation from the host`},
 		}},
-		// "runArgs" has no meaning in a Feature, so it's not flagged there.
+		// "runArgs" has no meaning in a Feature, so it's not flagged there, whatever it holds.
 		{"runArgs with privileged is ignored", `{"id": "test", "runArgs": ["--privileged"]}`, nil},
+		{"runArgs object with a privileged member is ignored", `{"id": "test", "runArgs": {"--privileged": true}}`, nil},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

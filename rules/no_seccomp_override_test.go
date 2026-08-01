@@ -56,6 +56,8 @@ func TestNoSeccompOverride(t *testing.T) {
 		}},
 		{"runArgs security-opt consumed as another flag's value", `{"runArgs": ["--label", "--security-opt=seccomp=unconfined"]}`, nil},
 		{"runArgs bare seccomp entry names no flag", `{"runArgs": ["seccomp=unconfined"]}`, nil},
+		// An object "runArgs" is no command line, so a member named like a flag is not that flag.
+		{"runArgs object with a security-opt member", `{"runArgs": {"--security-opt": "seccomp=unconfined"}}`, nil},
 		{"runArgs with custom seccomp profile", `{"runArgs": ["--security-opt", "seccomp=/path/to/profile.json"]}`, []linter.Issue{
 			{Path: "devcontainer.json", Line: 1, Col: 32, RuleID: "no-seccomp-override",
 				Message: `"runArgs" overrides the default seccomp profile via "--security-opt"`},
@@ -83,8 +85,9 @@ func TestNoSeccompOverride_Feature(t *testing.T) {
 			{Path: "devcontainer-feature.json", Line: 1, Col: 32, RuleID: "no-seccomp-override",
 				Message: `"securityOpt" overrides the default seccomp profile`},
 		}},
-		// "runArgs" has no meaning in a Feature, so it's not flagged there.
+		// "runArgs" has no meaning in a Feature, so it's not flagged there, whatever it holds.
 		{"runArgs with security-opt is ignored", `{"id": "test", "runArgs": ["--security-opt=seccomp=unconfined"]}`, nil},
+		{"runArgs object with a security-opt member is ignored", `{"id": "test", "runArgs": {"--security-opt": "seccomp=unconfined"}}`, nil},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

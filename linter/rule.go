@@ -289,8 +289,13 @@ type Rule struct {
 	// A devcontainer.json's "runArgs" is traversed as the "docker run" argv it becomes, so its
 	// elements are addressed by flag rather than by index: "/runArgs/--volume" matches once per
 	// occurrence of that flag, whichever spelling the argv uses, and [Node.Arg] carries the value the
-	// occurrence gives it. A rule reporting a flag's absence cannot be driven by that, since a flag
-	// that is not there is never matched; it inspects the document root instead.
+	// occurrence gives it. Nothing else is addressed under it, so a pattern matching there always
+	// arrives with [Node.Arg] set. Only a devcontainer.json has a "runArgs" at all: in a Feature or a
+	// Template the same pattern matches whatever that name holds, an ordinary member merely spelled
+	// like the flag included, with [Node.Arg] nil.
+	//
+	// A rule reporting a flag's absence cannot be driven by any of that, since a flag that is not
+	// there is never matched; it inspects the document root instead.
 	Paths []string
 	// Example shows the rule firing and not firing on realistic configuration. Tests lint both: Bad
 	// must report the rule, Good must not.

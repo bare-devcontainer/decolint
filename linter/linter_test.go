@@ -430,44 +430,95 @@ func TestLintDocument_RulePanicIsRecovered(t *testing.T) {
 	}
 }
 
-// runArgsSpyRule is a stub Rule that reports every element of "runArgs" it is handed, naming how it
-// was reached. It declares every file type deliberately: a rule that declares only some leaves
+// runArgsSpy returns a stub Rule subscribing to path that reports every value it is handed, naming
+// how it was reached. It declares every file type deliberately: a rule that declares only some leaves
 // LintDocument with no patterns for the rest, which it short-circuits before traversing anything, so
 // a test written on such a rule would pass whatever the traversal does with the file types it skips.
-var runArgsSpyRule = &Rule{
-	ID:          "run-args-spy",
-	Description: "reports how each element of runArgs was reached",
-	FileTypes:   []FileType{Devcontainer, Feature, Template},
-	Paths:       []string{"/runArgs/*"},
-	Check: func(_ *Context, node *Node) []Finding {
-		if node.Arg == nil {
-			return []Finding{{Message: "element " + node.Pointer, Offset: node.Value.StartOffset}}
-		}
-		return []Finding{{Message: "flag --" + node.Arg.Flag, Offset: node.Value.StartOffset}}
-	},
+func runArgsSpy(id, path string) *Rule {
+	return &Rule{
+		ID:          id,
+		Description: "reports how each value under runArgs was reached",
+		FileTypes:   []FileType{Devcontainer, Feature, Template},
+		Paths:       []string{path},
+		Check: func(_ *Context, node *Node) []Finding {
+			if node.Arg == nil {
+				return []Finding{{Message: "element " + node.Pointer, Offset: node.Value.StartOffset}}
+			}
+			return []Finding{{Message: "flag --" + node.Arg.Flag, Offset: node.Value.StartOffset}}
+		},
+	}
 }
 
 // TestLintDocument_RunArgsFileTypes checks that "runArgs" is read as a "docker run" argv only in a
 // devcontainer.json. It is not a property of a Feature or a Template, so there the array is an
-// ordinary one, walked by index.
+// ordinary one, walked by index — and so is a "runArgs" that is not an array at all, which a
+// devcontainer.json has nothing to read in.
 func TestLintDocument_RunArgsFileTypes(t *testing.T) {
 	t.Parallel()
 
+	const (
+		argv   = `{"runArgs": ["--cap-add=ALL"]}`
+		object = `{"runArgs": {"--cap-add": "ALL"}}`
+	)
 	tests := []struct {
+		name     string
 		fileType FileType
+		src      string
 		want     []string
 	}{
-		{Devcontainer, []string{"flag --cap-add"}},
-		{Feature, []string{"element /runArgs/0"}},
-		{Template, []string{"element /runArgs/0"}},
+		{"devcontainer", Devcontainer, argv, []string{"flag --cap-add"}},
+		{"feature", Feature, argv, []string{"element /runArgs/0"}},
+		{"template", Template, argv, []string{"element /runArgs/0"}},
+		{"devcontainer object", Devcontainer, object, nil},
+		{"feature object", Feature, object, []string{"element /runArgs/--cap-add"}},
+		{"template object", Template, object, []string{"element /runArgs/--cap-add"}},
 	}
 	for _, tt := range tests {
-		t.Run(string(tt.fileType), func(t *testing.T) {
+		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			l := New()
-			l.RegisterRule(runArgsSpyRule, SeverityWarn)
+			l.RegisterRule(runArgsSpy("run-args-spy", "/runArgs/*"), SeverityWarn)
 			var got []string
-			for _, issue := range lintSource(t, l, "config.json", tt.fileType, `{"runArgs": ["--cap-add=ALL"]}`) {
+			for _, issue := range lintSource(t, l, "config.json", tt.fileType, tt.src) {
+				got = append(got, issue.Message)
+			}
+			if !slices.Equal(got, tt.want) {
+				t.Errorf("messages = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+// TestLintDocument_RunArgsFlagPath checks what a "/runArgs/--flag" path matches. In a devcontainer.json
+// it is the argv's occurrences of that flag and nothing else; in a Feature or a Template, where
+// "runArgs" is no property of the file at all, it is an ordinary member that happens to be spelled
+// like the flag. A rule that reports both a property and a flag has to tell the two apart itself,
+// since [Node.Arg] is nil for such a member just as it is for the property.
+func TestLintDocument_RunArgsFlagPath(t *testing.T) {
+	t.Parallel()
+
+	const (
+		argv   = `{"runArgs": ["--cap-add=ALL"]}`
+		object = `{"runArgs": {"--cap-add": "ALL"}}`
+	)
+	tests := []struct {
+		name     string
+		fileType FileType
+		src      string
+		want     []string
+	}{
+		{"devcontainer", Devcontainer, argv, []string{"flag --cap-add"}},
+		{"devcontainer object", Devcontainer, object, nil},
+		{"feature", Feature, argv, nil},
+		{"feature object", Feature, object, []string{"element /runArgs/--cap-add"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			l := New()
+			l.RegisterRule(runArgsSpy("run-args-flag-spy", "/runArgs/--cap-add"), SeverityWarn)
+			var got []string
+			for _, issue := range lintSource(t, l, "config.json", tt.fileType, tt.src) {
 				got = append(got, issue.Message)
 			}
 			if !slices.Equal(got, tt.want) {

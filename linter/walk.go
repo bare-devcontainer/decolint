@@ -107,13 +107,31 @@ func (w *walker) value(v *hujson.Value, pointer string, segs []string) {
 	}
 }
 
+// RunArgs returns every "docker run" flag occurrence in arr, a devcontainer.json's "runArgs", as
+// [dockerargs.Parse] reads the argv the array becomes; [dockerargs.Arg.Index] indexes arr.Elements.
+// An element that is not a string, which the devcontainer tooling could not hand to docker at all,
+// stands in as an empty entry so that the elements around it keep the positions docker would read
+// them at.
+//
+// It is the reading the traversal hands "/runArgs/--flag" patterns (see [Rule.Paths]), for the rules
+// that cannot be driven by it because they report a flag's absence.
+func RunArgs(arr *hujson.Array) []dockerargs.Arg {
+	argv := make([]string, len(arr.Elements))
+	for i, elem := range arr.Elements {
+		if lit, ok := elem.Value.(hujson.Literal); ok && lit.Kind() == '"' {
+			argv[i] = lit.String()
+		}
+	}
+	return dockerargs.Parse(argv)
+}
+
 // runArgsFlags visits the elements of arr, a devcontainer.json's "runArgs", as the "docker run" argv
 // the array becomes: each flag occurrence is reached at the flag's long spelling, so "-v" and
 // "--volume" alike are reached at "/runArgs/--volume", on the element the flag's value is written
 // in. The elements are deliberately not visited by index as well, which would give each of them two
 // paths and so hand a pattern like "/runArgs/*" the same element twice.
 func (w *walker) runArgsFlags(arr *hujson.Array, pointer string, segs []string) {
-	for _, arg := range dockerargs.ParseArray(arr) {
+	for _, arg := range RunArgs(arr) {
 		node := &Node{
 			Pointer: pointer + "/" + strconv.Itoa(arg.Index),
 			Value:   &arr.Elements[arg.Index],

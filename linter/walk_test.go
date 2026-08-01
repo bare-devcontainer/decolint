@@ -4,6 +4,8 @@ import (
 	"slices"
 	"testing"
 
+	"github.com/bare-devcontainer/decolint/dockerargs"
+	"github.com/google/go-cmp/cmp"
 	"github.com/tailscale/hujson"
 )
 
@@ -100,6 +102,45 @@ func TestWalk_SingleTraversal(t *testing.T) {
 	})
 	if !slices.Equal(callsA, []string{"/image"}) || !slices.Equal(callsB, []string{"/image"}) {
 		t.Errorf("calls = %v / %v, want a single /image call for each rule", callsA, callsB)
+	}
+}
+
+func TestRunArgs(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		src  string
+		want []dockerargs.Arg
+	}{
+		{"empty array", `[]`, nil},
+		{"flag and value in one element", `["--cap-drop=ALL"]`, []dockerargs.Arg{
+			{Flag: "cap-drop", Value: "ALL", Index: 0},
+		}},
+		{"value in the following element", `["--cap-drop", "ALL"]`, []dockerargs.Arg{
+			{Flag: "cap-drop", Value: "ALL", Index: 1},
+		}},
+		// A non-string element keeps its position so that the ones after it keep theirs.
+		{"non-string element", `[123, "--privileged"]`, []dockerargs.Arg{
+			{Flag: "privileged", Value: "true", Index: 1},
+		}},
+		{"non-string element consumed as a value", `["--label", 123, "--privileged"]`, []dockerargs.Arg{
+			{Flag: "label", Value: "", Index: 1},
+			{Flag: "privileged", Value: "true", Index: 2},
+		}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			v := parseValue(t, tt.src)
+			arr, ok := v.Value.(*hujson.Array)
+			if !ok {
+				t.Fatalf("%s is not an array", tt.src)
+			}
+			if diff := cmp.Diff(tt.want, RunArgs(arr)); diff != "" {
+				t.Errorf("RunArgs(%s) mismatch (-want +got):\n%s", tt.src, diff)
+			}
+		})
 	}
 }
 

@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/bare-devcontainer/decolint/dockerargs"
+	"github.com/bare-devcontainer/decolint/linter"
 	"github.com/tailscale/hujson"
 )
 
@@ -102,7 +103,7 @@ func arrayMembers(obj *hujson.Object, name string) iter.Seq[*hujson.Array] {
 // array itself.
 func runArgsHasFlagValue(obj *hujson.Object, flag string, match func(string) bool) bool {
 	for arr := range arrayMembers(obj, "runArgs") {
-		for _, arg := range dockerargs.ParseArray(arr) {
+		for _, arg := range linter.RunArgs(arr) {
 			if arg.Flag == flag && match(arg.Value) {
 				return true
 			}

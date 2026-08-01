@@ -11,8 +11,6 @@ package dockerargs
 import (
 	"strconv"
 	"strings"
-
-	"github.com/tailscale/hujson"
 )
 
 // Flag describes one flag "docker run" registers. The fields mirror pflag, whose parser docker/cli
@@ -212,20 +210,6 @@ func (p *parser) emit(flag, value string, i int) {
 		return
 	}
 	p.args = append(p.args, Arg{Flag: flag, Value: value, Index: i})
-}
-
-// ParseArray returns every flag occurrence in arr, a "runArgs" array, as [Parse] reads the argv the
-// array becomes; [Arg.Index] indexes arr.Elements. An element that is not a string, which the
-// devcontainer tooling could not hand to docker at all, stands in as an empty entry so that the
-// elements around it keep the positions docker would read them at.
-func ParseArray(arr *hujson.Array) []Arg {
-	argv := make([]string, len(arr.Elements))
-	for i, elem := range arr.Elements {
-		if lit, ok := elem.Value.(hujson.Literal); ok && lit.Kind() == '"' {
-			argv[i] = lit.String()
-		}
-	}
-	return Parse(argv)
 }
 
 // IsTrue reports whether value turns on the boolean flag it was written for. Docker reads it with

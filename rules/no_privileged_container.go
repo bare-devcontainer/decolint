@@ -63,6 +63,9 @@ func checkNoPrivilegedContainer(_ *linter.Context, node *linter.Node) []linter.F
 		}}
 	}
 
+	if underRunArgs(node) {
+		return nil
+	}
 	lit, ok := node.Value.Value.(hujson.Literal)
 	if !ok || lit.Kind() != 't' {
 		return nil

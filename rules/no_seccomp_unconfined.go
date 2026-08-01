@@ -58,6 +58,9 @@ func checkNoSeccompUnconfined(_ *linter.Context, node *linter.Node) []linter.Fin
 		}}
 	}
 
+	if underRunArgs(node) {
+		return nil
+	}
 	lit, ok := node.Value.Value.(hujson.Literal)
 	if !ok || lit.Kind() != '"' || !securityOptDisablesSeccomp(lit.String()) {
 		return nil

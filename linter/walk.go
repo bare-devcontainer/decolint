@@ -13,23 +13,15 @@ import (
 type pattern struct {
 	rule     *Rule
 	segments []string // unescaped segments; "*" matches any segment
-	flag     bool     // addresses a "docker run" flag occurrence (see isFlagPattern)
 }
 
 // compilePatterns compiles the path patterns of a rule.
 func compilePatterns(r *Rule) []pattern {
 	var out []pattern
 	for _, p := range r.Paths {
-		segs := splitPointer(p)
-		out = append(out, pattern{rule: r, segments: segs, flag: isFlagPattern(segs)})
+		out = append(out, pattern{rule: r, segments: splitPointer(p)})
 	}
 	return out
-}
-
-// isFlagPattern reports whether segs addresses a "docker run" flag occurrence in "runArgs", e.g.
-// "/runArgs/--volume". A "*" segment is not one: it matches whatever the traversal reaches there.
-func isFlagPattern(segs []string) bool {
-	return len(segs) == 2 && segs[0] == "runArgs" && strings.HasPrefix(segs[1], "--")
 }
 
 // splitPointer parses a JSON Pointer (RFC 6901) into unescaped segments. The empty pointer denotes
@@ -162,16 +154,10 @@ func (w *walker) runArgsFlags(arr *hujson.Array, pointer string, segs []string) 
 	}
 }
 
-// dispatch calls visit for every rule with a pattern matching segs, at most once per rule. A pattern
-// addressing a flag occurrence (see isFlagPattern) matches only a node runArgsFlags produced: in a
-// Feature or a Template, where "runArgs" is ordinary data rather than an argv, a member of it can be
-// named like a flag without being one.
+// dispatch calls visit for every rule with a pattern matching segs, at most once per rule.
 func (w *walker) dispatch(node *Node, segs []string) {
 	var called []*Rule
 	for _, p := range w.patterns {
-		if p.flag && node.Arg == nil {
-			continue
-		}
 		if !matches(p.segments, segs) {
 			continue
 		}

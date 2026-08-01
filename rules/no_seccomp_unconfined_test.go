@@ -77,8 +77,9 @@ func TestNoSeccompUnconfined_Feature(t *testing.T) {
 			{Path: "devcontainer-feature.json", Line: 1, Col: 32, RuleID: "no-seccomp-unconfined",
 				Message: `"securityOpt" contains "seccomp=unconfined", disabling the container's syscall filtering`},
 		}},
-		// "runArgs" has no meaning in a Feature, so it's not flagged there.
+		// "runArgs" has no meaning in a Feature, so it's not flagged there, whatever it holds.
 		{"runArgs with security-opt is ignored", `{"id": "test", "runArgs": ["--security-opt=seccomp=unconfined"]}`, nil},
+		{"runArgs object with a security-opt member is ignored", `{"id": "test", "runArgs": {"--security-opt": "seccomp=unconfined"}}`, nil},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

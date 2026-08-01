@@ -56,9 +56,17 @@ included, and a `runArgs` that is not an array is reached only as a
 whole, at `/runArgs` — so a path under it always arrives with
 `node.Arg` set.
 
-A rule that reports a flag's *absence* cannot be driven by that: a flag
-that is not there is never matched. It inspects the document root
-instead, asking `runArgsHasFlagValue` (see
+Only a devcontainer.json has a `runArgs` at all. A Feature or a
+Template that carries one is walked as the ordinary data it is, so
+`/runArgs/--volume` matches a member merely spelled like the flag
+there, with `node.Arg` nil — exactly as it is on the property the
+rule's other path names. A rule reporting both a property and a flag
+has to ignore those matches, with `underRunArgs` (see
+[`rules/util.go`](rules/util.go)).
+
+A rule that reports a flag's *absence* cannot be driven by any of that:
+a flag that is not there is never matched. It inspects the document
+root instead, asking `runArgsHasFlagValue` (also in
 [`rules/util.go`](rules/util.go)) for the flag's values.
 
 A rule's default severity is not set individually; it comes entirely

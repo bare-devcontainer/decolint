@@ -295,9 +295,10 @@ type Rule struct {
 	// Example shows the rule firing and not firing on realistic configuration. Tests lint both: Bad
 	// must report the rule, Good must not.
 	Example Example
-	// Check inspects one value matching Paths and returns any findings. It is called at most once per
-	// rule for a given value, even if several patterns match it. Check must be safe for concurrent
-	// use, since it may be called for multiple files.
+	// Check inspects one value matching Paths and returns any findings. It is called once for a given
+	// value, even if several patterns match it — except for a "runArgs" element naming several flags,
+	// which it is called for once per flag, with [Node.Arg] telling the occurrences apart. Check must
+	// be safe for concurrent use, since it may be called for multiple files.
 	Check func(ctx *Context, node *Node) []Finding
 }
 

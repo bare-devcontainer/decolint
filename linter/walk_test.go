@@ -180,12 +180,14 @@ func TestWalk_RunArgs(t *testing.T) {
 			`{"runArgs": ["--cap-add=ALL"], "runArgs": ["--cap-add=NET_ADMIN"]}`,
 			[]visit{{"/runArgs/0", `"--cap-add=ALL"`, "cap-add", "ALL"}, {"/runArgs/0", `"--cap-add=NET_ADMIN"`, "cap-add", "NET_ADMIN"}}},
 
-		// The elements are addressed by flag only, so a wildcard reaches each of them once — and only
-		// the ones a flag's value is written in.
+		// The elements are addressed by flag only, so a wildcard reaches an element once per flag it
+		// names — and only the elements a flag's value is written in.
 		{"wildcard over flags holding their values", []string{"/runArgs/*"}, `{"runArgs": ["--privileged", "--init"]}`,
 			[]visit{{"/runArgs/0", `"--privileged"`, "privileged", "true"}, {"/runArgs/1", `"--init"`, "init", "true"}}},
 		{"wildcard over a flag consuming the next element", []string{"/runArgs/*"}, `{"runArgs": ["--cap-add", "ALL"]}`,
 			[]visit{{"/runArgs/1", `"ALL"`, "cap-add", "ALL"}}},
+		{"wildcard over one element naming several flags", []string{"/runArgs/*"}, `{"runArgs": ["-it"]}`,
+			[]visit{{"/runArgs/0", `"-it"`, "interactive", "true"}, {"/runArgs/0", `"-it"`, "tty", "true"}}},
 
 		{"the array itself", []string{"/runArgs"}, `{"runArgs": ["--cap-add=ALL"]}`,
 			[]visit{{"/runArgs", `["--cap-add=ALL"]`, "", ""}}},

@@ -59,7 +59,8 @@ func matches(pat, segs []string) bool {
 
 // walk traverses the syntax tree of a file of the given type depth-first exactly once and calls
 // visit for every (rule, value) pair where one of the rule's patterns matches the value's path. A
-// rule is visited at most once per value.
+// rule is visited once for a value however many of its patterns match, except for a "runArgs"
+// element naming several flags, which is visited once per flag (see runArgsFlags).
 func walk(root *hujson.Value, fileType FileType, patterns []pattern, visit func(*Rule, *Node)) {
 	w := walker{patterns: patterns, runArgs: fileType == Devcontainer, visit: visit}
 	w.value(root, "", nil)
@@ -128,8 +129,14 @@ func RunArgs(arr *hujson.Array) []dockerargs.Arg {
 // runArgsFlags visits the elements of arr, a devcontainer.json's "runArgs", as the "docker run" argv
 // the array becomes: each flag occurrence is reached at the flag's long spelling, so "-v" and
 // "--volume" alike are reached at "/runArgs/--volume", on the element the flag's value is written
-// in. The elements are deliberately not visited by index as well, which would give each of them two
-// paths and so hand a pattern like "/runArgs/*" the same element twice.
+// in.
+//
+// One element can hold several occurrences — a run of shorthands, "-it", names two flags — and is
+// visited once for each, so that a rule subscribing to more than one of them, or to "/runArgs/*",
+// sees every flag the argv gives rather than whichever comes first. Collapsing them would drop a
+// flag silently, which is the failure this addressing exists to prevent. The elements are
+// deliberately not visited by index as well: that reaches the same occurrence by a second path and
+// buys nothing, where two occurrences in one element are two distinct things to report on.
 func (w *walker) runArgsFlags(arr *hujson.Array, pointer string, segs []string) {
 	for _, arg := range RunArgs(arr) {
 		node := &Node{

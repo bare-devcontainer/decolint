@@ -6,6 +6,7 @@ import (
 	"path"
 	"strings"
 
+	"github.com/bare-devcontainer/decolint/dockerargs"
 	"github.com/bare-devcontainer/decolint/linter"
 	"github.com/tailscale/hujson"
 )
@@ -23,6 +24,12 @@ const dockerSocketPath = "/var/run/docker.sock"
 // "//var/run/docker.sock" and "/var/run/docker.sock/" all reach the same socket.
 func isDockerSocketSource(source string) bool {
 	return path.Clean(source) == dockerSocketPath
+}
+
+// isAllCapability reports whether s names the "ALL" pseudo-capability, which stands for every Linux
+// capability. Docker upper-cases a capability name before matching it, so "all" names it too.
+func isAllCapability(s string) bool {
+	return strings.EqualFold(s, "ALL")
 }
 
 // hasMember reports whether obj has a member named name.
@@ -76,34 +83,31 @@ func arrayMembers(obj *hujson.Object, name string) iter.Seq[*hujson.Array] {
 	}
 }
 
-// runArgsFlagValues yields every value that arr, a "runArgs" array, gives to flag, in order. Docker
-// accepts such a value either as a single combined "flag=value" entry or as two adjacent entries,
-// "flag" followed by "value". Each yielded pair is the hujson.Value holding the value and the value
-// itself.
+// runArgsFlagValues yields every value that arr, a "runArgs" array, gives to the "docker run" flag
+// named flag, in order. flag is the flag's name rather than a spelling of it, so "volume" covers
+// both "-v" and "--volume"; see [dockerargs.Parse] for the entry forms a value can be written in.
+// Each yielded pair is the array element holding the value and the value itself.
 func runArgsFlagValues(arr *hujson.Array, flag string) iter.Seq2[*hujson.Value, string] {
 	return func(yield func(*hujson.Value, string) bool) {
-		for i := range arr.Elements {
-			lit, ok := arr.Elements[i].Value.(hujson.Literal)
-			if !ok || lit.Kind() != '"' {
-				continue
-			}
-
-			if v, ok := strings.CutPrefix(lit.String(), flag+"="); ok {
-				if !yield(&arr.Elements[i], v) {
-					return
-				}
-				continue
-			}
-
-			if lit.String() != flag || i+1 >= len(arr.Elements) {
-				continue
-			}
-			next, ok := arr.Elements[i+1].Value.(hujson.Literal)
-			if ok && next.Kind() == '"' && !yield(&arr.Elements[i+1], next.String()) {
+		for _, arg := range dockerargs.Parse(runArgsArgv(arr)) {
+			if arg.Flag == flag && !yield(&arr.Elements[arg.Index], arg.Value) {
 				return
 			}
 		}
 	}
+}
+
+// runArgsArgv returns arr, a "runArgs" array, as the argv it becomes. An element that is not a
+// string, which the devcontainer tooling could not hand to docker at all, stands in as an empty
+// entry so that the elements around it keep the positions docker would read them at.
+func runArgsArgv(arr *hujson.Array) []string {
+	argv := make([]string, len(arr.Elements))
+	for i, elem := range arr.Elements {
+		if lit, ok := elem.Value.(hujson.Literal); ok && lit.Kind() == '"' {
+			argv[i] = lit.String()
+		}
+	}
+	return argv
 }
 
 // runArgsFindFlagValue returns the hujson.Value holding the first value arr gives to flag that match

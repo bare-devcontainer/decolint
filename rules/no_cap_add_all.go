@@ -52,7 +52,7 @@ func checkNoCapAddAll(ctx *linter.Context, node *linter.Node) []linter.Finding {
 		if !ok || !runArgsApplicable(ctx) {
 			return nil
 		}
-		v := runArgsFindFlagValue(arr, "--cap-add", func(s string) bool { return s == "ALL" })
+		v := runArgsFindFlagValue(arr, "cap-add", isAllCapability)
 		if v == nil {
 			return nil
 		}

@@ -75,15 +75,13 @@ func checkDockerSocketMount(node *linter.Node) []linter.Finding {
 
 // dockerSocketRunArgFlags are the "runArgs" flags that can mount a host path, each paired with the
 // reader for its own value syntax. The two syntaxes are unrelated, so a value must be read only as
-// the flag introducing it, which is why this rule inspects the whole "runArgs" array rather than its
-// entries one by one.
+// the flag introducing it.
 var dockerSocketRunArgFlags = []struct {
 	flag   string
 	source func(string) string
 }{
-	{"--mount", func(s string) string { _, source := parseMountString(s); return source }},
-	{"--volume", volumeSpecSource},
-	{"-v", volumeSpecSource},
+	{"mount", func(s string) string { _, source := parseMountString(s); return source }},
+	{"volume", volumeSpecSource},
 }
 
 func checkDockerSocketRunArgs(node *linter.Node) []linter.Finding {

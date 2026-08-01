@@ -44,6 +44,10 @@ func TestRequireNoNewPrivileges(t *testing.T) {
 		}},
 		{"runArgs two tokens", `{"runArgs": ["--security-opt", "no-new-privileges"]}`, nil},
 		{"runArgs combined", `{"runArgs": ["--security-opt=no-new-privileges=true"]}`, nil},
+		{"runArgs security-opt consumed as another flag's value", `{"runArgs": ["--label", "--security-opt=no-new-privileges"]}`, []linter.Issue{
+			{Path: "devcontainer.json", Line: 1, Col: 1, RuleID: "require-no-new-privileges",
+				Message: `"no-new-privileges" is not set via "securityOpt" or "runArgs", allowing container processes to gain additional privileges`},
+		}},
 		{"runArgs combined false", `{"runArgs": ["--security-opt=no-new-privileges=false"]}`, []linter.Issue{
 			{Path: "devcontainer.json", Line: 1, Col: 1, RuleID: "require-no-new-privileges",
 				Message: `"no-new-privileges" is not set via "securityOpt" or "runArgs", allowing container processes to gain additional privileges`},

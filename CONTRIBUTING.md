@@ -118,6 +118,53 @@ context the two snippets alone don't convey.
 The existing rules in [`rules/`](rules/) are good references,
 including for the table-driven tests each rule ships with.
 
+## The `docker run` flag table
+
+A devcontainer.json's `runArgs` is spliced into a `docker run` command
+line, so where a rule finds a value depends on which flags take one:
+`["--label", "--cap-drop=ALL"]` drops no capability, because `--label`
+consumes the entry after it. [`dockerargs`](dockerargs/) reads a
+`runArgs` array the way pflag — the parser docker/cli uses — reads an
+argv, and rules ask it for a flag's values instead of matching entries
+themselves.
+
+That needs to know every flag `docker run` registers and whether it
+takes a value. A table written by hand would go stale the first time
+Docker adds a flag, and stale silently: decolint would keep parsing,
+just no longer the way Docker does. So
+[`cmd/dockerflagsgen`](cmd/dockerflagsgen/) builds the command
+docker/cli builds and writes the flags back out as
+[`dockerargs/runflags.go`](dockerargs/runflags.go):
+
+```console
+make dockerflags        # regenerate the table
+make dockerflags-test   # the generator's tests, incl. the differential test against pflag
+```
+
+The generator is a module of its own, with docker/cli pinned in its own
+[`go.mod`](cmd/dockerflagsgen/go.mod). decolint itself depends on
+neither docker/cli nor pflag, and `go build`, `go test` and `make lint`,
+which all work on the module rooted here, never reach it. Renovate bumps
+the pin like any other dependency; CI's `dockerflags` job regenerates
+the table and fails on a diff, so a docker/cli release that changes a
+flag arrives as a diff to review rather than as findings that quietly
+stop matching what Docker does.
+
+Two of the generator module's tests are the ones that keep the table
+honest, and both are meant to fail loudly:
+
+- `TestParse` runs random argvs through both `dockerargs.Parse` and a
+  real `pflag.FlagSet` built from the table, and compares the values
+  each assigns.
+- `TestRunFlags`, in `dockerargs` itself, spells the whole table out a
+  second time, so regenerating it against a newer docker/cli fails a
+  test instead of changing which entry a rule reads a value from.
+
+`dockerargs` deliberately parts from Docker in two places, both
+documented at `Parse`: it reads on past a `--` terminator and past the
+image name, where Docker stops. Anything else is a bug in `dockerargs`,
+not a rule's problem.
+
 ## Where documentation lives
 
 The README and the site divide by what the reader is trying to decide:

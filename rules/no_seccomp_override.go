@@ -27,7 +27,7 @@ does.`,
 	},
 	Category:  linter.CategorySecurity,
 	FileTypes: []linter.FileType{linter.Devcontainer, linter.Feature},
-	Paths:     []string{"/securityOpt/*", "/runArgs/*"},
+	Paths:     []string{"/securityOpt/*", "/runArgs"},
 	Example: linter.Example{
 		Bad: linter.Snippet{
 			Files: []linter.ExampleFile{
@@ -54,33 +54,33 @@ which already allows what a development container normally does.`,
 }
 
 func checkNoSeccompOverride(ctx *linter.Context, node *linter.Node) []linter.Finding {
-	lit, ok := node.Value.Value.(hujson.Literal)
-	if !ok || lit.Kind() != '"' {
-		return nil
-	}
-
-	if strings.HasPrefix(node.Pointer, "/securityOpt/") {
-		if !strings.HasPrefix(lit.String(), "seccomp=") {
+	if node.Pointer == "/runArgs" {
+		arr, ok := node.Value.Value.(*hujson.Array)
+		if !ok || !runArgsApplicable(ctx) {
+			return nil
+		}
+		v := runArgsFindFlagValue(arr, "security-opt", securityOptOverridesSeccomp)
+		if v == nil {
 			return nil
 		}
 		return []linter.Finding{{
-			Message: `"securityOpt" overrides the default seccomp profile`,
-			Offset:  node.Value.StartOffset,
+			Message: `"runArgs" overrides the default seccomp profile via "--security-opt"`,
+			Offset:  v.StartOffset,
 		}}
 	}
 
-	if !runArgsApplicable(ctx) || !runArgOverridesSeccomp(lit.String()) {
+	lit, ok := node.Value.Value.(hujson.Literal)
+	if !ok || lit.Kind() != '"' || !securityOptOverridesSeccomp(lit.String()) {
 		return nil
 	}
 	return []linter.Finding{{
-		Message: `"runArgs" overrides the default seccomp profile via "--security-opt"`,
+		Message: `"securityOpt" overrides the default seccomp profile`,
 		Offset:  node.Value.StartOffset,
 	}}
 }
 
-// runArgOverridesSeccomp reports whether s, a single "runArgs" entry, overrides the default seccomp
-// profile. It recognizes a combined "--security-opt=seccomp=..." entry as well as the bare
-// "seccomp=..." value that follows a separate "--security-opt" entry.
-func runArgOverridesSeccomp(s string) bool {
-	return strings.HasPrefix(strings.TrimPrefix(s, "--security-opt="), "seccomp=")
+// securityOptOverridesSeccomp reports whether s, a single "securityOpt" entry, points seccomp at a
+// profile of its own.
+func securityOptOverridesSeccomp(s string) bool {
+	return strings.HasPrefix(s, "seccomp=")
 }

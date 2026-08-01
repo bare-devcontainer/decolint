@@ -1,6 +1,7 @@
 package rules
 
 import (
+	"github.com/bare-devcontainer/decolint/dockerargs"
 	"github.com/bare-devcontainer/decolint/linter"
 	"github.com/tailscale/hujson"
 )
@@ -23,7 +24,7 @@ capabilities and devices the workload needs, is a far narrower grant.`,
 	},
 	Category:  linter.CategorySecurity,
 	FileTypes: []linter.FileType{linter.Devcontainer, linter.Feature},
-	Paths:     []string{"/privileged", "/runArgs/*"},
+	Paths:     []string{"/privileged", "/runArgs"},
 	Example: linter.Example{
 		Bad: linter.Snippet{
 			Files: []linter.ExampleFile{
@@ -52,27 +53,27 @@ nested containers.`,
 }
 
 func checkNoPrivilegedContainer(ctx *linter.Context, node *linter.Node) []linter.Finding {
-	lit, ok := node.Value.Value.(hujson.Literal)
-	if !ok {
-		return nil
-	}
-
-	switch node.Pointer {
-	case "/privileged":
-		if lit.Kind() != 't' {
+	if node.Pointer == "/runArgs" {
+		arr, ok := node.Value.Value.(*hujson.Array)
+		if !ok || !runArgsApplicable(ctx) {
 			return nil
 		}
-		return []linter.Finding{{
-			Message: `"privileged" is set to true, disabling the container's isolation from the host`,
-			Offset:  node.Value.StartOffset,
-		}}
-	default:
-		if !runArgsApplicable(ctx) || lit.Kind() != '"' || lit.String() != "--privileged" {
+		v := runArgsFindFlagValue(arr, "privileged", dockerargs.IsTrue)
+		if v == nil {
 			return nil
 		}
 		return []linter.Finding{{
 			Message: `"runArgs" contains "--privileged", disabling the container's isolation from the host`,
-			Offset:  node.Value.StartOffset,
+			Offset:  v.StartOffset,
 		}}
 	}
+
+	lit, ok := node.Value.Value.(hujson.Literal)
+	if !ok || lit.Kind() != 't' {
+		return nil
+	}
+	return []linter.Finding{{
+		Message: `"privileged" is set to true, disabling the container's isolation from the host`,
+		Offset:  node.Value.StartOffset,
+	}}
 }

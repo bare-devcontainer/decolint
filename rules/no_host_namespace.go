@@ -92,6 +92,12 @@ reach other containers on it by name while keeping a network namespace of its ow
 }
 
 func checkNoHostNamespace(_ *linter.Context, node *linter.Node) []linter.Finding {
+	// A "runArgs" that is an object rather than an array is no argv, and is traversed as the ordinary
+	// object it is, so a member named "--network" reaches this rule's path without being a flag.
+	if node.Arg == nil {
+		return nil
+	}
+
 	ns := hostNamespaces[node.Arg.Flag]
 	target := node.Arg.Value
 	if ns.target != nil {

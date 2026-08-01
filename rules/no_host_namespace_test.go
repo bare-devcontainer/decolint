@@ -75,8 +75,21 @@ func TestNoHostNamespace(t *testing.T) {
 			{Path: "devcontainer.json", Line: 1, Col: 14, RuleID: "no-host-namespace",
 				Message: `"runArgs" contains "--network=alias=web, name = host ", which asks for the host's network namespace instead of the container's own`},
 		}},
-		{"network field list with a field carrying no value", `{"runArgs": ["--network=name=host,web"]}`, nil},
+		// Docker rejects a field list holding a field it cannot read, so nothing runs; the list still
+		// says which network was asked for, and the rule says so rather than going quiet on it.
+		{"network field list with a field carrying no value", `{"runArgs": ["--network=name=host,web"]}`, []linter.Issue{
+			{Path: "devcontainer.json", Line: 1, Col: 14, RuleID: "no-host-namespace",
+				Message: `"runArgs" contains "--network=name=host,web", which asks for the host's network namespace instead of the container's own`},
+		}},
+		{"network field list with an unknown field key", `{"runArgs": ["--network=name=host,foo=bar"]}`, []linter.Issue{
+			{Path: "devcontainer.json", Line: 1, Col: 14, RuleID: "no-host-namespace",
+				Message: `"runArgs" contains "--network=name=host,foo=bar", which asks for the host's network namespace instead of the container's own`},
+		}},
 		{"network field list naming no network", `{"runArgs": ["--network=alias=host"]}`, nil},
+		// A "runArgs" that is an object is no argv: its members are traversed as an object's, so one
+		// named like a flag reaches this rule's path carrying no flag occurrence.
+		{"runArgs is an object keyed like a flag", `{"runArgs": {"--network": "host"}}`, nil},
+		{"runArgs is an object with a non-string member", `{"runArgs": {"--pid": {"a": 1}}}`, nil},
 		// Only "--network" takes a field list; every other namespace flag names its value directly,
 		// so Docker reads this one as a network named "name=host" rather than as the host.
 		{"a field list is not accepted for another namespace", `{"runArgs": ["--pid=name=host"]}`, nil},

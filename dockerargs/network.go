@@ -20,8 +20,15 @@ var networkFieldList = regexp.MustCompile(`\w+=\w+(,\w+=\w+)*`)
 // ("name=host,alias=web"), the fields being a CSV record as a mount entry's are. It lower-cases a
 // field's key and value and trims the space around them.
 //
-// A value naming no network — a list without a "name" field, or one Docker rejects outright —
-// yields "", and a list naming several yields the last, which is the one Docker is left holding.
+// A field list Docker rejects for a reason of its own — an unknown field key, an address that does
+// not parse, a field written without a key or without a value — is read here for whatever its
+// "name" field holds rather than treated as naming nothing. The value already fails to start the
+// container, and reading it lets a rule name the network the author asked for instead of falling
+// silent on it, as [IsTrue] reads a boolean flag Docker would reject.
+//
+// The result is "" for a list naming no network at all and for one the CSV reader cannot read,
+// neither of which says what was meant. A list naming several yields the last, which is the one
+// Docker is left holding.
 func NetworkTarget(value string) string {
 	if !networkFieldList.MatchString(value) {
 		return value
@@ -34,8 +41,7 @@ func NetworkTarget(value string) string {
 	for _, field := range fields {
 		key, name, ok := strings.Cut(field, "=")
 		if !ok {
-			// Docker rejects a field carrying no value, leaving the value naming no network.
-			return ""
+			continue
 		}
 		if strings.ToLower(strings.TrimSpace(key)) == "name" {
 			target = strings.ToLower(strings.TrimSpace(name))

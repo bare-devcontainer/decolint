@@ -19,7 +19,12 @@ func TestNetworkTarget(t *testing.T) {
 		{`name=devnet,name=host`, "host"},
 		{`name=host,name=devnet`, "devnet"},
 		{`alias=host`, ""},
-		{`name=host,web`, ""},
+		// Docker rejects each of these outright, so nothing runs; the value still says which network
+		// was asked for, and saying so beats going quiet on it.
+		{`name=host,web`, "host"},
+		{`name=host,foo=bar`, "host"},
+		{`name=host,ip=notanip`, "host"},
+		{`name=host,=x`, "host"},
 		// The field-list reading is chosen by an unspaced "key=value" appearing somewhere, so a value
 		// whose every "=" has space around it is a network name that happens to contain one.
 		{`name = host`, "name = host"},

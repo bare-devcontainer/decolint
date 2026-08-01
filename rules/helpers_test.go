@@ -3,6 +3,7 @@ package rules_test
 import (
 	"errors"
 	"io/fs"
+	"slices"
 	"testing"
 
 	"github.com/bare-devcontainer/decolint/linter"
@@ -58,10 +59,11 @@ func assertIssuesInDir(t *testing.T, r *linter.Rule, severity linter.Severity, p
 	got := lintSource(t, l, path, fileType, src, dir)
 
 	// want is written without Severity since it's the same for every case in a table-driven test: the
-	// severity r was registered at.
-	for i, w := range want {
-		w.Severity = severity
-		want[i] = w
+	// severity r was registered at. Fill it in on a copy, since parallel subtests may share one want
+	// slice. [slices.Clone] keeps a nil want nil, which cmp.Diff distinguishes from an empty slice.
+	want = slices.Clone(want)
+	for i := range want {
+		want[i].Severity = severity
 	}
 
 	sortIssues := cmpopts.SortSlices(func(a, b linter.Issue) bool {

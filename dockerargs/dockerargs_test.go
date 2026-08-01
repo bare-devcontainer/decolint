@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
+	"github.com/tailscale/hujson"
 )
 
 func TestParse(t *testing.T) {
@@ -161,6 +162,48 @@ func TestIsTrue(t *testing.T) {
 			t.Parallel()
 			if got := IsTrue(tt.value); got != tt.want {
 				t.Errorf("IsTrue(%q) = %v, want %v", tt.value, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestParseArray(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		src  string
+		want []Arg
+	}{
+		{"empty array", `[]`, nil},
+		{"flag and value in one element", `["--cap-drop=ALL"]`, []Arg{
+			{Flag: "cap-drop", Value: "ALL", Index: 0},
+		}},
+		{"value in the following element", `["--cap-drop", "ALL"]`, []Arg{
+			{Flag: "cap-drop", Value: "ALL", Index: 1},
+		}},
+		// A non-string element keeps its position so that the ones after it keep theirs.
+		{"non-string element", `[123, "--privileged"]`, []Arg{
+			{Flag: "privileged", Value: "true", Index: 1},
+		}},
+		{"non-string element consumed as a value", `["--label", 123, "--privileged"]`, []Arg{
+			{Flag: "label", Value: "", Index: 1},
+			{Flag: "privileged", Value: "true", Index: 2},
+		}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			v, err := hujson.Parse([]byte(tt.src))
+			if err != nil {
+				t.Fatalf("parse: %v", err)
+			}
+			arr, ok := v.Value.(*hujson.Array)
+			if !ok {
+				t.Fatalf("%s is not an array", tt.src)
+			}
+			if diff := cmp.Diff(tt.want, ParseArray(arr)); diff != "" {
+				t.Errorf("ParseArray(%s) mismatch (-want +got):\n%s", tt.src, diff)
 			}
 		})
 	}

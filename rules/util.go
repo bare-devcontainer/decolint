@@ -7,7 +7,6 @@ import (
 	"strings"
 
 	"github.com/bare-devcontainer/decolint/dockerargs"
-	"github.com/bare-devcontainer/decolint/linter"
 	"github.com/tailscale/hujson"
 )
 
@@ -94,43 +93,22 @@ func arrayMembers(obj *hujson.Object, name string) iter.Seq[*hujson.Array] {
 	}
 }
 
-// runArgsFlagValues yields every value that arr, a "runArgs" array, gives to the "docker run" flag
-// named flag, in order. flag is the flag's name rather than a spelling of it, so "volume" covers
-// both "-v" and "--volume"; see [dockerargs.Parse] for the entry forms a value can be written in.
-// Each yielded pair is the array element holding the value and the value itself.
-func runArgsFlagValues(arr *hujson.Array, flag string) iter.Seq2[*hujson.Value, string] {
-	return func(yield func(*hujson.Value, string) bool) {
-		for _, arg := range dockerargs.Parse(runArgsArgv(arr)) {
-			if arg.Flag == flag && !yield(&arr.Elements[arg.Index], arg.Value) {
-				return
+// runArgsHasFlagValue reports whether any "runArgs" member of obj (see [arrayMembers]) gives the
+// "docker run" flag named flag a value match accepts. flag is the flag's long name without the
+// leading "--", so "volume" covers both "-v" and "--volume".
+//
+// It is for the rules that report a flag's absence, which the engine cannot hand an occurrence of.
+// A rule reporting a flag's presence declares a "/runArgs/--flag" path instead and never reads the
+// array itself.
+func runArgsHasFlagValue(obj *hujson.Object, flag string, match func(string) bool) bool {
+	for arr := range arrayMembers(obj, "runArgs") {
+		for _, arg := range dockerargs.ParseArray(arr) {
+			if arg.Flag == flag && match(arg.Value) {
+				return true
 			}
 		}
 	}
-}
-
-// runArgsArgv returns arr, a "runArgs" array, as the argv it becomes. An element that is not a
-// string, which the devcontainer tooling could not hand to docker at all, stands in as an empty
-// entry so that the elements around it keep the positions docker would read them at.
-func runArgsArgv(arr *hujson.Array) []string {
-	argv := make([]string, len(arr.Elements))
-	for i, elem := range arr.Elements {
-		if lit, ok := elem.Value.(hujson.Literal); ok && lit.Kind() == '"' {
-			argv[i] = lit.String()
-		}
-	}
-	return argv
-}
-
-// runArgsFindFlagValue returns the hujson.Value holding the first value arr gives to flag that match
-// accepts, or nil if it gives flag no such value. See [runArgsFlagValues] for the entry forms it
-// recognizes.
-func runArgsFindFlagValue(arr *hujson.Array, flag string, match func(string) bool) *hujson.Value {
-	for v, s := range runArgsFlagValues(arr, flag) {
-		if match(s) {
-			return v
-		}
-	}
-	return nil
+	return false
 }
 
 // parseMountString extracts the "type" and "source" fields from s, a "--mount" value, as docker/cli
@@ -236,12 +214,6 @@ func stringMember(obj *hujson.Object, name string) (string, bool) {
 		return lit.String(), true
 	}
 	return "", false
-}
-
-// runArgsApplicable reports whether ctx is for a devcontainer.json, the only file type where
-// "runArgs" is meaningful; a Feature has no use for it, so rules should not flag one there.
-func runArgsApplicable(ctx *linter.Context) bool {
-	return ctx.Type == linter.Devcontainer
 }
 
 // refTag extracts the tag from an OCI-style reference, e.g. a container image or Feature reference.

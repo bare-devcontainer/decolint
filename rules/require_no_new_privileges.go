@@ -56,10 +56,8 @@ func checkRequireNoNewPrivileges(_ *linter.Context, node *linter.Node) []linter.
 	if stringArrayContains(obj, "securityOpt", securityOptIsNoNewPrivileges) {
 		return nil
 	}
-	for arr := range arrayMembers(obj, "runArgs") {
-		if runArgsFindFlagValue(arr, "security-opt", securityOptIsNoNewPrivileges) != nil {
-			return nil
-		}
+	if runArgsHasFlagValue(obj, "security-opt", securityOptIsNoNewPrivileges) {
+		return nil
 	}
 
 	return []linter.Finding{{

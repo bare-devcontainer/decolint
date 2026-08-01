@@ -6,6 +6,7 @@ import (
 	"io/fs"
 	"strings"
 
+	"github.com/bare-devcontainer/decolint/dockerargs"
 	"github.com/tailscale/hujson"
 )
 
@@ -238,6 +239,10 @@ type Node struct {
 	Pointer string
 	// Value is the HuJSON value at Pointer.
 	Value *hujson.Value
+	// Arg is the "docker run" flag occurrence the value was reached as, set only on a node the
+	// "runArgs" traversal produced (see [Rule.Paths]) and nil on every other node. Value is then the
+	// element the flag's value is written in, which is the flag's own element or the one after it.
+	Arg *dockerargs.Arg
 }
 
 // Finding is a single problem reported by a rule.
@@ -280,6 +285,12 @@ type Rule struct {
 	// Paths are the JSON Pointer patterns of the values this rule wants to inspect. A "*" segment
 	// matches any object member name or array index (e.g. "/mounts/*"); the empty string matches the
 	// document root.
+	//
+	// A devcontainer.json's "runArgs" is traversed as the "docker run" argv it becomes, so its
+	// elements are addressed by flag rather than by index: "/runArgs/--volume" matches once per
+	// occurrence of that flag, whichever spelling the argv uses, and [Node.Arg] carries the value the
+	// occurrence gives it. A rule reporting a flag's absence cannot be driven by that, since a flag
+	// that is not there is never matched; it inspects the document root instead.
 	Paths []string
 	// Example shows the rule firing and not firing on realistic configuration. Tests lint both: Bad
 	// must report the rule, Good must not.

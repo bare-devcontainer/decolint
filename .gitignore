@@ -22,6 +22,9 @@ profile.cov
 # A stray "go build ./cmd/docgen/..." from the repo root lands here; the Makefile always uses
 # "go run" for it instead, so this is never an intentional artifact.
 /docgen
+# The same for cmd/dockerflagsgen, except that it is a module of its own, so a stray "go build"
+# runs from inside it and the binary lands beside the source; "make dockerflags" uses "go run".
+/cmd/dockerflagsgen/dockerflagsgen
 /docs/public/
 /docs/resources/
 # Rule pages, the README-derived pages, and the generated syntax stylesheet; see cmd/docgen and

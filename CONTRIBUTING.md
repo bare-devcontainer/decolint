@@ -48,12 +48,17 @@ A devcontainer.json's `runArgs` is the exception: it is traversed as
 the `docker run` argv it becomes (see [The `docker run` flag
 table](#the-docker-run-flag-table) below), so a rule addresses its
 entries by flag rather than by index. `/runArgs/--volume` matches once
-per occurrence of that flag, whichever spelling the argv uses, and
-`node.Arg` carries the flag's value; `node.Value` is the entry that
+per occurrence of that flag, whichever spelling the argv uses;
+`node.Arg` carries the flag's value, and `node.Value` is the entry that
 value is written in, which is not necessarily the one naming the flag.
-A rule that reports a flag's *absence* cannot be driven by that — a
-flag that is not there is never matched — and inspects the document
-root instead, asking `runArgsHasFlagValue` (see
+Nothing else is addressed under `/runArgs` there — `/runArgs/*`
+included, and a `runArgs` that is not an array is reached only as a
+whole, at `/runArgs` — so a path under it always arrives with
+`node.Arg` set.
+
+A rule that reports a flag's *absence* cannot be driven by that: a flag
+that is not there is never matched. It inspects the document root
+instead, asking `runArgsHasFlagValue` (see
 [`rules/util.go`](rules/util.go)) for the flag's values.
 
 A rule's default severity is not set individually; it comes entirely

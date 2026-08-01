@@ -449,25 +449,35 @@ var runArgsSpyRule = &Rule{
 
 // TestLintDocument_RunArgsFileTypes checks that "runArgs" is read as a "docker run" argv only in a
 // devcontainer.json. It is not a property of a Feature or a Template, so there the array is an
-// ordinary one, walked by index.
+// ordinary one, walked by index — and so is a "runArgs" that is not an array at all, which a
+// devcontainer.json has nothing to read in.
 func TestLintDocument_RunArgsFileTypes(t *testing.T) {
 	t.Parallel()
 
+	const (
+		argv   = `{"runArgs": ["--cap-add=ALL"]}`
+		object = `{"runArgs": {"--cap-add": "ALL"}}`
+	)
 	tests := []struct {
+		name     string
 		fileType FileType
+		src      string
 		want     []string
 	}{
-		{Devcontainer, []string{"flag --cap-add"}},
-		{Feature, []string{"element /runArgs/0"}},
-		{Template, []string{"element /runArgs/0"}},
+		{"devcontainer", Devcontainer, argv, []string{"flag --cap-add"}},
+		{"feature", Feature, argv, []string{"element /runArgs/0"}},
+		{"template", Template, argv, []string{"element /runArgs/0"}},
+		{"devcontainer object", Devcontainer, object, nil},
+		{"feature object", Feature, object, []string{"element /runArgs/--cap-add"}},
+		{"template object", Template, object, []string{"element /runArgs/--cap-add"}},
 	}
 	for _, tt := range tests {
-		t.Run(string(tt.fileType), func(t *testing.T) {
+		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			l := New()
 			l.RegisterRule(runArgsSpyRule, SeverityWarn)
 			var got []string
-			for _, issue := range lintSource(t, l, "config.json", tt.fileType, `{"runArgs": ["--cap-add=ALL"]}`) {
+			for _, issue := range lintSource(t, l, "config.json", tt.fileType, tt.src) {
 				got = append(got, issue.Message)
 			}
 			if !slices.Equal(got, tt.want) {

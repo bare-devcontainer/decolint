@@ -193,11 +193,12 @@ func TestWalk_RunArgs(t *testing.T) {
 			[]visit{{"/runArgs", `["--cap-add=ALL"]`, "", ""}}},
 		{"a runArgs that is not an array", []string{"/runArgs/--cap-add"}, `{"runArgs": "--cap-add=ALL"}`, nil},
 
-		// A "runArgs" that is an object is no argv, so a member of it named like a flag is not an
-		// occurrence of that flag — it is reached only where a pattern asks for whatever is there.
+		// A "runArgs" that is an object is no argv, so it holds no flag occurrence — by whatever path
+		// one is asked for, including a member of it named like a flag.
 		{"a member named like a flag", []string{"/runArgs/--cap-add"}, `{"runArgs": {"--cap-add": "ALL"}}`, nil},
-		{"wildcard over an object runArgs", []string{"/runArgs/*"}, `{"runArgs": {"--cap-add": "ALL"}}`,
-			[]visit{{"/runArgs/--cap-add", `"ALL"`, "", ""}}},
+		{"wildcard over an object runArgs", []string{"/runArgs/*"}, `{"runArgs": {"--cap-add": "ALL"}}`, nil},
+		{"the object itself", []string{"/runArgs"}, `{"runArgs": {"--cap-add": "ALL"}}`,
+			[]visit{{"/runArgs", `{"--cap-add": "ALL"}`, "", ""}}},
 		{"a runArgs that is not the document's", []string{"/build/runArgs/*"}, `{"build": {"runArgs": ["--cap-add=ALL"]}}`,
 			[]visit{{"/build/runArgs/0", `"--cap-add=ALL"`, "", ""}}},
 	}

@@ -88,6 +88,16 @@ type walker struct {
 func (w *walker) value(v *hujson.Value, pointer string, segs []string) {
 	w.dispatch(&Node{Pointer: pointer, Value: v}, segs)
 
+	// The segments under a devcontainer.json's "runArgs" name the argv's flags and nothing else, so a
+	// "runArgs" that is not an array is not descended: it has no flag to visit, and its members would
+	// otherwise be addressed in the space the flags occupy.
+	if w.runArgs && len(segs) == 1 && segs[0] == "runArgs" {
+		if arr, ok := v.Value.(*hujson.Array); ok {
+			w.runArgsFlags(arr, pointer, segs)
+		}
+		return
+	}
+
 	// append(segs, seg) here and in runArgsFlags may share segs's backing array across sibling calls,
 	// so a later sibling can overwrite an element a previous sibling appended. This is safe only
 	// because traversal is sequential and no walk call retains segs past its own return (matches
@@ -105,10 +115,6 @@ func (w *walker) value(v *hujson.Value, pointer string, segs []string) {
 			w.value(&m.Value, pointer+"/"+escapeSegment(seg), append(segs, seg))
 		}
 	case *hujson.Array:
-		if w.runArgs && len(segs) == 1 && segs[0] == "runArgs" {
-			w.runArgsFlags(t, pointer, segs)
-			return
-		}
 		for i := range t.Elements {
 			seg := strconv.Itoa(i)
 			w.value(&t.Elements[i], pointer+"/"+seg, append(segs, seg))
@@ -157,9 +163,9 @@ func (w *walker) runArgsFlags(arr *hujson.Array, pointer string, segs []string) 
 }
 
 // dispatch calls visit for every rule with a pattern matching segs, at most once per rule. A pattern
-// addressing a flag occurrence (see isFlagPattern) matches only a node runArgsFlags produced: a
-// "runArgs" that is not an argv is still walked as the object or array it is, and a member of it can
-// be named like a flag without being one.
+// addressing a flag occurrence (see isFlagPattern) matches only a node runArgsFlags produced: in a
+// Feature or a Template, where "runArgs" is ordinary data rather than an argv, a member of it can be
+// named like a flag without being one.
 func (w *walker) dispatch(node *Node, segs []string) {
 	var called []*Rule
 	for _, p := range w.patterns {

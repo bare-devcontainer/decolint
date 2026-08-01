@@ -50,6 +50,8 @@ func TestNoCapAddAll(t *testing.T) {
 			{Path: "devcontainer.json", Line: 1, Col: 31, RuleID: "no-cap-add-all",
 				Message: `"runArgs" contains "--cap-add=ALL", granting every Linux capability to the container`},
 		}},
+		// An object "runArgs" is no command line, so a member named like a flag is not that flag.
+		{"runArgs object with a cap-add member", `{"runArgs": {"--cap-add": "ALL"}}`, nil},
 		{"runArgs with non-string entry before cap-add=ALL", `{"runArgs": [123, "--cap-add=ALL"]}`, []linter.Issue{
 			{Path: "devcontainer.json", Line: 1, Col: 19, RuleID: "no-cap-add-all",
 				Message: `"runArgs" contains "--cap-add=ALL", granting every Linux capability to the container`},

@@ -48,6 +48,8 @@ func TestNoSeccompUnconfined(t *testing.T) {
 		{"runArgs seccomp builtin", `{"runArgs": ["--security-opt", "seccomp=builtin"]}`, nil},
 		{"runArgs security-opt consumed as another flag's value", `{"runArgs": ["--label", "--security-opt=seccomp=unconfined"]}`, nil},
 		{"runArgs bare seccomp entry names no flag", `{"runArgs": ["seccomp=unconfined"]}`, nil},
+		// An object "runArgs" is no command line, so a member named like a flag is not that flag.
+		{"runArgs object with a security-opt member", `{"runArgs": {"--security-opt": "seccomp=unconfined"}}`, nil},
 		{"runArgs seccomp unconfined combined", `{"runArgs": ["--security-opt=seccomp=unconfined"]}`, []linter.Issue{
 			{Path: "devcontainer.json", Line: 1, Col: 14, RuleID: "no-seccomp-unconfined",
 				Message: `"runArgs" contains "--security-opt seccomp=unconfined", disabling the container's syscall filtering`},

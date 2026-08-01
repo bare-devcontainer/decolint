@@ -44,6 +44,18 @@ and calls `Check` for every value matching one of the paths; a `*`
 segment matches any object member name or array index, and the empty
 string matches the document root.
 
+A devcontainer.json's `runArgs` is the exception: it is traversed as
+the `docker run` argv it becomes (see [The `docker run` flag
+table](#the-docker-run-flag-table) below), so a rule addresses its
+entries by flag rather than by index. `/runArgs/--volume` matches once
+per occurrence of that flag, whichever spelling the argv uses, and
+`node.Arg` carries the flag's value; `node.Value` is the entry that
+value is written in, which is not necessarily the one naming the flag.
+A rule that reports a flag's *absence* cannot be driven by that — a
+flag that is not there is never matched — and inspects the document
+root instead, asking `runArgsHasFlagValue` (see
+[`rules/util.go`](rules/util.go)) for the flag's values.
+
 A rule's default severity is not set individually; it comes entirely
 from its category (see `categoryDefaultSeverities` in
 [`rules.go`](rules/rules.go)) — only `CategoryCorrectness` runs by
@@ -125,8 +137,9 @@ line, so where a rule finds a value depends on which flags take one:
 `["--label", "--cap-drop=ALL"]` drops no capability, because `--label`
 consumes the entry after it. [`dockerargs`](dockerargs/) reads a
 `runArgs` array the way pflag — the parser docker/cli uses — reads an
-argv, and rules ask it for a flag's values instead of matching entries
-themselves.
+argv. Both ways a rule reaches a flag (see [Adding a
+rule](#adding-a-rule) above) are built on that reading, so no rule
+matches entries itself.
 
 That needs to know every flag `docker run` registers and whether it
 takes a value. A table written by hand would go stale the first time

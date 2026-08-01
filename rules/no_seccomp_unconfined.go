@@ -52,7 +52,7 @@ func checkNoSeccompUnconfined(ctx *linter.Context, node *linter.Node) []linter.F
 		if !ok || !runArgsApplicable(ctx) {
 			return nil
 		}
-		v := runArgsFindFlagValue(arr, "--security-opt", func(s string) bool { return s == "seccomp=unconfined" })
+		v := runArgsFindFlagValue(arr, "security-opt", func(s string) bool { return s == "seccomp=unconfined" })
 		if v == nil {
 			return nil
 		}

@@ -100,6 +100,15 @@ func TestNoDockerSocketMount(t *testing.T) {
 			{Path: "devcontainer.json", Line: 1, Col: 53, RuleID: "no-docker-socket-mount",
 				Message: `"runArgs" bind-mounts the Docker socket, which grants the container root-equivalent control over the host`},
 		}},
+		{"runArgs -v with a joined value", `{"runArgs": ["-v/var/run/docker.sock:/x"]}`, []linter.Issue{
+			{Path: "devcontainer.json", Line: 1, Col: 14, RuleID: "no-docker-socket-mount",
+				Message: `"runArgs" bind-mounts the Docker socket, which grants the container root-equivalent control over the host`},
+		}},
+		{"runArgs -v ending a run of shorthands", `{"runArgs": ["-itv", "/var/run/docker.sock:/x"]}`, []linter.Issue{
+			{Path: "devcontainer.json", Line: 1, Col: 22, RuleID: "no-docker-socket-mount",
+				Message: `"runArgs" bind-mounts the Docker socket, which grants the container root-equivalent control over the host`},
+		}},
+		{"runArgs -v consumed as another flag's value", `{"runArgs": ["--label", "-v", "/var/run/docker.sock:/x"]}`, nil},
 		{"runArgs unrelated volume", `{"runArgs": ["-v", "/host/docker.sock:/var/run/docker.sock"]}`, nil},
 		// A -v value of a single field is an anonymous volume, and that field is the container path:
 		// nothing from the host is bound.

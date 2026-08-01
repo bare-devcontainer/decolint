@@ -40,6 +40,8 @@ func TestNoSeccompOverride(t *testing.T) {
 			{Path: "devcontainer.json", Line: 1, Col: 14, RuleID: "no-seccomp-override",
 				Message: `"runArgs" overrides the default seccomp profile via "--security-opt"`},
 		}},
+		{"runArgs security-opt consumed as another flag's value", `{"runArgs": ["--label", "--security-opt=seccomp=unconfined"]}`, nil},
+		{"runArgs bare seccomp entry names no flag", `{"runArgs": ["seccomp=unconfined"]}`, nil},
 		{"runArgs with custom seccomp profile", `{"runArgs": ["--security-opt", "seccomp=/path/to/profile.json"]}`, []linter.Issue{
 			{Path: "devcontainer.json", Line: 1, Col: 32, RuleID: "no-seccomp-override",
 				Message: `"runArgs" overrides the default seccomp profile via "--security-opt"`},

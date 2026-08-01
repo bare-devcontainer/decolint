@@ -52,6 +52,25 @@ jobs:
       - run: make docs-content
       - run: git diff --exit-code README.md
 
+  dockerflags:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+      # cmd/dockerflagsgen reads the "docker run" flags out of docker/cli itself. A diff here means
+      # the pinned docker/cli changed one decolint parses "runArgs" with, which decides where in the
+      # array a rule reads a value from; it should arrive as a reviewable diff rather than as
+      # findings that quietly stop matching what Docker does.
+      - run: make dockerflags
+      - run: git diff --exit-code dockerargs/runflags.go
+      - run: make dockerflags-test
+
   dogfooding:
     runs-on: ubuntu-latest
     permissions:

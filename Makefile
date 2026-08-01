@@ -44,6 +44,14 @@ coverage: ## Run tests and open an HTML coverage report
 lint: ## Run all lint rules
 	go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@$(GOLANGCI_LINT_VERSION) run
 
+.PHONY: dockerflags
+dockerflags: ## Regenerate the "docker run" flag table in dockerargs
+	go -C cmd/dockerflagsgen run . -o ../../dockerargs/runflags.go
+
+.PHONY: dockerflags-test
+dockerflags-test: ## Run cmd/dockerflagsgen's tests, including the differential test against pflag
+	go -C cmd/dockerflagsgen test ./...
+
 .PHONY: docs
 docs: docs-content docs-syntax ## Build the documentation site into docs/public
 	$(HUGO) --source docs --minify

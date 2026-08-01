@@ -32,6 +32,11 @@ func TestNoCapAddAll(t *testing.T) {
 				Message: `"runArgs" contains "--cap-add=ALL", granting every Linux capability to the container`},
 		}},
 		{"runArgs with cap-drop ALL is not cap-add", `{"runArgs": ["--cap-drop", "ALL"]}`, nil},
+		{"runArgs with lower-case all", `{"runArgs": ["--cap-add=all"]}`, []linter.Issue{
+			{Path: "devcontainer.json", Line: 1, Col: 14, RuleID: "no-cap-add-all",
+				Message: `"runArgs" contains "--cap-add=ALL", granting every Linux capability to the container`},
+		}},
+		{"runArgs with cap-add consumed as another flag's value", `{"runArgs": ["--label", "--cap-add=ALL"]}`, nil},
 		{"runArgs with non-string entry before cap-add=ALL", `{"runArgs": [123, "--cap-add=ALL"]}`, []linter.Issue{
 			{Path: "devcontainer.json", Line: 1, Col: 19, RuleID: "no-cap-add-all",
 				Message: `"runArgs" contains "--cap-add=ALL", granting every Linux capability to the container`},

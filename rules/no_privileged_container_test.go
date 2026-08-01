@@ -29,6 +29,12 @@ func TestNoPrivilegedContainer(t *testing.T) {
 			{Path: "devcontainer.json", Line: 1, Col: 24, RuleID: "no-privileged-container",
 				Message: `"runArgs" contains "--privileged", disabling the container's isolation from the host`},
 		}},
+		{"runArgs with privileged set to true", `{"runArgs": ["--privileged=true"]}`, []linter.Issue{
+			{Path: "devcontainer.json", Line: 1, Col: 14, RuleID: "no-privileged-container",
+				Message: `"runArgs" contains "--privileged", disabling the container's isolation from the host`},
+		}},
+		{"runArgs with privileged set to false", `{"runArgs": ["--privileged=false"]}`, nil},
+		{"runArgs with privileged consumed as another flag's value", `{"runArgs": ["--label", "--privileged"]}`, nil},
 		{"both privileged and runArgs flag", `{"privileged": true, "runArgs": ["--privileged"]}`, []linter.Issue{
 			{Path: "devcontainer.json", Line: 1, Col: 16, RuleID: "no-privileged-container",
 				Message: `"privileged" is set to true, disabling the container's isolation from the host`},

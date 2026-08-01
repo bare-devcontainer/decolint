@@ -59,7 +59,7 @@ without an error and the container starts missing the data it expects. Volume mo
 
 func checkNoBindMount(_ *linter.Context, node *linter.Node) []linter.Finding {
 	mountType, source, ok := parseMount(node.Value)
-	if !ok || mountType != "bind" || source == dockerSocketPath {
+	if !ok || mountType != "bind" || isDockerSocketSource(source) {
 		return nil
 	}
 	return []linter.Finding{{

@@ -1,8 +1,6 @@
 package rules
 
 import (
-	"strings"
-
 	"github.com/bare-devcontainer/decolint/linter"
 	"github.com/tailscale/hujson"
 )
@@ -25,7 +23,7 @@ rootless daemon keeps that access inside the container.`,
 	},
 	Category:  linter.CategorySecurity,
 	FileTypes: []linter.FileType{linter.Devcontainer},
-	Paths:     []string{"/mounts/*", "/runArgs/*"},
+	Paths:     []string{"/mounts/*", "/runArgs"},
 	Example: linter.Example{
 		Bad: linter.Snippet{
 			Files: []linter.ExampleFile{
@@ -58,15 +56,15 @@ rootless daemon keeps that access inside the container.`,
 }
 
 func checkNoDockerSocketMount(_ *linter.Context, node *linter.Node) []linter.Finding {
-	if strings.HasPrefix(node.Pointer, "/mounts/") {
-		return checkDockerSocketMount(node)
+	if node.Pointer == "/runArgs" {
+		return checkDockerSocketRunArgs(node)
 	}
-	return checkDockerSocketRunArg(node)
+	return checkDockerSocketMount(node)
 }
 
 func checkDockerSocketMount(node *linter.Node) []linter.Finding {
 	_, source, ok := parseMount(node.Value)
-	if !ok || source != dockerSocketPath {
+	if !ok || !isDockerSocketSource(source) {
 		return nil
 	}
 	return []linter.Finding{{
@@ -75,29 +73,35 @@ func checkDockerSocketMount(node *linter.Node) []linter.Finding {
 	}}
 }
 
-func checkDockerSocketRunArg(node *linter.Node) []linter.Finding {
-	lit, ok := node.Value.Value.(hujson.Literal)
-	if !ok || lit.Kind() != '"' || !runArgMountsDockerSocket(lit.String()) {
-		return nil
-	}
-	return []linter.Finding{{
-		Message: `"runArgs" bind-mounts the Docker socket, which grants the container root-equivalent control over the host`,
-		Offset:  node.Value.StartOffset,
-	}}
+// dockerSocketRunArgFlags are the "runArgs" flags that can mount a host path, each paired with the
+// reader for its own value syntax. The two syntaxes are unrelated, so a value must be read only as
+// the flag introducing it, which is why this rule inspects the whole "runArgs" array rather than its
+// entries one by one.
+var dockerSocketRunArgFlags = []struct {
+	flag   string
+	source func(string) string
+}{
+	{"--mount", func(s string) string { _, source := parseMountString(s); return source }},
+	{"--volume", volumeSpecSource},
+	{"-v", volumeSpecSource},
 }
 
-// runArgMountsDockerSocket reports whether s, a single "runArgs" entry, bind-mounts the Docker
-// socket. It recognizes a "--mount"-style "key=value,..." entry with a matching "source", and a
-// "-v"/"--volume" entry, with or without an "=" before the value, whose host path is the Docker
-// socket.
-func runArgMountsDockerSocket(s string) bool {
-	if strings.Contains(s, ",") {
-		if _, source := parseMountString(strings.TrimPrefix(s, "--mount=")); source == dockerSocketPath {
-			return true
+func checkDockerSocketRunArgs(node *linter.Node) []linter.Finding {
+	arr, ok := node.Value.Value.(*hujson.Array)
+	if !ok {
+		return nil
+	}
+	var findings []linter.Finding
+	for _, f := range dockerSocketRunArgFlags {
+		for value, s := range runArgsFlagValues(arr, f.flag) {
+			if !isDockerSocketSource(f.source(s)) {
+				continue
+			}
+			findings = append(findings, linter.Finding{
+				Message: `"runArgs" bind-mounts the Docker socket, which grants the container root-equivalent control over the host`,
+				Offset:  value.StartOffset,
+			})
 		}
 	}
-	for _, prefix := range []string{"--volume=", "-v="} {
-		s = strings.TrimPrefix(s, prefix)
-	}
-	return s == dockerSocketPath || strings.HasPrefix(s, dockerSocketPath+":")
+	return findings
 }

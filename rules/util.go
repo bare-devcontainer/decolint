@@ -40,42 +40,40 @@ func memberNamed(obj *hujson.Object, name string) *hujson.ObjectMember {
 	return nil
 }
 
-// stringArrayContains reports whether obj has a member named name whose value is an array
-// containing a string element for which match returns true. It returns false if obj has no such
-// member or the member's value is not an array.
+// stringArrayContains reports whether any array member of obj named name (see [arrayMembers])
+// contains a string element for which match returns true.
 func stringArrayContains(obj *hujson.Object, name string, match func(string) bool) bool {
-	for _, m := range obj.Members {
-		nameLit, ok := m.Name.Value.(hujson.Literal)
-		if !ok || nameLit.String() != name {
-			continue
-		}
-		arr, ok := m.Value.Value.(*hujson.Array)
-		if !ok {
-			return false
-		}
+	for arr := range arrayMembers(obj, name) {
 		for _, elem := range arr.Elements {
 			lit, ok := elem.Value.(hujson.Literal)
 			if ok && lit.Kind() == '"' && match(lit.String()) {
 				return true
 			}
 		}
-		return false
 	}
 	return false
 }
 
-// arrayMember returns obj's member named name as an array. ok is false if obj has no such member or
-// the member's value is not an array.
-func arrayMember(obj *hujson.Object, name string) (arr *hujson.Array, ok bool) {
-	for _, m := range obj.Members {
-		nameLit, isLit := m.Name.Value.(hujson.Literal)
-		if !isLit || nameLit.String() != name {
-			continue
+// arrayMembers yields the value of every member of obj named name that is an array, skipping the
+// members whose value is not one. A malformed object may repeat a name: JSON parsers keep a single
+// copy — the last one — but decolint reads them all rather than report as unset something the
+// document plainly sets.
+func arrayMembers(obj *hujson.Object, name string) iter.Seq[*hujson.Array] {
+	return func(yield func(*hujson.Array) bool) {
+		for _, m := range obj.Members {
+			nameLit, ok := m.Name.Value.(hujson.Literal)
+			if !ok || nameLit.String() != name {
+				continue
+			}
+			arr, ok := m.Value.Value.(*hujson.Array)
+			if !ok {
+				continue
+			}
+			if !yield(arr) {
+				return
+			}
 		}
-		arr, ok = m.Value.Value.(*hujson.Array)
-		return arr, ok
 	}
-	return nil, false
 }
 
 // runArgsFlagValues yields every value that arr, a "runArgs" array, gives to flag, in order. Docker

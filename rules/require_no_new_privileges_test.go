@@ -53,6 +53,22 @@ func TestRequireNoNewPrivileges(t *testing.T) {
 				Message: `"no-new-privileges" is not set via "securityOpt" or "runArgs", allowing container processes to gain additional privileges`},
 		}},
 
+		// duplicate members: a JSON parser keeps only the last copy, so every copy is read
+		{"securityOpt duplicated, set by the last", `{"securityOpt": [], "securityOpt": ["no-new-privileges"]}`, nil},
+		{"securityOpt duplicated, set by the first", `{"securityOpt": ["no-new-privileges"], "securityOpt": []}`, nil},
+		{"securityOpt duplicated, one copy not an array", `{"securityOpt": "no-new-privileges", "securityOpt": ["no-new-privileges"]}`, nil},
+		{"securityOpt duplicated, set by neither", `{"securityOpt": [], "securityOpt": ["seccomp=unconfined"]}`, []linter.Issue{
+			{Path: "devcontainer.json", Line: 1, Col: 1, RuleID: "require-no-new-privileges",
+				Message: `"no-new-privileges" is not set via "securityOpt" or "runArgs", allowing container processes to gain additional privileges`},
+		}},
+		{"runArgs duplicated, set by the last", `{"runArgs": ["--init"], "runArgs": ["--security-opt=no-new-privileges"]}`, nil},
+		{"runArgs duplicated, set by the first", `{"runArgs": ["--security-opt=no-new-privileges"], "runArgs": ["--init"]}`, nil},
+		{"runArgs duplicated, one copy not an array", `{"runArgs": "--security-opt=no-new-privileges", "runArgs": ["--security-opt", "no-new-privileges"]}`, nil},
+		{"runArgs duplicated, set by neither", `{"runArgs": ["--init"], "runArgs": ["--cap-drop=ALL"]}`, []linter.Issue{
+			{Path: "devcontainer.json", Line: 1, Col: 1, RuleID: "require-no-new-privileges",
+				Message: `"no-new-privileges" is not set via "securityOpt" or "runArgs", allowing container processes to gain additional privileges`},
+		}},
+
 		// document root
 		{"root is an array, not an object", `[]`, nil},
 	}

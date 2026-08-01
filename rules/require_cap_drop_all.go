@@ -56,7 +56,7 @@ func checkRequireCapDropAll(_ *linter.Context, node *linter.Node) []linter.Findi
 		return nil
 	}
 
-	if arr, ok := arrayMember(obj, "runArgs"); ok {
+	for arr := range arrayMembers(obj, "runArgs") {
 		if runArgsFindFlagValue(arr, "--cap-drop", func(s string) bool { return s == "ALL" }) != nil {
 			return nil
 		}

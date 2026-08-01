@@ -12,6 +12,7 @@ import (
 	"flag"
 	"fmt"
 	"go/format"
+	"io"
 	"os"
 	"runtime/debug"
 	"sort"
@@ -29,34 +30,44 @@ func main() {
 	out := flag.String("o", "", "write the table to this file instead of standard output")
 	flag.Parse()
 
-	src, err := generate()
-	if err != nil {
-		fmt.Fprintln(os.Stderr, "dockerflagsgen:", err)
-		os.Exit(1)
-	}
-	if *out == "" {
-		if _, err := os.Stdout.Write(src); err != nil {
-			fmt.Fprintln(os.Stderr, "dockerflagsgen:", err)
-			os.Exit(1)
-		}
-		return
-	}
-	if err := os.WriteFile(*out, src, 0o644); err != nil {
+	if err := run(*out); err != nil {
 		fmt.Fprintln(os.Stderr, "dockerflagsgen:", err)
 		os.Exit(1)
 	}
 }
 
-func generate() ([]byte, error) {
+// run writes the table to the file named out, creating it, or to standard output when out is empty.
+func run(out string) (err error) {
+	if out == "" {
+		return generate(os.Stdout)
+	}
+
+	f, err := os.Create(out)
+	if err != nil {
+		return fmt.Errorf("creating %s: %w", out, err)
+	}
+	defer func() {
+		if cerr := f.Close(); cerr != nil && err == nil {
+			err = fmt.Errorf("closing %s: %w", out, cerr)
+		}
+	}()
+	return generate(f)
+}
+
+// generate writes the table to w.
+func generate(w io.Writer) error {
 	flags, err := RunFlagSet()
 	if err != nil {
-		return nil, err
+		return err
 	}
 	src, err := format.Source([]byte(render(flags, dockerCLIVersion())))
 	if err != nil {
-		return nil, fmt.Errorf("formatting the generated table: %w", err)
+		return fmt.Errorf("formatting the generated table: %w", err)
 	}
-	return src, nil
+	if _, err := w.Write(src); err != nil {
+		return fmt.Errorf("writing the table: %w", err)
+	}
+	return nil
 }
 
 // RunFlagSet returns the flags "docker run" registers, as docker/cli registers them: on the command

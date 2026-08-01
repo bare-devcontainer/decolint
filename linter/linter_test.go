@@ -229,6 +229,113 @@ func TestLintDocument_SortsByRuleIDAtSamePosition(t *testing.T) {
 	}
 }
 
+func TestLintDocument_SortsByMessageAtSamePosition(t *testing.T) {
+	t.Parallel()
+
+	// One rule reporting several missing properties at the document root emits findings that share a
+	// position and a rule ID, so only the message can order them. They are emitted in reverse so the
+	// assertion fails unless the message decides.
+	src := `{}`
+	want := []string{`"id" is required`, `"name" is required`, `"version" is required`}
+	rule := &Rule{
+		ID:        "missing-required-props",
+		FileTypes: []FileType{Devcontainer},
+		Paths:     []string{""},
+		Check: func(_ *Context, node *Node) []Finding {
+			return []Finding{
+				{Message: `"version" is required`, Offset: node.Value.StartOffset},
+				{Message: `"name" is required`, Offset: node.Value.StartOffset},
+				{Message: `"id" is required`, Offset: node.Value.StartOffset},
+			}
+		},
+	}
+	l := New()
+	l.RegisterRule(rule, SeverityWarn)
+
+	got := messagesOf(lintSource(t, l, "devcontainer.json", Devcontainer, src))
+	if !slices.Equal(got, want) {
+		t.Errorf("issue order = %v, want %v (sorted by Message)", got, want)
+	}
+}
+
+func TestLintDocument_Deduplicates(t *testing.T) {
+	t.Parallel()
+
+	// "aa" and "bb" share a line at different columns; "cc" is on a later line, so cases can differ
+	// in column alone or in line alone.
+	src := "{\n  \"x\": \"aa bb\",\n  \"y\": \"cc\"\n}"
+	offAA := strings.Index(src, "aa")
+	offBB := strings.Index(src, "bb")
+	offCC := strings.Index(src, "cc")
+
+	type finding struct {
+		ruleID  string
+		message string
+		offset  int
+	}
+	for _, tt := range []struct {
+		name     string
+		findings []finding
+		want     int
+	}{
+		{
+			name:     "identical findings collapse",
+			findings: []finding{{"dup-rule", "same", offAA}, {"dup-rule", "same", offAA}},
+			want:     1,
+		},
+		{
+			name:     "differing column kept",
+			findings: []finding{{"dup-rule", "same", offAA}, {"dup-rule", "same", offBB}},
+			want:     2,
+		},
+		{
+			name:     "differing line kept",
+			findings: []finding{{"dup-rule", "same", offAA}, {"dup-rule", "same", offCC}},
+			want:     2,
+		},
+		{
+			name:     "differing message kept",
+			findings: []finding{{"dup-rule", "one", offAA}, {"dup-rule", "two", offAA}},
+			want:     2,
+		},
+		{
+			name:     "differing rule ID kept",
+			findings: []finding{{"one-rule", "same", offAA}, {"two-rule", "same", offAA}},
+			want:     2,
+		},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			// Group the case's findings by rule ID and register one rule per group, so that a case
+			// differing only in rule ID reports the same finding from two rules.
+			byRule := map[string][]Finding{}
+			var ids []string
+			for _, f := range tt.findings {
+				if _, ok := byRule[f.ruleID]; !ok {
+					ids = append(ids, f.ruleID)
+				}
+				byRule[f.ruleID] = append(byRule[f.ruleID], Finding{Message: f.message, Offset: f.offset})
+			}
+			l := New()
+			for _, id := range ids {
+				l.RegisterRule(&Rule{
+					ID:        id,
+					FileTypes: []FileType{Devcontainer},
+					Paths:     []string{""},
+					Check: func(*Context, *Node) []Finding {
+						return byRule[id]
+					},
+				}, SeverityWarn)
+			}
+
+			if got := lintSource(t, l, "devcontainer.json", Devcontainer, src); len(got) != tt.want {
+				t.Errorf("got %d issues %v, want %d", len(got), got, tt.want)
+			}
+		})
+	}
+}
+
 func TestIssueString(t *testing.T) {
 	t.Parallel()
 

@@ -24,7 +24,7 @@ capabilities and devices the workload needs, is a far narrower grant.`,
 	},
 	Category:  linter.CategorySecurity,
 	FileTypes: []linter.FileType{linter.Devcontainer, linter.Feature},
-	Paths:     []string{"/privileged", "/runArgs"},
+	Paths:     []string{"/privileged", "/runArgs/--privileged"},
 	Example: linter.Example{
 		Bad: linter.Snippet{
 			Files: []linter.ExampleFile{
@@ -52,19 +52,14 @@ nested containers.`,
 	Check: checkNoPrivilegedContainer,
 }
 
-func checkNoPrivilegedContainer(ctx *linter.Context, node *linter.Node) []linter.Finding {
-	if node.Pointer == "/runArgs" {
-		arr, ok := node.Value.Value.(*hujson.Array)
-		if !ok || !runArgsApplicable(ctx) {
-			return nil
-		}
-		v := runArgsFindFlagValue(arr, "privileged", dockerargs.IsTrue)
-		if v == nil {
+func checkNoPrivilegedContainer(_ *linter.Context, node *linter.Node) []linter.Finding {
+	if node.Arg != nil {
+		if !dockerargs.IsTrue(node.Arg.Value) {
 			return nil
 		}
 		return []linter.Finding{{
 			Message: `"runArgs" contains "--privileged", disabling the container's isolation from the host`,
-			Offset:  v.StartOffset,
+			Offset:  node.Value.StartOffset,
 		}}
 	}
 

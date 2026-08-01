@@ -429,3 +429,50 @@ func TestLintDocument_RulePanicIsRecovered(t *testing.T) {
 		t.Errorf("Severity = %v, want %v", issues[0].Severity, SeverityError)
 	}
 }
+
+// runArgsSpyRule is a stub Rule that reports every element of "runArgs" it is handed, naming how it
+// was reached. It declares every file type deliberately: a rule that declares only some leaves
+// LintDocument with no patterns for the rest, which it short-circuits before traversing anything, so
+// a test written on such a rule would pass whatever the traversal does with the file types it skips.
+var runArgsSpyRule = &Rule{
+	ID:          "run-args-spy",
+	Description: "reports how each element of runArgs was reached",
+	FileTypes:   []FileType{Devcontainer, Feature, Template},
+	Paths:       []string{"/runArgs/*"},
+	Check: func(_ *Context, node *Node) []Finding {
+		if node.Arg == nil {
+			return []Finding{{Message: "element " + node.Pointer, Offset: node.Value.StartOffset}}
+		}
+		return []Finding{{Message: "flag --" + node.Arg.Flag, Offset: node.Value.StartOffset}}
+	},
+}
+
+// TestLintDocument_RunArgsFileTypes checks that "runArgs" is read as a "docker run" argv only in a
+// devcontainer.json. It is not a property of a Feature or a Template, so there the array is an
+// ordinary one, walked by index.
+func TestLintDocument_RunArgsFileTypes(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		fileType FileType
+		want     []string
+	}{
+		{Devcontainer, []string{"flag --cap-add"}},
+		{Feature, []string{"element /runArgs/0"}},
+		{Template, []string{"element /runArgs/0"}},
+	}
+	for _, tt := range tests {
+		t.Run(string(tt.fileType), func(t *testing.T) {
+			t.Parallel()
+			l := New()
+			l.RegisterRule(runArgsSpyRule, SeverityWarn)
+			var got []string
+			for _, issue := range lintSource(t, l, "config.json", tt.fileType, `{"runArgs": ["--cap-add=ALL"]}`) {
+				got = append(got, issue.Message)
+			}
+			if !slices.Equal(got, tt.want) {
+				t.Errorf("messages = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}

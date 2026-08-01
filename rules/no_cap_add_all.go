@@ -22,7 +22,7 @@ withholds the dangerous ones by default. "ALL" hands them all over, including ca
 	},
 	Category:  linter.CategorySecurity,
 	FileTypes: []linter.FileType{linter.Devcontainer, linter.Feature},
-	Paths:     []string{"/capAdd/*", "/runArgs"},
+	Paths:     []string{"/capAdd/*", "/runArgs/--cap-add"},
 	Example: linter.Example{
 		Bad: linter.Snippet{
 			Files: []linter.ExampleFile{
@@ -46,19 +46,14 @@ withholds the dangerous ones by default. "ALL" hands them all over, including ca
 	Check: checkNoCapAddAll,
 }
 
-func checkNoCapAddAll(ctx *linter.Context, node *linter.Node) []linter.Finding {
-	if node.Pointer == "/runArgs" {
-		arr, ok := node.Value.Value.(*hujson.Array)
-		if !ok || !runArgsApplicable(ctx) {
-			return nil
-		}
-		v := runArgsFindFlagValue(arr, "cap-add", isAllCapability)
-		if v == nil {
+func checkNoCapAddAll(_ *linter.Context, node *linter.Node) []linter.Finding {
+	if node.Arg != nil {
+		if !isAllCapability(node.Arg.Value) {
 			return nil
 		}
 		return []linter.Finding{{
 			Message: `"runArgs" contains "--cap-add=ALL", granting every Linux capability to the container`,
-			Offset:  v.StartOffset,
+			Offset:  node.Value.StartOffset,
 		}}
 	}
 

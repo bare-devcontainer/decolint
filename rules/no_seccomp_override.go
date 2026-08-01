@@ -26,7 +26,7 @@ does.`,
 	},
 	Category:  linter.CategorySecurity,
 	FileTypes: []linter.FileType{linter.Devcontainer, linter.Feature},
-	Paths:     []string{"/securityOpt/*", "/runArgs"},
+	Paths:     []string{"/securityOpt/*", "/runArgs/--security-opt"},
 	Example: linter.Example{
 		Bad: linter.Snippet{
 			Files: []linter.ExampleFile{
@@ -52,19 +52,14 @@ which already allows what a development container normally does.`,
 	Check: checkNoSeccompOverride,
 }
 
-func checkNoSeccompOverride(ctx *linter.Context, node *linter.Node) []linter.Finding {
-	if node.Pointer == "/runArgs" {
-		arr, ok := node.Value.Value.(*hujson.Array)
-		if !ok || !runArgsApplicable(ctx) {
-			return nil
-		}
-		v := runArgsFindFlagValue(arr, "security-opt", securityOptOverridesSeccomp)
-		if v == nil {
+func checkNoSeccompOverride(_ *linter.Context, node *linter.Node) []linter.Finding {
+	if node.Arg != nil {
+		if !securityOptOverridesSeccomp(node.Arg.Value) {
 			return nil
 		}
 		return []linter.Finding{{
 			Message: `"runArgs" overrides the default seccomp profile via "--security-opt"`,
-			Offset:  v.StartOffset,
+			Offset:  node.Value.StartOffset,
 		}}
 	}
 

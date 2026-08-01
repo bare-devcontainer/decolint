@@ -23,7 +23,7 @@ enough on current runtimes.`,
 	},
 	Category:  linter.CategorySecurity,
 	FileTypes: []linter.FileType{linter.Devcontainer, linter.Feature},
-	Paths:     []string{"/securityOpt/*", "/runArgs"},
+	Paths:     []string{"/securityOpt/*", "/runArgs/--security-opt"},
 	Example: linter.Example{
 		Bad: linter.Snippet{
 			Files: []linter.ExampleFile{
@@ -47,19 +47,14 @@ enough on current runtimes.`,
 	Check: checkNoSeccompUnconfined,
 }
 
-func checkNoSeccompUnconfined(ctx *linter.Context, node *linter.Node) []linter.Finding {
-	if node.Pointer == "/runArgs" {
-		arr, ok := node.Value.Value.(*hujson.Array)
-		if !ok || !runArgsApplicable(ctx) {
-			return nil
-		}
-		v := runArgsFindFlagValue(arr, "security-opt", securityOptDisablesSeccomp)
-		if v == nil {
+func checkNoSeccompUnconfined(_ *linter.Context, node *linter.Node) []linter.Finding {
+	if node.Arg != nil {
+		if !securityOptDisablesSeccomp(node.Arg.Value) {
 			return nil
 		}
 		return []linter.Finding{{
 			Message: `"runArgs" contains "--security-opt seccomp=unconfined", disabling the container's syscall filtering`,
-			Offset:  v.StartOffset,
+			Offset:  node.Value.StartOffset,
 		}}
 	}
 

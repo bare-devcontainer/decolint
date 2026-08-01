@@ -2,8 +2,8 @@
 // devcontainer tooling, gives meaning to:
 //
 //   - "runArgs", which becomes the argv of the "docker run" command the tooling builds. [Parse] is
-//     the single place that knows where a flag's value can be written, so a rule only has to know
-//     the values it cares about and never which entry of the array holds one.
+//     the single place that knows where a flag's value can be written, so its callers only have to
+//     know the values they care about and never which entry of the array holds one.
 //   - the values themselves, whose syntax is Docker's wherever they are written: a "securityOpt"
 //     entry ([ParseSecurityOpt]), a capability name ([Capability]), a boolean ([IsTrue]).
 package dockerargs

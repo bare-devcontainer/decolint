@@ -69,7 +69,7 @@ func (l *Linter) LintDocument(path string, fileType FileType, doc *Document, dir
 	rctx := &Context{Path: path, Type: fileType, Root: doc.tree, Dir: dir}
 	var issues []Issue
 	seen := map[Issue]struct{}{}
-	walk(doc.tree, "", nil, patterns, func(r *Rule, node *Node) {
+	walk(doc.tree, fileType, patterns, func(r *Rule, node *Node) {
 		id := r.ID
 		severity := l.severities[id]
 		for _, f := range safeCheck(r, rctx, node) {

@@ -2,7 +2,6 @@ package rules
 
 import (
 	"github.com/bare-devcontainer/decolint/linter"
-	"github.com/tailscale/hujson"
 )
 
 // NoDockerSocketMount reports a devcontainer.json that bind-mounts the host's Docker daemon socket
@@ -23,7 +22,7 @@ rootless daemon keeps that access inside the container.`,
 	},
 	Category:  linter.CategorySecurity,
 	FileTypes: []linter.FileType{linter.Devcontainer},
-	Paths:     []string{"/mounts/*", "/runArgs"},
+	Paths:     []string{"/mounts/*", "/runArgs/--mount", "/runArgs/--volume"},
 	Example: linter.Example{
 		Bad: linter.Snippet{
 			Files: []linter.ExampleFile{
@@ -56,8 +55,8 @@ rootless daemon keeps that access inside the container.`,
 }
 
 func checkNoDockerSocketMount(_ *linter.Context, node *linter.Node) []linter.Finding {
-	if node.Pointer == "/runArgs" {
-		return checkDockerSocketRunArgs(node)
+	if node.Arg != nil {
+		return checkDockerSocketRunArg(node)
 	}
 	return checkDockerSocketMount(node)
 }
@@ -73,33 +72,22 @@ func checkDockerSocketMount(node *linter.Node) []linter.Finding {
 	}}
 }
 
-// dockerSocketRunArgFlags are the "runArgs" flags that can mount a host path, each paired with the
-// reader for its own value syntax. The two syntaxes are unrelated, so a value must be read only as
-// the flag introducing it.
-var dockerSocketRunArgFlags = []struct {
-	flag   string
-	source func(string) string
-}{
-	{"mount", func(s string) string { _, source := parseMountString(s); return source }},
-	{"volume", volumeSpecSource},
-}
-
-func checkDockerSocketRunArgs(node *linter.Node) []linter.Finding {
-	arr, ok := node.Value.Value.(*hujson.Array)
-	if !ok {
+// checkDockerSocketRunArg reports the host path node's "runArgs" flag mounts, if it is the Docker
+// socket. The value syntaxes of the two flags that can mount one are unrelated, so a value is read
+// only as the flag introducing it.
+func checkDockerSocketRunArg(node *linter.Node) []linter.Finding {
+	var source string
+	switch node.Arg.Flag {
+	case "mount":
+		_, source = parseMountString(node.Arg.Value)
+	case "volume":
+		source = volumeSpecSource(node.Arg.Value)
+	}
+	if !isDockerSocketSource(source) {
 		return nil
 	}
-	var findings []linter.Finding
-	for _, f := range dockerSocketRunArgFlags {
-		for value, s := range runArgsFlagValues(arr, f.flag) {
-			if !isDockerSocketSource(f.source(s)) {
-				continue
-			}
-			findings = append(findings, linter.Finding{
-				Message: `"runArgs" bind-mounts the Docker socket, which grants the container root-equivalent control over the host`,
-				Offset:  value.StartOffset,
-			})
-		}
-	}
-	return findings
+	return []linter.Finding{{
+		Message: `"runArgs" bind-mounts the Docker socket, which grants the container root-equivalent control over the host`,
+		Offset:  node.Value.StartOffset,
+	}}
 }

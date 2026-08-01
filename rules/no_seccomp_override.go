@@ -1,8 +1,7 @@
 package rules
 
 import (
-	"strings"
-
+	"github.com/bare-devcontainer/decolint/dockerargs"
 	"github.com/bare-devcontainer/decolint/linter"
 	"github.com/tailscale/hujson"
 )
@@ -79,8 +78,10 @@ func checkNoSeccompOverride(ctx *linter.Context, node *linter.Node) []linter.Fin
 	}}
 }
 
-// securityOptOverridesSeccomp reports whether s, a single "securityOpt" entry, points seccomp at a
-// profile of its own.
+// securityOptOverridesSeccomp reports whether s, a single "securityOpt" entry, points seccomp at
+// anything other than the runtime's own default profile. Naming that default explicitly leaves the
+// container exactly where it started, so it is not an override.
 func securityOptOverridesSeccomp(s string) bool {
-	return strings.HasPrefix(s, "seccomp=")
+	profile, ok := securityOptSeccompProfile(s)
+	return ok && profile != dockerargs.SeccompProfileDefault
 }

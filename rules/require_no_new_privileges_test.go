@@ -24,7 +24,22 @@ func TestRequireNoNewPrivileges(t *testing.T) {
 		{"securityOpt bare", `{"securityOpt": ["no-new-privileges"]}`, nil},
 		{"securityOpt equals true", `{"securityOpt": ["no-new-privileges=true"]}`, nil},
 		{"securityOpt colon true", `{"securityOpt": ["no-new-privileges:true"]}`, nil},
+		// The value is a boolean, not the literal "true": Docker reads it with strconv.ParseBool.
+		{"securityOpt equals 1", `{"securityOpt": ["no-new-privileges=1"]}`, nil},
+		{"securityOpt colon T", `{"securityOpt": ["no-new-privileges:T"]}`, nil},
 		{"securityOpt equals false", `{"securityOpt": ["no-new-privileges=false"]}`, []linter.Issue{
+			{Path: "devcontainer.json", Line: 1, Col: 1, RuleID: "require-no-new-privileges",
+				Message: `"no-new-privileges" is not set via "securityOpt" or "runArgs", allowing container processes to gain additional privileges`},
+		}},
+		{"securityOpt equals 0", `{"securityOpt": ["no-new-privileges=0"]}`, []linter.Issue{
+			{Path: "devcontainer.json", Line: 1, Col: 1, RuleID: "require-no-new-privileges",
+				Message: `"no-new-privileges" is not set via "securityOpt" or "runArgs", allowing container processes to gain additional privileges`},
+		}},
+		{"securityOpt key upper-cased", `{"securityOpt": ["NO-NEW-PRIVILEGES=true"]}`, []linter.Issue{
+			{Path: "devcontainer.json", Line: 1, Col: 1, RuleID: "require-no-new-privileges",
+				Message: `"no-new-privileges" is not set via "securityOpt" or "runArgs", allowing container processes to gain additional privileges`},
+		}},
+		{"securityOpt key upper-cased and bare", `{"securityOpt": ["NO-NEW-PRIVILEGES"]}`, []linter.Issue{
 			{Path: "devcontainer.json", Line: 1, Col: 1, RuleID: "require-no-new-privileges",
 				Message: `"no-new-privileges" is not set via "securityOpt" or "runArgs", allowing container processes to gain additional privileges`},
 		}},
@@ -44,6 +59,7 @@ func TestRequireNoNewPrivileges(t *testing.T) {
 		}},
 		{"runArgs two tokens", `{"runArgs": ["--security-opt", "no-new-privileges"]}`, nil},
 		{"runArgs combined", `{"runArgs": ["--security-opt=no-new-privileges=true"]}`, nil},
+		{"runArgs combined 1", `{"runArgs": ["--security-opt=no-new-privileges=1"]}`, nil},
 		{"runArgs security-opt consumed as another flag's value", `{"runArgs": ["--label", "--security-opt=no-new-privileges"]}`, []linter.Issue{
 			{Path: "devcontainer.json", Line: 1, Col: 1, RuleID: "require-no-new-privileges",
 				Message: `"no-new-privileges" is not set via "securityOpt" or "runArgs", allowing container processes to gain additional privileges`},

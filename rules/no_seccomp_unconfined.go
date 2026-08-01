@@ -1,6 +1,7 @@
 package rules
 
 import (
+	"github.com/bare-devcontainer/decolint/dockerargs"
 	"github.com/bare-devcontainer/decolint/linter"
 	"github.com/tailscale/hujson"
 )
@@ -52,7 +53,7 @@ func checkNoSeccompUnconfined(ctx *linter.Context, node *linter.Node) []linter.F
 		if !ok || !runArgsApplicable(ctx) {
 			return nil
 		}
-		v := runArgsFindFlagValue(arr, "security-opt", func(s string) bool { return s == "seccomp=unconfined" })
+		v := runArgsFindFlagValue(arr, "security-opt", securityOptDisablesSeccomp)
 		if v == nil {
 			return nil
 		}
@@ -63,11 +64,18 @@ func checkNoSeccompUnconfined(ctx *linter.Context, node *linter.Node) []linter.F
 	}
 
 	lit, ok := node.Value.Value.(hujson.Literal)
-	if !ok || lit.Kind() != '"' || lit.String() != "seccomp=unconfined" {
+	if !ok || lit.Kind() != '"' || !securityOptDisablesSeccomp(lit.String()) {
 		return nil
 	}
 	return []linter.Finding{{
 		Message: `"securityOpt" contains "seccomp=unconfined", disabling the container's syscall filtering`,
 		Offset:  node.Value.StartOffset,
 	}}
+}
+
+// securityOptDisablesSeccomp reports whether s, a single "securityOpt" entry, turns syscall
+// filtering off.
+func securityOptDisablesSeccomp(s string) bool {
+	profile, ok := securityOptSeccompProfile(s)
+	return ok && profile == dockerargs.SeccompProfileUnconfined
 }

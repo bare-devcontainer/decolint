@@ -1,6 +1,7 @@
 package rules
 
 import (
+	"github.com/bare-devcontainer/decolint/dockerargs"
 	"github.com/bare-devcontainer/decolint/linter"
 	"github.com/tailscale/hujson"
 )
@@ -67,13 +68,10 @@ func checkRequireNoNewPrivileges(_ *linter.Context, node *linter.Node) []linter.
 	}}
 }
 
-// securityOptIsNoNewPrivileges reports whether s, a single "securityOpt" entry, sets
-// "no-new-privileges". Docker treats the bare keyword as well as an explicit "=true" or ":true"
-// value as enabling it; "=false" or ":false" leaves it disabled.
+// securityOptIsNoNewPrivileges reports whether s, a single "securityOpt" entry, turns on
+// "no-new-privileges". Its value is a boolean, read as [dockerargs.IsTrue] describes, and the
+// option is the one that may also be written bare.
 func securityOptIsNoNewPrivileges(s string) bool {
-	switch s {
-	case "no-new-privileges", "no-new-privileges=true", "no-new-privileges:true":
-		return true
-	}
-	return false
+	opt, ok := dockerargs.ParseSecurityOpt(s)
+	return ok && opt.Key == "no-new-privileges" && dockerargs.IsTrue(opt.Value)
 }

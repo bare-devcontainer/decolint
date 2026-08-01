@@ -21,6 +21,12 @@ func TestNoCapAddAll(t *testing.T) {
 			{Path: "devcontainer.json", Line: 1, Col: 27, RuleID: "no-cap-add-all",
 				Message: `"capAdd" contains "ALL", granting every Linux capability to the container`},
 		}},
+		{"capAdd with lower-case all", `{"capAdd": ["all"]}`, []linter.Issue{
+			{Path: "devcontainer.json", Line: 1, Col: 13, RuleID: "no-cap-add-all",
+				Message: `"capAdd" contains "ALL", granting every Linux capability to the container`},
+		}},
+		// "ALL" takes no "CAP_" prefix, so a prefixed one is an ordinary capability name.
+		{"capAdd with CAP_ALL", `{"capAdd": ["CAP_ALL"]}`, nil},
 		{"no runArgs", `{"runArgs": ["--init"]}`, nil},
 		{"runArgs without cap-add=ALL", `{"runArgs": ["--init", "--cap-add=SYS_PTRACE"]}`, nil},
 		{"runArgs with cap-add=ALL", `{"runArgs": ["--init", "--cap-add=ALL"]}`, []linter.Issue{
@@ -67,6 +73,10 @@ func TestNoCapAddAll_Feature(t *testing.T) {
 		{"no capAdd property", `{"id": "test", "version": "1.0.0", "name": "test"}`, nil},
 		{"capAdd without ALL", `{"id": "test", "capAdd": ["SYS_PTRACE"]}`, nil},
 		{"capAdd with ALL", `{"id": "test", "capAdd": ["ALL"]}`, []linter.Issue{
+			{Path: "devcontainer-feature.json", Line: 1, Col: 27, RuleID: "no-cap-add-all",
+				Message: `"capAdd" contains "ALL", granting every Linux capability to the container`},
+		}},
+		{"capAdd with lower-case all", `{"id": "test", "capAdd": ["all"]}`, []linter.Issue{
 			{Path: "devcontainer-feature.json", Line: 1, Col: 27, RuleID: "no-cap-add-all",
 				Message: `"capAdd" contains "ALL", granting every Linux capability to the container`},
 		}},

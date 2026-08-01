@@ -63,7 +63,7 @@ func checkNoCapAddAll(ctx *linter.Context, node *linter.Node) []linter.Finding {
 	}
 
 	lit, ok := node.Value.Value.(hujson.Literal)
-	if !ok || lit.Kind() != '"' || lit.String() != "ALL" {
+	if !ok || lit.Kind() != '"' || !isAllCapability(lit.String()) {
 		return nil
 	}
 	return []linter.Finding{{

@@ -22,6 +22,11 @@ func TestRequireCapDropAll(t *testing.T) {
 		{"runArgs with cap-drop=ALL", `{"runArgs": ["--cap-drop=ALL"]}`, nil},
 		{"runArgs with cap-drop ALL two tokens", `{"runArgs": ["--cap-drop", "ALL"]}`, nil},
 		{"runArgs with lower-case all", `{"runArgs": ["--cap-drop=all"]}`, nil},
+		// "ALL" takes no "CAP_" prefix, so a prefixed one is an ordinary capability name.
+		{"runArgs with cap-drop=CAP_ALL", `{"runArgs": ["--cap-drop=CAP_ALL"]}`, []linter.Issue{
+			{Path: "devcontainer.json", Line: 1, Col: 1, RuleID: "require-cap-drop-all",
+				Message: `"ALL" is not set via "runArgs", leaving the container with its default Linux capabilities`},
+		}},
 		{"runArgs with cap-drop consumed as another flag's value", `{"runArgs": ["--label", "--cap-drop=ALL"]}`, []linter.Issue{
 			{Path: "devcontainer.json", Line: 1, Col: 1, RuleID: "require-cap-drop-all",
 				Message: `"ALL" is not set via "runArgs", leaving the container with its default Linux capabilities`},

@@ -26,10 +26,21 @@ func isDockerSocketSource(source string) bool {
 	return path.Clean(source) == dockerSocketPath
 }
 
-// isAllCapability reports whether s names the "ALL" pseudo-capability, which stands for every Linux
-// capability. Docker upper-cases a capability name before matching it, so "all" names it too.
+// isAllCapability reports whether s names the pseudo-capability standing for every Linux
+// capability. See [dockerargs.Capability] for the spellings that reach it.
 func isAllCapability(s string) bool {
-	return strings.EqualFold(s, "ALL")
+	return dockerargs.Capability(s) == dockerargs.AllCapabilities
+}
+
+// securityOptSeccompProfile returns the seccomp profile s, a "securityOpt" entry, selects, and
+// reports whether it selects one at all. See [dockerargs.ParseSecurityOpt] for the forms an entry
+// can be written in.
+func securityOptSeccompProfile(s string) (profile string, ok bool) {
+	opt, ok := dockerargs.ParseSecurityOpt(s)
+	if !ok || opt.Key != "seccomp" {
+		return "", false
+	}
+	return opt.Value, true
 }
 
 // hasMember reports whether obj has a member named name.

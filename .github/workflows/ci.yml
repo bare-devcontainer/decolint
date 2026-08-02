@@ -83,7 +83,7 @@ jobs:
         with:
           go-version-file: go.mod
       - run: make build
-      - run: ./bin/decolint -format=github -deny-warnings -platform=vscode,codespaces .
+      - run: ./bin/decolint --format=github --deny-warnings --platform=vscode,codespaces .
 
   docker:
     runs-on: ubuntu-latest

@@ -1,5 +1,5 @@
 // Enables the two security rules the merge fixture's Feature trips, so the e2e tests can assert
-// they fire only when -merge is given.
+// they fire only when --merge is given.
 {
 	"rules": {
 		"no-privileged-container": "error",

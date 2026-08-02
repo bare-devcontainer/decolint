@@ -19,20 +19,20 @@ func TestParseOptions_Platform(t *testing.T) {
 		wantErr bool
 	}{
 		{"no flag", nil, nil, false},
-		{"single platform", []string{"-platform=vscode"}, []linter.Platform{linter.PlatformVSCode}, false},
+		{"single platform", []string{"--platform=vscode"}, []linter.Platform{linter.PlatformVSCode}, false},
 		{
 			"multiple platforms",
-			[]string{"-platform=vscode,codespaces"},
+			[]string{"--platform=vscode,codespaces"},
 			[]linter.Platform{linter.PlatformVSCode, linter.PlatformCodespaces},
 			false,
 		},
-		{"mixed case", []string{"-platform=VSCode"}, []linter.Platform{linter.PlatformVSCode}, false},
+		{"mixed case", []string{"--platform=VSCode"}, []linter.Platform{linter.PlatformVSCode}, false},
 		// Empty entries from stray commas or surrounding whitespace are skipped, not rejected.
-		{"empty entries skipped", []string{"-platform=vscode, ,,codespaces"}, []linter.Platform{linter.PlatformVSCode, linter.PlatformCodespaces}, false},
-		{"unknown platform", []string{"-platform=bogus"}, nil, true},
+		{"empty entries skipped", []string{"--platform=vscode, ,,codespaces"}, []linter.Platform{linter.PlatformVSCode, linter.PlatformCodespaces}, false},
+		{"unknown platform", []string{"--platform=bogus"}, nil, true},
 		{
 			"combined with other flags and paths",
-			[]string{"-deny-warnings", "-platform=vscode", "."},
+			[]string{"--deny-warnings", "--platform=vscode", "."},
 			[]linter.Platform{linter.PlatformVSCode},
 			false,
 		},
@@ -57,19 +57,19 @@ func TestParseOptions_Platform(t *testing.T) {
 func TestParseOptions_Format(t *testing.T) {
 	t.Parallel()
 
-	// parseOptions captures the raw -format value verbatim; validation and resolution into a Format
+	// parseOptions captures the raw --format value verbatim; validation and resolution into a Format
 	// happen later, in runLint, so both the flag and the config file's "format" member go through
-	// one path (an invalid value is rejected there, see TestRun_Flags/"invalid -format value").
+	// one path (an invalid value is rejected there, see TestRun_Flags/"invalid --format value").
 	tests := []struct {
 		name string
 		args []string
 		want string
 	}{
 		{"no flag", nil, ""},
-		{"text", []string{"-format=text"}, "text"},
-		{"json", []string{"-format=json"}, "json"},
-		{"github", []string{"-format=github"}, "github"},
-		{"unrecognized value captured verbatim", []string{"-format=bogus"}, "bogus"},
+		{"text", []string{"--format=text"}, "text"},
+		{"json", []string{"--format=json"}, "json"},
+		{"github", []string{"--format=github"}, "github"},
+		{"unrecognized value captured verbatim", []string{"--format=bogus"}, "bogus"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -95,10 +95,10 @@ func TestParseOptions_Color(t *testing.T) {
 		wantErr bool
 	}{
 		{name: "no flag", want: colorAuto},
-		{name: "auto", args: []string{"-color=auto"}, want: colorAuto},
-		{name: "always", args: []string{"-color=always"}, want: colorAlways},
-		{name: "never", args: []string{"-color=never"}, want: colorNever},
-		{name: "unknown value is rejected", args: []string{"-color=bogus"}, wantErr: true},
+		{name: "auto", args: []string{"--color=auto"}, want: colorAuto},
+		{name: "always", args: []string{"--color=always"}, want: colorAlways},
+		{name: "never", args: []string{"--color=never"}, want: colorNever},
+		{name: "unknown value is rejected", args: []string{"--color=bogus"}, wantErr: true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -117,11 +117,6 @@ func TestParseOptions_Color(t *testing.T) {
 	}
 }
 
-// dashPrefixes are the two ways a boolean flag can be spelled on the command line; the standard
-// flag package accepts either, so every bare boolean flag is tested with both automatically instead
-// of listing each variant as a separate table row.
-var dashPrefixes = []string{"-", "--"}
-
 func TestParseOptions_BoolFlags(t *testing.T) {
 	t.Parallel()
 
@@ -138,24 +133,22 @@ func TestParseOptions_BoolFlags(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.flag, func(t *testing.T) {
 			t.Parallel()
-			for _, prefix := range dashPrefixes {
-				t.Run(prefix, func(t *testing.T) {
-					t.Parallel()
-					args := []string{prefix + tt.flag}
-					opts, err := parseOptions(args, io.Discard)
-					if err != nil {
-						t.Fatalf("parseOptions(%v): %v", args, err)
-					}
-					if !tt.get(opts) {
-						t.Errorf("%s = false, want true", tt.flag)
-					}
-				})
-			}
+			t.Run("bare", func(t *testing.T) {
+				t.Parallel()
+				args := []string{"--" + tt.flag}
+				opts, err := parseOptions(args, io.Discard)
+				if err != nil {
+					t.Fatalf("parseOptions(%v): %v", args, err)
+				}
+				if !tt.get(opts) {
+					t.Errorf("%s = false, want true", tt.flag)
+				}
+			})
 			for _, want := range []bool{true, false} {
 				name := fmt.Sprintf("=%v", want)
 				t.Run(name, func(t *testing.T) {
 					t.Parallel()
-					args := []string{fmt.Sprintf("-%s=%v", tt.flag, want)}
+					args := []string{fmt.Sprintf("--%s=%v", tt.flag, want)}
 					opts, err := parseOptions(args, io.Discard)
 					if err != nil {
 						t.Fatalf("parseOptions(%v): %v", args, err)
@@ -164,6 +157,38 @@ func TestParseOptions_BoolFlags(t *testing.T) {
 						t.Errorf("%s = %v, want %v", tt.flag, got, want)
 					}
 				})
+			}
+		})
+	}
+}
+
+// TestParseOptions_Shorthands checks that each shorthand sets the same field as its long flag, and
+// that a shorthand taking a value accepts it as the following argument.
+func TestParseOptions_Shorthands(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		args []string
+		want Options
+	}{
+		{"config", []string{"-c", "custom.jsonc"}, Options{ConfigPath: "custom.jsonc"}},
+		{"format", []string{"-f", "json"}, Options{Format: "json"}},
+		{"platform", []string{"-p", "vscode"}, Options{Platforms: []linter.Platform{linter.PlatformVSCode}}},
+		{"merge", []string{"-m"}, Options{Merge: true, mergeSet: true}},
+		{"version", []string{"-v"}, Options{Version: true}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			opts, err := parseOptions(tt.args, io.Discard)
+			if err != nil {
+				t.Fatalf("parseOptions(%v): %v", tt.args, err)
+			}
+			want := tt.want
+			want.Paths = []string{"."}
+			if diff := cmp.Diff(want, opts, cmp.AllowUnexported(Options{})); diff != "" {
+				t.Errorf("parseOptions(%v) mismatch (-want +got):\n%s", tt.args, diff)
 			}
 		})
 	}
@@ -180,9 +205,9 @@ func TestParseOptions_MergeSet(t *testing.T) {
 		want bool
 	}{
 		{"no flag", nil, false},
-		{"bare flag", []string{"-merge"}, true},
-		{"explicit true", []string{"-merge=true"}, true},
-		{"explicit false", []string{"-merge=false"}, true},
+		{"bare flag", []string{"--merge"}, true},
+		{"explicit true", []string{"--merge=true"}, true},
+		{"explicit false", []string{"--merge=false"}, true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -202,7 +227,7 @@ func TestParseOptions_DenyWarningsSet(t *testing.T) {
 	t.Parallel()
 
 	// The value of DenyWarnings itself is covered by TestParseOptions_BoolFlags; this exercises
-	// denyWarningsSet, the bookkeeping that lets an explicit -deny-warnings=false override the config
+	// denyWarningsSet, the bookkeeping that lets an explicit --deny-warnings=false override the config
 	// file's "denyWarnings": true (see its doc comment in opts.go).
 	tests := []struct {
 		name string
@@ -210,9 +235,9 @@ func TestParseOptions_DenyWarningsSet(t *testing.T) {
 		want bool
 	}{
 		{"no flag", nil, false},
-		{"bare flag", []string{"-deny-warnings"}, true},
-		{"explicit true", []string{"-deny-warnings=true"}, true},
-		{"explicit false", []string{"-deny-warnings=false"}, true},
+		{"bare flag", []string{"--deny-warnings"}, true},
+		{"explicit true", []string{"--deny-warnings=true"}, true},
+		{"explicit false", []string{"--deny-warnings=false"}, true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -237,7 +262,7 @@ func TestParseOptions_Config(t *testing.T) {
 		want string
 	}{
 		{"no flag", nil, ""},
-		{"config flag", []string{"-config=path/to/config.jsonc"}, "path/to/config.jsonc"},
+		{"config flag", []string{"--config=path/to/config.jsonc"}, "path/to/config.jsonc"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

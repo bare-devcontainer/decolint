@@ -97,7 +97,7 @@ privileges:
 Nothing in it is wrong. The problems are in what it pulls in:
 
 ```console
-$ decolint -merge .
+$ decolint --merge .
 Downloading image metadata(mcr.microsoft.com/devcontainers/go:1.24@sha256:8de3d5b3a3ce235671c7649f0b910414158a220d18cbd2714a4446cc0cc6acd3)
 Config: .decolint.jsonc
 Linted 1 file:
@@ -115,7 +115,7 @@ installs two unpinned VS Code extensions, and that configuration reaches the
 container whether or not anyone reads it. decolint reports each finding at the
 property that pulled it in.
 
-Turn it on with `-merge`, or `"merge": true` in your config; see [Lint what
+Turn it on with `--merge`, or `"merge": true` in your config; see [Lint what
 actually
 runs](https://bare-devcontainer.github.io/decolint/getting-started/#4-lint-what-actually-runs)
 for what gets resolved and what does not.

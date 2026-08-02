@@ -32,7 +32,7 @@ const (
 	PlatformCodespaces
 )
 
-// String returns the platform's name, as used in the -platform flag and in output.
+// String returns the platform's name, as used in the ---platform flag and in output.
 func (p Platform) String() string {
 	switch p {
 	case PlatformVSCode:

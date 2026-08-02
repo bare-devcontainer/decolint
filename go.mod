@@ -9,6 +9,7 @@ require (
 	github.com/olareg/olareg v0.2.2
 	github.com/opencontainers/go-digest v1.0.0
 	github.com/opencontainers/image-spec v1.1.1
+	github.com/spf13/pflag v1.0.10
 	github.com/tailscale/hujson v0.0.0-20260302212456-ecc657c15afd
 	golang.org/x/sys v0.47.0
 	golang.org/x/term v0.45.0
@@ -177,7 +178,6 @@ require (
 	github.com/spf13/cast v1.10.0 // indirect
 	github.com/spf13/cobra v1.10.2 // indirect
 	github.com/spf13/fsync v0.10.1 // indirect
-	github.com/spf13/pflag v1.0.10 // indirect
 	github.com/spiffe/go-spiffe/v2 v2.6.0 // indirect
 	github.com/sudo-bmitch/oci-digest v0.1.2 // indirect
 	github.com/tdewolff/minify/v2 v2.24.13 // indirect

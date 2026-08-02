@@ -42,7 +42,7 @@ jobs:
         # non-zero status is a real failure. It runs from the repository root so that the reported
         # paths are relative to it, which is how code scanning resolves them. Merging is off so the
         # run needs no registry access and cannot fail for reasons unrelated to the upload.
-        run: ./bin/decolint -format=sarif -merge=false "$FIXTURE" > decolint.sarif || [ "$?" -eq 1 ]
+        run: ./bin/decolint --format=sarif --merge=false "$FIXTURE" > decolint.sarif || [ "$?" -eq 1 ]
 
       - name: Upload the SARIF log
         id: upload

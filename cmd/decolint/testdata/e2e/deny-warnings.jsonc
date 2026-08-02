@@ -1,6 +1,6 @@
 // Config for the e2e test: opts the security category in at warn severity and sets
 // "denyWarnings" so warnings alone cross the fail threshold, exercising the config-file
-// member without the -deny-warnings flag.
+// member without the --deny-warnings flag.
 {
 	"categories": {
 		"security": "warn"

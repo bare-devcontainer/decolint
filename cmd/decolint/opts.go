@@ -73,8 +73,6 @@ func parseOptions(args []string, output io.Writer) (Options, error) {
 	fs.BoolVar(&opts.Init, "init", false, "write a new .decolint.jsonc config file listing every rule at its default severity, then exit")
 	fs.Usage = func() { _ = usage(fs) }
 	if err := fs.Parse(args); err != nil {
-		// pflag leaves it to the caller to report a parse error, unlike --help, which it reports
-		// itself before returning [pflag.ErrHelp].
 		if !errors.Is(err, pflag.ErrHelp) {
 			_ = usage(fs)
 		}

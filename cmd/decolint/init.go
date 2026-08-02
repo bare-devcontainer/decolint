@@ -35,7 +35,7 @@ func initConfigFile(output io.Writer) error {
 // under "categories"; per-rule entries take precedence, e.g.:
 //   "categories": { "security": "error" }
 // "platforms" lists target platforms whose rules run in addition to
-// platform-agnostic ones (the ---platform flag takes precedence), e.g.:
+// platform-agnostic ones (the --platform flag takes precedence), e.g.:
 //   "platforms": ["vscode", "codespaces"]
 // "merge", when true, fetches the Features referenced in each
 // devcontainer.json and lints the merged (effective) configuration, e.g.:

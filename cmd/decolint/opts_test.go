@@ -162,8 +162,6 @@ func TestParseOptions_BoolFlags(t *testing.T) {
 	}
 }
 
-// TestParseOptions_Shorthands checks that each shorthand sets the same field as its long flag, and
-// that a shorthand taking a value accepts it as the following argument.
 func TestParseOptions_Shorthands(t *testing.T) {
 	t.Parallel()
 

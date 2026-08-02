@@ -11,7 +11,7 @@ needs `GOEXPERIMENT=jsonv2`. The [Makefile](Makefile) sets it for you:
 make build   # build ./bin/decolint
 make test    # go test ./...
 make lint    # golangci-lint
-make run ARGS="-format=json path/to/dir"
+make run ARGS="--format=json path/to/dir"
 ```
 
 The documentation site in [`docs/`](docs/) is built with

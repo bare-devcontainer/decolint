@@ -53,7 +53,8 @@ type Options struct {
 	Init bool
 }
 
-// parseOptions parses args into Options. Flag errors and usage text are written to output.
+// parseOptions parses args into Options. Usage text is written to output; an error is returned for
+// the caller to report.
 func parseOptions(args []string, output io.Writer) (Options, error) {
 	var opts Options
 	var platformFlag string

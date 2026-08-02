@@ -2,6 +2,8 @@ package rules
 
 import (
 	"encoding/csv"
+	"io"
+	"io/fs"
 	"iter"
 	"path"
 	"strings"
@@ -224,6 +226,101 @@ func stringMember(obj *hujson.Object, name string) (string, bool) {
 		return lit.String(), true
 	}
 	return "", false
+}
+
+// maxConfigFileBytes caps a file a rule reads from the directory it lints in, mirroring the Feature
+// pipeline's per-file cap. A larger file is not read at all, rather than read in part: a rule that
+// judged a truncated Dockerfile or Compose file would report on configuration that is not there.
+const maxConfigFileBytes = 4 << 20 // 4 MB
+
+// readConfigFile reads the file another configuration file references by name, a slash-separated
+// path relative to the directory being linted, and reports whether it could be read.
+//
+// It reports false rather than an error because a rule reads such a file to say something about it,
+// and can say nothing when it is absent, unreadable, or too large (see maxConfigFileBytes). A path
+// leading outside the directory is also not read: access is confined to the boundary the file was
+// discovered through (see [discovery.VisitConfigs]), so a rule reports nothing on configuration
+// that names a file decolint may not open.
+func readConfigFile(dir linter.Dir, name string) ([]byte, bool) {
+	if dir.FS == nil {
+		return nil, false
+	}
+	p := path.Clean(name)
+	if !fs.ValidPath(p) || p == "." {
+		return nil, false
+	}
+	f, err := dir.FS.Open(p)
+	if err != nil {
+		return nil, false
+	}
+	// The file is only read from, so a close error is inconsequential.
+	defer func() { _ = f.Close() }()
+	// One byte past the cap is read so that a file over it is recognized as too large rather than
+	// silently truncated to exactly the cap.
+	data, err := io.ReadAll(io.LimitReader(f, maxConfigFileBytes+1))
+	if err != nil || len(data) > maxConfigFileBytes {
+		return nil, false
+	}
+	return data, true
+}
+
+// featureRef is an OCI Feature reference, as written for a key of a devcontainer.json "features" or
+// a Feature's "dependsOn", with the byte offset of that key.
+type featureRef struct {
+	ref    string
+	offset int
+}
+
+// ociFeatureRefs returns the OCI Feature references the members of v are keyed by, for a v that is
+// an object of them. It returns none for a value that is not one.
+//
+// The local path and tarball URI forms are left out: neither carries a version to pin. See
+// [isLocalFeature] and [isTarballFeature].
+func ociFeatureRefs(v *hujson.Value) []featureRef {
+	obj, ok := v.Value.(*hujson.Object)
+	if !ok {
+		return nil
+	}
+	var refs []featureRef
+	for _, m := range obj.Members {
+		name, ok := m.Name.Value.(hujson.Literal)
+		if !ok || name.Kind() != '"' {
+			continue
+		}
+		ref := name.String()
+		if isLocalFeature(ref) || isTarballFeature(ref) {
+			continue
+		}
+		refs = append(refs, featureRef{ref: ref, offset: m.Name.StartOffset})
+	}
+	return refs
+}
+
+// isLocalFeature reports whether ref names a Feature by a relative path, which has no version tag
+// to pin.
+func isLocalFeature(ref string) bool {
+	return strings.HasPrefix(ref, "./") || strings.HasPrefix(ref, "../")
+}
+
+// isTarballFeature reports whether ref names a Feature by a direct HTTP(S) URI to a tarball, which
+// has no version tag to pin.
+func isTarballFeature(ref string) bool {
+	return strings.HasPrefix(ref, "http://") || strings.HasPrefix(ref, "https://")
+}
+
+// unpinnedFeatureVersion describes how ref fails to name a specific Feature version, or "" if it
+// names one. The text completes a message that begins with the reference, e.g.
+// `feature "ghcr.io/devcontainers/features/go" has no explicit version; ...`.
+func unpinnedFeatureVersion(ref string) string {
+	tag, hasTag := refTag(ref)
+	switch {
+	case !hasTag:
+		return "has no explicit version; pin a specific version"
+	case tag == "latest":
+		return `uses the "latest" version; pin a specific version`
+	default:
+		return ""
+	}
 }
 
 // refTag extracts the tag from an OCI-style reference, e.g. a container image or Feature reference.

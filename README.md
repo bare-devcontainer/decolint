@@ -155,7 +155,7 @@ runs without configuration; the rest are `off` until you enable them:
 | --- | --- | --- |
 | [`correctness`](https://bare-devcontainer.github.io/decolint/rules/#correctness) | `error` | 13 |
 | [`security`](https://bare-devcontainer.github.io/decolint/rules/#security) | `off` | 11 |
-| [`reproducibility`](https://bare-devcontainer.github.io/decolint/rules/#reproducibility) | `off` | 4 |
+| [`reproducibility`](https://bare-devcontainer.github.io/decolint/rules/#reproducibility) | `off` | 9 |
 | [`style`](https://bare-devcontainer.github.io/decolint/rules/#style) | `off` | 2 |
 <!-- /decolint:categories -->
 

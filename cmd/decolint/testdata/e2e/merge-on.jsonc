@@ -1,5 +1,5 @@
 // Same as merge.jsonc, but enables Feature merging via the config file instead of the
-// -merge flag.
+// --merge flag.
 {
 	"merge": true,
 	"rules": {

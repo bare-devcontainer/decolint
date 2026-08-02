@@ -1,4 +1,4 @@
-// Config for the e2e test: a project whose lint-findings format is "sarif". -rules lists the rule
+// Config for the e2e test: a project whose lint-findings format is "sarif". --rules lists the rule
 // catalog, not lint findings, so this member must not affect it.
 {
 	"format": "sarif"

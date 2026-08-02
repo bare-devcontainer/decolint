@@ -115,7 +115,7 @@ Found 1 error and 1 warning.
 			report: Report{
 				Files: []File{{Path: ".devcontainer.json", Type: linter.Devcontainer}},
 			},
-			want: `Config: none (defaults; run "decolint -init" to create .decolint.jsonc)
+			want: `Config: none (defaults; run "decolint --init" to create .decolint.jsonc)
 Linted 1 file:
   .devcontainer.json (devcontainer)
 
@@ -187,7 +187,7 @@ func TestTextWriteReport_Color(t *testing.T) {
 			name:   "a clean run is summarized in green",
 			report: Report{Files: []File{{Path: ".devcontainer.json", Type: linter.Devcontainer}}},
 			want: []string{
-				ansiBold + "Config:" + ansiOff + " " + ansiDim + `none (defaults; run "decolint -init" to create .decolint.jsonc)` + ansiOff,
+				ansiBold + "Config:" + ansiOff + " " + ansiDim + `none (defaults; run "decolint --init" to create .decolint.jsonc)` + ansiOff,
 				ansiBold + "Linted 1 file:" + ansiOff,
 				"  .devcontainer.json " + ansiDim + "(devcontainer)" + ansiOff,
 				"",

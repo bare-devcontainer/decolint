@@ -67,7 +67,7 @@ func TestRun(t *testing.T) {
 
 	tests := []struct {
 		name         string
-		args         []string // CLI args, excluding -format=json which is appended for all cases
+		args         []string // CLI args, excluding --format=json which is appended for all cases
 		want         []firing
 		wantExitCode int
 	}{
@@ -78,7 +78,7 @@ func TestRun(t *testing.T) {
 			// docker socket mount, unpinned image and feature) stays silent until those categories
 			// are opted into.
 			name: "violations",
-			args: []string{"-platform=vscode,codespaces", "testdata/e2e/violations"},
+			args: []string{"--platform=vscode,codespaces", "testdata/e2e/violations"},
 			want: []firing{
 				{violationsFile, "no-bind-mount", linter.SeverityError},
 				{violationsFile, "no-host-port-format", linter.SeverityError},
@@ -99,7 +99,7 @@ func TestRun(t *testing.T) {
 			// selection the platform-scoped correctness rules aren't registered, so deny-warnings is
 			// the only thing standing between these warnings and a clean exit.
 			name: "violations with deny-warnings",
-			args: []string{"-deny-warnings", "-config=testdata/e2e/security-warn.jsonc", "testdata/e2e/violations"},
+			args: []string{"--deny-warnings", "--config=testdata/e2e/security-warn.jsonc", "testdata/e2e/violations"},
 			want: []firing{
 				{violationsFile, "no-docker-socket-mount", linter.SeverityWarn},
 				{violationsFile, "no-privileged-container", linter.SeverityWarn},
@@ -112,9 +112,9 @@ func TestRun(t *testing.T) {
 		},
 		{
 			// deny-warnings.jsonc sets "denyWarnings": true in the config file, so the same security
-			// warnings cross the fail threshold with no -deny-warnings flag.
+			// warnings cross the fail threshold with no --deny-warnings flag.
 			name: "deny-warnings from config",
-			args: []string{"-config=testdata/e2e/deny-warnings.jsonc", "testdata/e2e/violations"},
+			args: []string{"--config=testdata/e2e/deny-warnings.jsonc", "testdata/e2e/violations"},
 			want: []firing{
 				{violationsFile, "no-docker-socket-mount", linter.SeverityWarn},
 				{violationsFile, "no-privileged-container", linter.SeverityWarn},
@@ -126,10 +126,10 @@ func TestRun(t *testing.T) {
 			wantExitCode: 1,
 		},
 		{
-			// -deny-warnings=false, given explicitly, overrides deny-warnings.jsonc's
+			// --deny-warnings=false, given explicitly, overrides deny-warnings.jsonc's
 			// "denyWarnings": true, so the warnings no longer fail the run.
 			name: "deny-warnings disabled by CLI flag overrides config",
-			args: []string{"-deny-warnings=false", "-config=testdata/e2e/deny-warnings.jsonc", "testdata/e2e/violations"},
+			args: []string{"--deny-warnings=false", "--config=testdata/e2e/deny-warnings.jsonc", "testdata/e2e/violations"},
 			want: []firing{
 				{violationsFile, "no-docker-socket-mount", linter.SeverityWarn},
 				{violationsFile, "no-privileged-container", linter.SeverityWarn},
@@ -147,8 +147,8 @@ func TestRun(t *testing.T) {
 			// opted into.
 			name: "violations with config overrides",
 			args: []string{
-				"-platform=vscode,codespaces",
-				"-config=testdata/e2e/override.jsonc",
+				"--platform=vscode,codespaces",
+				"--config=testdata/e2e/override.jsonc",
 				"testdata/e2e/violations",
 			},
 			want: []firing{
@@ -166,8 +166,8 @@ func TestRun(t *testing.T) {
 			// Correctness rules are unaffected and stay at their enabled-by-default error severity.
 			name: "violations with category overrides",
 			args: []string{
-				"-platform=vscode,codespaces",
-				"-config=testdata/e2e/categories.jsonc",
+				"--platform=vscode,codespaces",
+				"--config=testdata/e2e/categories.jsonc",
 				"testdata/e2e/violations",
 			},
 			want: []firing{
@@ -185,9 +185,9 @@ func TestRun(t *testing.T) {
 		{
 			// platforms.jsonc selects vscode and codespaces via the config file's "platforms"
 			// member, so the same platform-scoped correctness rules fire as in the "violations"
-			// case, without any -platform flag.
+			// case, without any --platform flag.
 			name: "violations with platforms from config",
-			args: []string{"-config=testdata/e2e/platforms.jsonc", "testdata/e2e/violations"},
+			args: []string{"--config=testdata/e2e/platforms.jsonc", "testdata/e2e/violations"},
 			want: []firing{
 				{violationsFile, "no-bind-mount", linter.SeverityError},
 				{violationsFile, "no-host-port-format", linter.SeverityError},
@@ -195,13 +195,13 @@ func TestRun(t *testing.T) {
 			wantExitCode: 1,
 		},
 		{
-			// The -platform flag overrides the config's "platforms" member. The fixture's firing
+			// The --platform flag overrides the config's "platforms" member. The fixture's firing
 			// rules are codespaces-scoped, so narrowing the selection to vscode via the flag
 			// silences everything platforms.jsonc would otherwise enable.
 			name: "platform flag overrides config platforms",
 			args: []string{
-				"-platform=vscode",
-				"-config=testdata/e2e/platforms.jsonc",
+				"--platform=vscode",
+				"--config=testdata/e2e/platforms.jsonc",
 				"testdata/e2e/violations",
 			},
 			want:         nil,
@@ -209,7 +209,7 @@ func TestRun(t *testing.T) {
 		},
 		{
 			name:         "clean",
-			args:         []string{"-platform=vscode,codespaces", "testdata/e2e/clean"},
+			args:         []string{"--platform=vscode,codespaces", "testdata/e2e/clean"},
 			want:         nil,
 			wantExitCode: 0,
 		},
@@ -244,7 +244,7 @@ func TestRun(t *testing.T) {
 			// Multiple directories are linted in one run and their issues aggregated; the clean
 			// directory contributes nothing while the violations directory drives the exit code.
 			name: "multiple directories aggregate issues",
-			args: []string{"-platform=vscode,codespaces", "testdata/e2e/clean", "testdata/e2e/violations"},
+			args: []string{"--platform=vscode,codespaces", "testdata/e2e/clean", "testdata/e2e/violations"},
 			want: []firing{
 				{violationsFile, "no-bind-mount", linter.SeverityError},
 				{violationsFile, "no-host-port-format", linter.SeverityError},
@@ -256,7 +256,7 @@ func TestRun(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			args := append([]string{"-format=json"}, tt.args...)
+			args := append([]string{"--format=json"}, tt.args...)
 
 			var stdout, stderr bytes.Buffer
 			exitCode := run(t.Context(), args, &stdout, &stderr, emptyEnv)
@@ -303,7 +303,7 @@ func TestRun_ReportedPathsAreWorkingDirectoryRelative(t *testing.T) {
 	reportedPaths := func(t *testing.T, target string) []string {
 		t.Helper()
 		var stdout, stderr bytes.Buffer
-		run(t.Context(), []string{"-format=json", "-platform=codespaces", target}, &stdout, &stderr, emptyEnv)
+		run(t.Context(), []string{"--format=json", "--platform=codespaces", target}, &stdout, &stderr, emptyEnv)
 		issues := decodeJSONOutput(t, stdout.Bytes()).Issues
 		if len(issues) == 0 {
 			t.Fatalf("no findings for %s; the fixture is expected to trip codespaces rules", target)
@@ -341,11 +341,11 @@ func TestRun_ReportedPathsAreWorkingDirectoryRelative(t *testing.T) {
 func TestRun_Flags(t *testing.T) {
 	t.Parallel()
 
-	t.Run("-version", func(t *testing.T) {
+	t.Run("--version", func(t *testing.T) {
 		t.Parallel()
 
 		var stdout, stderr bytes.Buffer
-		exitCode := run(t.Context(), []string{"-version"}, &stdout, &stderr, emptyEnv)
+		exitCode := run(t.Context(), []string{"--version"}, &stdout, &stderr, emptyEnv)
 		if exitCode != 0 {
 			t.Errorf("exit code = %d, want 0", exitCode)
 		}
@@ -357,11 +357,11 @@ func TestRun_Flags(t *testing.T) {
 		}
 	})
 
-	t.Run("-rules", func(t *testing.T) {
+	t.Run("--rules", func(t *testing.T) {
 		t.Parallel()
 
 		var stdout, stderr bytes.Buffer
-		exitCode := run(t.Context(), []string{"-rules"}, &stdout, &stderr, emptyEnv)
+		exitCode := run(t.Context(), []string{"--rules"}, &stdout, &stderr, emptyEnv)
 		if exitCode != 0 {
 			t.Errorf("exit code = %d, want 0", exitCode)
 		}
@@ -388,11 +388,11 @@ func TestRun_Flags(t *testing.T) {
 		}
 	})
 
-	t.Run("-rules with -config", func(t *testing.T) {
+	t.Run("--rules with --config", func(t *testing.T) {
 		t.Parallel()
 
 		var stdout, stderr bytes.Buffer
-		exitCode := run(t.Context(), []string{"-rules", "-config=testdata/e2e/override.jsonc"}, &stdout, &stderr, emptyEnv)
+		exitCode := run(t.Context(), []string{"--rules", "--config=testdata/e2e/override.jsonc"}, &stdout, &stderr, emptyEnv)
 		if exitCode != 0 {
 			t.Errorf("exit code = %d, want 0", exitCode)
 		}
@@ -423,11 +423,11 @@ func TestRun_Flags(t *testing.T) {
 		}
 	})
 
-	t.Run("-rules with category overrides in -config", func(t *testing.T) {
+	t.Run("--rules with category overrides in --config", func(t *testing.T) {
 		t.Parallel()
 
 		var stdout, stderr bytes.Buffer
-		exitCode := run(t.Context(), []string{"-rules", "-config=testdata/e2e/categories.jsonc"}, &stdout, &stderr, emptyEnv)
+		exitCode := run(t.Context(), []string{"--rules", "--config=testdata/e2e/categories.jsonc"}, &stdout, &stderr, emptyEnv)
 		if exitCode != 0 {
 			t.Errorf("exit code = %d, want 0", exitCode)
 		}
@@ -452,11 +452,11 @@ func TestRun_Flags(t *testing.T) {
 		}
 	})
 
-	t.Run("-rules ignores -format", func(t *testing.T) {
+	t.Run("--rules ignores --format", func(t *testing.T) {
 		t.Parallel()
 
 		var stdout, stderr bytes.Buffer
-		exitCode := run(t.Context(), []string{"-rules", "-format=sarif"}, &stdout, &stderr, emptyEnv)
+		exitCode := run(t.Context(), []string{"--rules", "--format=sarif"}, &stdout, &stderr, emptyEnv)
 		if exitCode != 0 {
 			t.Errorf("exit code = %d, want 0", exitCode)
 		}
@@ -470,11 +470,11 @@ func TestRun_Flags(t *testing.T) {
 		}
 	})
 
-	t.Run("-rules ignores the config file's format", func(t *testing.T) {
+	t.Run("--rules ignores the config file's format", func(t *testing.T) {
 		t.Parallel()
 
 		var stdout, stderr bytes.Buffer
-		exitCode := run(t.Context(), []string{"-rules", "-config=testdata/e2e/format-sarif.jsonc"}, &stdout, &stderr, emptyEnv)
+		exitCode := run(t.Context(), []string{"--rules", "--config=testdata/e2e/format-sarif.jsonc"}, &stdout, &stderr, emptyEnv)
 		if exitCode != 0 {
 			t.Errorf("exit code = %d, want 0", exitCode)
 		}
@@ -488,11 +488,11 @@ func TestRun_Flags(t *testing.T) {
 		}
 	})
 
-	t.Run("-help", func(t *testing.T) {
+	t.Run("--help", func(t *testing.T) {
 		t.Parallel()
 
 		var stdout, stderr bytes.Buffer
-		exitCode := run(t.Context(), []string{"-help"}, &stdout, &stderr, emptyEnv)
+		exitCode := run(t.Context(), []string{"--help"}, &stdout, &stderr, emptyEnv)
 		if exitCode != 0 {
 			t.Errorf("exit code = %d, want 0", exitCode)
 		}
@@ -508,25 +508,25 @@ func TestRun_Flags(t *testing.T) {
 		t.Parallel()
 
 		var stdout, stderr bytes.Buffer
-		exitCode := run(t.Context(), []string{"-bogus"}, &stdout, &stderr, emptyEnv)
+		exitCode := run(t.Context(), []string{"--bogus"}, &stdout, &stderr, emptyEnv)
 		if exitCode != 2 {
 			t.Errorf("exit code = %d, want 2", exitCode)
 		}
 		if stdout.String() != "" {
 			t.Errorf("stdout = %q, want empty", stdout.String())
 		}
-		if !strings.Contains(stderr.String(), "-bogus") {
+		if !strings.Contains(stderr.String(), "--bogus") {
 			t.Errorf("stderr = %q, want it to mention the unknown flag", stderr.String())
 		}
 	})
 
-	t.Run("-config path does not exist", func(t *testing.T) {
+	t.Run("--config path does not exist", func(t *testing.T) {
 		t.Parallel()
 
 		dir := writeDevcontainer(t, `{"image": "ubuntu:latest"}`)
 
 		var stdout, stderr bytes.Buffer
-		exitCode := run(t.Context(), []string{"-config=nonexistent.jsonc", dir}, &stdout, &stderr, emptyEnv)
+		exitCode := run(t.Context(), []string{"--config=nonexistent.jsonc", dir}, &stdout, &stderr, emptyEnv)
 		if exitCode != 2 {
 			t.Errorf("exit code = %d, want 2", exitCode)
 		}
@@ -538,11 +538,11 @@ func TestRun_Flags(t *testing.T) {
 		}
 	})
 
-	t.Run("invalid -format value", func(t *testing.T) {
+	t.Run("invalid --format value", func(t *testing.T) {
 		t.Parallel()
 
 		var stdout, stderr bytes.Buffer
-		exitCode := run(t.Context(), []string{"-format=bogus", "testdata/e2e/clean"}, &stdout, &stderr, emptyEnv)
+		exitCode := run(t.Context(), []string{"--format=bogus", "testdata/e2e/clean"}, &stdout, &stderr, emptyEnv)
 		if exitCode != 2 {
 			t.Errorf("exit code = %d, want 2", exitCode)
 		}
@@ -554,11 +554,11 @@ func TestRun_Flags(t *testing.T) {
 		}
 	})
 
-	t.Run("invalid -platform value", func(t *testing.T) {
+	t.Run("invalid --platform value", func(t *testing.T) {
 		t.Parallel()
 
 		var stdout, stderr bytes.Buffer
-		exitCode := run(t.Context(), []string{"-platform=bogus", "testdata/e2e/clean"}, &stdout, &stderr, emptyEnv)
+		exitCode := run(t.Context(), []string{"--platform=bogus", "testdata/e2e/clean"}, &stdout, &stderr, emptyEnv)
 		if exitCode != 2 {
 			t.Errorf("exit code = %d, want 2", exitCode)
 		}
@@ -654,7 +654,7 @@ func TestRun_OutputFormat(t *testing.T) {
 		t.Parallel()
 
 		var stdout, stderr bytes.Buffer
-		exitCode := run(t.Context(), []string{"-platform=vscode,codespaces", violationsDir}, &stdout, &stderr, emptyEnv)
+		exitCode := run(t.Context(), []string{"--platform=vscode,codespaces", violationsDir}, &stdout, &stderr, emptyEnv)
 		if exitCode != 1 {
 			t.Fatalf("exit code = %d, want 1; stderr: %s", exitCode, stderr.String())
 		}
@@ -679,7 +679,7 @@ func TestRun_OutputFormat(t *testing.T) {
 		t.Parallel()
 
 		var stdout, stderr bytes.Buffer
-		exitCode := run(t.Context(), []string{"-color=always", "-platform=vscode,codespaces", violationsDir}, &stdout, &stderr, emptyEnv)
+		exitCode := run(t.Context(), []string{"--color=always", "--platform=vscode,codespaces", violationsDir}, &stdout, &stderr, emptyEnv)
 		if exitCode != 1 {
 			t.Fatalf("exit code = %d, want 1; stderr: %s", exitCode, stderr.String())
 		}
@@ -698,7 +698,7 @@ func TestRun_OutputFormat(t *testing.T) {
 			}
 			return ""
 		}
-		exitCode := run(t.Context(), []string{"-platform=vscode,codespaces", violationsDir}, &stdout, &stderr, env)
+		exitCode := run(t.Context(), []string{"--platform=vscode,codespaces", violationsDir}, &stdout, &stderr, env)
 		if exitCode != 1 {
 			t.Fatalf("exit code = %d, want 1; stderr: %s", exitCode, stderr.String())
 		}
@@ -711,7 +711,7 @@ func TestRun_OutputFormat(t *testing.T) {
 		t.Parallel()
 
 		var stdout, stderr bytes.Buffer
-		exitCode := run(t.Context(), []string{"-format=github", "-platform=vscode,codespaces", violationsDir}, &stdout, &stderr, emptyEnv)
+		exitCode := run(t.Context(), []string{"--format=github", "--platform=vscode,codespaces", violationsDir}, &stdout, &stderr, emptyEnv)
 		if exitCode != 1 {
 			t.Fatalf("exit code = %d, want 1; stderr: %s", exitCode, stderr.String())
 		}
@@ -731,7 +731,7 @@ func TestRun_OutputFormat(t *testing.T) {
 		t.Parallel()
 
 		var stdout, stderr bytes.Buffer
-		exitCode := run(t.Context(), []string{"-format=sarif", "-platform=vscode,codespaces", violationsDir}, &stdout, &stderr, emptyEnv)
+		exitCode := run(t.Context(), []string{"--format=sarif", "--platform=vscode,codespaces", violationsDir}, &stdout, &stderr, emptyEnv)
 		if exitCode != 1 {
 			t.Fatalf("exit code = %d, want 1; stderr: %s", exitCode, stderr.String())
 		}
@@ -779,7 +779,7 @@ func TestRun_OutputFormat(t *testing.T) {
 		dir := writeDevcontainer(t, `{}`)
 
 		var stdout, stderr bytes.Buffer
-		exitCode := run(t.Context(), []string{"-format=sarif", dir}, &stdout, &stderr, emptyEnv)
+		exitCode := run(t.Context(), []string{"--format=sarif", dir}, &stdout, &stderr, emptyEnv)
 		if exitCode != 1 {
 			t.Fatalf("exit code = %d, want 1; stderr: %s", exitCode, stderr.String())
 		}
@@ -820,9 +820,9 @@ func TestRun_OutputFormat(t *testing.T) {
 	t.Run("format selected by config file", func(t *testing.T) {
 		t.Parallel()
 
-		// format.jsonc sets "format": "json", so output is a JSON report with no -format flag.
+		// format.jsonc sets "format": "json", so output is a JSON report with no --format flag.
 		var stdout, stderr bytes.Buffer
-		exitCode := run(t.Context(), []string{"-config=testdata/e2e/format.jsonc", violationsDir}, &stdout, &stderr, emptyEnv)
+		exitCode := run(t.Context(), []string{"--config=testdata/e2e/format.jsonc", violationsDir}, &stdout, &stderr, emptyEnv)
 		if exitCode != 1 {
 			t.Fatalf("exit code = %d, want 1; stderr: %s", exitCode, stderr.String())
 		}
@@ -832,9 +832,9 @@ func TestRun_OutputFormat(t *testing.T) {
 	t.Run("format flag overrides config file", func(t *testing.T) {
 		t.Parallel()
 
-		// -format=text wins over format.jsonc's "format": "json", so output is the text format.
+		// --format=text wins over format.jsonc's "format": "json", so output is the text format.
 		var stdout, stderr bytes.Buffer
-		exitCode := run(t.Context(), []string{"-format=text", "-config=testdata/e2e/format.jsonc", violationsDir}, &stdout, &stderr, emptyEnv)
+		exitCode := run(t.Context(), []string{"--format=text", "--config=testdata/e2e/format.jsonc", violationsDir}, &stdout, &stderr, emptyEnv)
 		if exitCode != 1 {
 			t.Fatalf("exit code = %d, want 1; stderr: %s", exitCode, stderr.String())
 		}
@@ -894,7 +894,7 @@ func TestRun_LintedFiles(t *testing.T) {
 			t.Parallel()
 
 			var stdout, stderr bytes.Buffer
-			run(t.Context(), append([]string{"-format=json"}, tt.args...), &stdout, &stderr, emptyEnv)
+			run(t.Context(), append([]string{"--format=json"}, tt.args...), &stdout, &stderr, emptyEnv)
 			got := decodeJSONOutput(t, stdout.Bytes()).Files
 
 			want := make([]format.File, len(tt.want))
@@ -909,13 +909,13 @@ func TestRun_LintedFiles(t *testing.T) {
 }
 
 // TestRun_ConfigSource checks that the text output names the config file the run's settings came
-// from, and points at -init when there is none.
+// from, and points at --init when there is none.
 func TestRun_ConfigSource(t *testing.T) {
 	// Uses t.Chdir, which cannot be combined with t.Parallel.
 
 	t.Run("config file given", func(t *testing.T) {
 		var stdout, stderr bytes.Buffer
-		run(t.Context(), []string{"-config=testdata/e2e/security-warn.jsonc", "testdata/e2e/clean"}, &stdout, &stderr, emptyEnv)
+		run(t.Context(), []string{"--config=testdata/e2e/security-warn.jsonc", "testdata/e2e/clean"}, &stdout, &stderr, emptyEnv)
 
 		want := "Config: testdata/e2e/security-warn.jsonc\n"
 		if !strings.Contains(stdout.String(), want) {
@@ -938,7 +938,7 @@ func TestRun_ConfigSource(t *testing.T) {
 		var stdout, stderr bytes.Buffer
 		run(t.Context(), []string{"."}, &stdout, &stderr, emptyEnv)
 
-		want := `Config: none (defaults; run "decolint -init" to create .decolint.jsonc)` + "\n"
+		want := `Config: none (defaults; run "decolint --init" to create .decolint.jsonc)` + "\n"
 		if !strings.Contains(stdout.String(), want) {
 			t.Errorf("stdout = %q, want it to contain %q", stdout.String(), want)
 		}
@@ -953,7 +953,7 @@ func TestRun_BrokenConfig(t *testing.T) {
 	dir := writeDevcontainer(t, `{`)
 
 	var stdout, stderr bytes.Buffer
-	exitCode := run(t.Context(), []string{"-format=json", dir}, &stdout, &stderr, emptyEnv)
+	exitCode := run(t.Context(), []string{"--format=json", dir}, &stdout, &stderr, emptyEnv)
 	if exitCode != 2 {
 		t.Errorf("exit code = %d, want 2", exitCode)
 	}
@@ -982,7 +982,7 @@ func TestRun_DefaultDirectory(t *testing.T) {
 
 	// No path argument: the current directory is linted. The config trips missing-container-def.
 	var stdout, stderr bytes.Buffer
-	exitCode := run(t.Context(), []string{"-format=json"}, &stdout, &stderr, emptyEnv)
+	exitCode := run(t.Context(), []string{"--format=json"}, &stdout, &stderr, emptyEnv)
 	if exitCode != 1 {
 		t.Fatalf("exit code = %d, want 1; stderr: %s", exitCode, stderr.String())
 	}
@@ -1011,7 +1011,7 @@ func TestRun_ConfigDiscovery(t *testing.T) {
 		return dir
 	}
 
-	t.Run("discovers .decolint.jsonc without -config", func(t *testing.T) {
+	t.Run("discovers .decolint.jsonc without --config", func(t *testing.T) {
 		project := writeProject(t)
 		t.Chdir(t.TempDir())
 		if err := os.WriteFile(".decolint.jsonc", []byte(`{"rules": {"no-image-latest": "error"}}`), 0o644); err != nil {
@@ -1019,7 +1019,7 @@ func TestRun_ConfigDiscovery(t *testing.T) {
 		}
 
 		var stdout, stderr bytes.Buffer
-		exitCode := run(t.Context(), []string{"-format=json", project}, &stdout, &stderr, emptyEnv)
+		exitCode := run(t.Context(), []string{"--format=json", project}, &stdout, &stderr, emptyEnv)
 		if exitCode != 1 {
 			t.Fatalf("exit code = %d, want 1; stderr: %s", exitCode, stderr.String())
 		}
@@ -1040,7 +1040,7 @@ func TestRun_ConfigDiscovery(t *testing.T) {
 		}
 
 		var stdout, stderr bytes.Buffer
-		exitCode := run(t.Context(), []string{"-format=json", project}, &stdout, &stderr, emptyEnv)
+		exitCode := run(t.Context(), []string{"--format=json", project}, &stdout, &stderr, emptyEnv)
 		if exitCode != 1 {
 			t.Fatalf("exit code = %d, want 1; stderr: %s", exitCode, stderr.String())
 		}
@@ -1057,7 +1057,7 @@ func TestRun_Init(t *testing.T) {
 		t.Chdir(t.TempDir())
 
 		var stdout, stderr bytes.Buffer
-		exitCode := run(t.Context(), []string{"-init"}, &stdout, &stderr, emptyEnv)
+		exitCode := run(t.Context(), []string{"--init"}, &stdout, &stderr, emptyEnv)
 		if exitCode != 0 {
 			t.Errorf("exit code = %d, want 0", exitCode)
 		}
@@ -1090,7 +1090,7 @@ func TestRun_Init(t *testing.T) {
 		}
 
 		var stdout, stderr bytes.Buffer
-		exitCode := run(t.Context(), []string{"-init"}, &stdout, &stderr, emptyEnv)
+		exitCode := run(t.Context(), []string{"--init"}, &stdout, &stderr, emptyEnv)
 		if exitCode != 2 {
 			t.Errorf("exit code = %d, want 2", exitCode)
 		}
@@ -1271,7 +1271,7 @@ func TestRun_Merge(t *testing.T) {
 		dir := copyFixture(t, "testdata/e2e/merge", map[string]string{"${BASE_IMAGE}": baseImageRef(t, host)})
 
 		var stdout, stderr bytes.Buffer
-		args := []string{"-format=json", "-merge", "-config=testdata/e2e/merge.jsonc", dir}
+		args := []string{"--format=json", "--merge", "--config=testdata/e2e/merge.jsonc", dir}
 		exitCode := run(t.Context(), args, &stdout, &stderr, emptyEnv)
 		if exitCode != 1 {
 			t.Fatalf("exit code = %d, want 1; stderr: %s", exitCode, stderr.String())
@@ -1291,7 +1291,7 @@ func TestRun_Merge(t *testing.T) {
 		t.Parallel()
 
 		// Each case pairs the same merged config with a different flag/config combination; the two
-		// security rules fire only when merging is on. merge.jsonc enables them via the -merge flag,
+		// security rules fire only when merging is on. merge.jsonc enables them via the --merge flag,
 		// merge-on.jsonc enables them and turns merging on through its own "merge" member.
 		tests := []struct {
 			name         string
@@ -1299,10 +1299,10 @@ func TestRun_Merge(t *testing.T) {
 			wantExitCode int
 			wantMerged   bool
 		}{
-			{"flag enables merge", []string{"-merge", "-config=testdata/e2e/merge.jsonc"}, 1, true},
-			{"no flag leaves merge off", []string{"-config=testdata/e2e/merge.jsonc"}, 0, false},
-			{"config enables merge", []string{"-config=testdata/e2e/merge-on.jsonc"}, 1, true},
-			{"flag overrides config merge", []string{"-merge=false", "-config=testdata/e2e/merge-on.jsonc"}, 0, false},
+			{"flag enables merge", []string{"--merge", "--config=testdata/e2e/merge.jsonc"}, 1, true},
+			{"no flag leaves merge off", []string{"--config=testdata/e2e/merge.jsonc"}, 0, false},
+			{"config enables merge", []string{"--config=testdata/e2e/merge-on.jsonc"}, 1, true},
+			{"flag overrides config merge", []string{"--merge=false", "--config=testdata/e2e/merge-on.jsonc"}, 0, false},
 		}
 		for _, tt := range tests {
 			t.Run(tt.name, func(t *testing.T) {
@@ -1312,7 +1312,7 @@ func TestRun_Merge(t *testing.T) {
 				dir := copyFixture(t, "testdata/e2e/merge", map[string]string{"${BASE_IMAGE}": baseImageRef(t, host)})
 
 				var stdout, stderr bytes.Buffer
-				exitCode := run(t.Context(), append([]string{"-format=json"}, append(tt.args, dir)...), &stdout, &stderr, emptyEnv)
+				exitCode := run(t.Context(), append([]string{"--format=json"}, append(tt.args, dir)...), &stdout, &stderr, emptyEnv)
 				if exitCode != tt.wantExitCode {
 					t.Errorf("exit code = %d, want %d; stdout: %s", exitCode, tt.wantExitCode, stdout.String())
 				}
@@ -1344,7 +1344,7 @@ func TestRun_Merge(t *testing.T) {
 		dir := writeDevcontainer(t, body)
 
 		var stdout, stderr bytes.Buffer
-		args := []string{"-format=json", "-merge", "-config=testdata/e2e/merge.jsonc", dir}
+		args := []string{"--format=json", "--merge", "--config=testdata/e2e/merge.jsonc", dir}
 		exitCode := run(t.Context(), args, &stdout, &stderr, emptyEnv)
 		if exitCode != 1 {
 			t.Fatalf("exit code = %d, want 1; stderr: %s", exitCode, stderr.String())
@@ -1366,7 +1366,7 @@ func TestRun_Merge(t *testing.T) {
 		dir := writeDevcontainer(t, body)
 
 		var stdout, stderr bytes.Buffer
-		exitCode := run(t.Context(), []string{"-merge", dir}, &stdout, &stderr, emptyEnv)
+		exitCode := run(t.Context(), []string{"--merge", dir}, &stdout, &stderr, emptyEnv)
 		if exitCode != 2 {
 			t.Errorf("exit code = %d, want 2; stdout: %s", exitCode, stdout.String())
 		}
@@ -1395,7 +1395,7 @@ func TestRun_Merge(t *testing.T) {
 		}
 
 		var stdout, stderr bytes.Buffer
-		exitCode := run(t.Context(), []string{"-merge", dir}, &stdout, &stderr, emptyEnv)
+		exitCode := run(t.Context(), []string{"--merge", dir}, &stdout, &stderr, emptyEnv)
 		if exitCode != 2 {
 			t.Errorf("exit code = %d, want 2; stdout: %s", exitCode, stdout.String())
 		}
@@ -1410,7 +1410,7 @@ func TestRun_Merge(t *testing.T) {
 		dir := writeDevcontainer(t, fmt.Sprintf(`{"image": %q, "features": {"./missing": {}}}`, baseImageRef(t, host)))
 
 		var stdout, stderr bytes.Buffer
-		exitCode := run(t.Context(), []string{"-merge", dir}, &stdout, &stderr, emptyEnv)
+		exitCode := run(t.Context(), []string{"--merge", dir}, &stdout, &stderr, emptyEnv)
 		if exitCode != 2 {
 			t.Errorf("exit code = %d, want 2", exitCode)
 		}
@@ -1434,7 +1434,7 @@ func TestRun_Merge(t *testing.T) {
 		}
 
 		var stdout, stderr bytes.Buffer
-		exitCode := run(t.Context(), []string{"-merge", dir}, &stdout, &stderr, emptyEnv)
+		exitCode := run(t.Context(), []string{"--merge", dir}, &stdout, &stderr, emptyEnv)
 		if exitCode != 2 {
 			t.Errorf("exit code = %d, want 2; stdout: %s", exitCode, stdout.String())
 		}
@@ -1455,7 +1455,7 @@ func TestRun_Merge(t *testing.T) {
 		dir := writeDevcontainer(t, body)
 
 		var stdout, stderr bytes.Buffer
-		args := []string{"-format=json", "-merge", "-config=testdata/e2e/merge.jsonc", dir}
+		args := []string{"--format=json", "--merge", "--config=testdata/e2e/merge.jsonc", dir}
 		exitCode := run(t.Context(), args, &stdout, &stderr, emptyEnv)
 		if exitCode != 1 {
 			t.Fatalf("exit code = %d, want 1; stderr: %s", exitCode, stderr.String())
@@ -1488,7 +1488,7 @@ func TestRun_Merge(t *testing.T) {
 		}
 
 		var stdout, stderr bytes.Buffer
-		exitCode := run(t.Context(), []string{"-merge", dir}, &stdout, &stderr, emptyEnv)
+		exitCode := run(t.Context(), []string{"--merge", dir}, &stdout, &stderr, emptyEnv)
 		if exitCode != 2 {
 			t.Errorf("exit code = %d, want 2; stdout: %s", exitCode, stdout.String())
 		}
@@ -1509,7 +1509,7 @@ LABEL devcontainer.metadata='[{"privileged": true, "mounts": ["source=/var/run/d
 `)
 
 		var stdout, stderr bytes.Buffer
-		args := []string{"-format=json", "-merge", "-config=testdata/e2e/merge.jsonc", dir}
+		args := []string{"--format=json", "--merge", "--config=testdata/e2e/merge.jsonc", dir}
 		exitCode := run(t.Context(), args, &stdout, &stderr, emptyEnv)
 		if exitCode != 1 {
 			t.Fatalf("exit code = %d, want 1; stderr: %s", exitCode, stderr.String())
@@ -1539,7 +1539,7 @@ LABEL devcontainer.metadata='[{"privileged": true, "mounts": ["source=/var/run/d
 		writeDockerfile(t, dir, fmt.Sprintf("FROM %s/base:1\n", host))
 
 		var stdout, stderr bytes.Buffer
-		args := []string{"-format=json", "-merge", "-config=testdata/e2e/merge.jsonc", dir}
+		args := []string{"--format=json", "--merge", "--config=testdata/e2e/merge.jsonc", dir}
 		exitCode := run(t.Context(), args, &stdout, &stderr, emptyEnv)
 		if exitCode != 1 {
 			t.Fatalf("exit code = %d, want 1; stderr: %s", exitCode, stderr.String())
@@ -1559,7 +1559,7 @@ LABEL devcontainer.metadata='[{"privileged": true, "mounts": ["source=/var/run/d
 		writeDockerfile(t, dir, "FROM registry.invalid/base:1\n")
 
 		var stdout, stderr bytes.Buffer
-		exitCode := run(t.Context(), []string{"-merge", dir}, &stdout, &stderr, emptyEnv)
+		exitCode := run(t.Context(), []string{"--merge", dir}, &stdout, &stderr, emptyEnv)
 		if exitCode != 2 {
 			t.Errorf("exit code = %d, want 2; stdout: %s", exitCode, stdout.String())
 		}
@@ -1580,7 +1580,7 @@ LABEL devcontainer.metadata='[{"privileged": true, "mounts": ["source=/var/run/d
 		writeComposeFile(t, dir, fmt.Sprintf("services:\n  app:\n    image: %s/base:1\n", host))
 
 		var stdout, stderr bytes.Buffer
-		args := []string{"-format=json", "-merge", "-config=testdata/e2e/merge.jsonc", dir}
+		args := []string{"--format=json", "--merge", "--config=testdata/e2e/merge.jsonc", dir}
 		exitCode := run(t.Context(), args, &stdout, &stderr, emptyEnv)
 		if exitCode != 1 {
 			t.Fatalf("exit code = %d, want 1; stderr: %s", exitCode, stderr.String())
@@ -1612,7 +1612,7 @@ LABEL devcontainer.metadata='[{"privileged": true, "mounts": ["source=/var/run/d
 		}
 
 		var stdout, stderr bytes.Buffer
-		args := []string{"-format=json", "-merge", "-config=" + config, dir}
+		args := []string{"--format=json", "--merge", "--config=" + config, dir}
 		exitCode := run(t.Context(), args, &stdout, &stderr, emptyEnv)
 		if exitCode != 1 {
 			t.Fatalf("exit code = %d, want 1; stderr: %s", exitCode, stderr.String())
@@ -1635,7 +1635,7 @@ LABEL devcontainer.metadata='[{"privileged": true, "mounts": ["source=/var/run/d
 `)
 
 		var stdout, stderr bytes.Buffer
-		args := []string{"-format=json", "-merge", "-config=testdata/e2e/merge.jsonc", dir}
+		args := []string{"--format=json", "--merge", "--config=testdata/e2e/merge.jsonc", dir}
 		exitCode := run(t.Context(), args, &stdout, &stderr, emptyEnv)
 		if exitCode != 1 {
 			t.Fatalf("exit code = %d, want 1; stderr: %s", exitCode, stderr.String())
@@ -1663,7 +1663,7 @@ LABEL devcontainer.metadata='[{"privileged": true, "mounts": ["source=/var/run/d
 		writeComposeFile(t, dir, "services:\n  app:\n    image: registry.invalid/base:1\n")
 
 		var stdout, stderr bytes.Buffer
-		exitCode := run(t.Context(), []string{"-merge", dir}, &stdout, &stderr, emptyEnv)
+		exitCode := run(t.Context(), []string{"--merge", dir}, &stdout, &stderr, emptyEnv)
 		if exitCode != 2 {
 			t.Errorf("exit code = %d, want 2; stdout: %s", exitCode, stdout.String())
 		}
@@ -1963,7 +1963,7 @@ func TestAbsPathString_NoWorkingDirectory(t *testing.T) {
 	}
 }
 
-// TestRun_Substitution checks that ${...} variables resolve only under -merge, since substitution
+// TestRun_Substitution checks that ${...} variables resolve only under --merge, since substitution
 // and merging together compute the effective configuration: with merging on, no-image-latest
 // reports the resolved image reference; with merging off, it reports the raw ${localEnv:...} text.
 func TestRun_Substitution(t *testing.T) {
@@ -1985,7 +1985,7 @@ func TestRun_Substitution(t *testing.T) {
 			t.Fatal(err)
 		}
 		var stdout, stderr bytes.Buffer
-		exitCode := run(t.Context(), []string{"-format=json", "-config=" + path, dir}, &stdout, &stderr, emptyEnv)
+		exitCode := run(t.Context(), []string{"--format=json", "--config=" + path, dir}, &stdout, &stderr, emptyEnv)
 		if exitCode != 1 {
 			t.Fatalf("exit code = %d, want 1; stderr: %s", exitCode, stderr.String())
 		}

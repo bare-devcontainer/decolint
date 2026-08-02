@@ -9,7 +9,7 @@ import (
 	"golang.org/x/term"
 )
 
-// colorMode is when the text output should be colored, as given by the -color flag.
+// colorMode is when the text output should be colored, as given by the --color flag.
 type colorMode int
 
 const (
@@ -41,7 +41,7 @@ func parseColorMode(name string) (colorMode, error) {
 // colorAuto, in which case the environment does, in this order:
 //
 //   - NO_COLOR set to a non-empty value turns color off. It wins over FORCE_COLOR, so decolint never
-//     emits escape sequences where they were declared unwanted; -color=always still forces them.
+//     emits escape sequences where they were declared unwanted; --color=always still forces them.
 //   - FORCE_COLOR decides on its own: "0" turns color off, any other non-empty value turns it on,
 //     for a destination that renders escape sequences without being a terminal, e.g. a CI log.
 //   - A "dumb" terminal, or a destination that is not a terminal at all, turns color off.

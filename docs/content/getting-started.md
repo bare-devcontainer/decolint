@@ -59,7 +59,7 @@ back clean:
 
 ```console
 $ decolint
-Config: none (defaults; run "decolint -init" to create .decolint.jsonc)
+Config: none (defaults; run "decolint --init" to create .decolint.jsonc)
 Linted 1 file:
   .devcontainer/devcontainer.json (devcontainer)
 
@@ -105,8 +105,8 @@ right:
 ```
 
 Every severity is `error`, `warn`, or `off`, and a `rules` entry beats its
-category. Run `decolint -rules` to see every rule with the severity your
-config gives it, or `decolint -init` to generate a config that lists all of
+category. Run `decolint --rules` to see every rule with the severity your
+config gives it, or `decolint --init` to generate a config that lists all of
 them explicitly. The full list is under [Rules](reference.md#rules), and everything the
 file accepts is under [Config file](reference.md#config-file).
 
@@ -150,7 +150,7 @@ Linted 1 file:
 .devcontainer/devcontainer.json:1:1: error: neither "remoteUser" nor "containerUser" is set, so the container defaults to running as root (require-non-root)
 Found 1 error and 0 warnings.
 
-$ decolint -merge .
+$ decolint --merge .
 Downloading image metadata(mcr.microsoft.com/devcontainers/go:1.24@sha256:8de3d5b3a3ce235671c7649f0b910414158a220d18cbd2714a4446cc0cc6acd3)
 Config: .decolint.jsonc
 Linted 1 file:
@@ -169,7 +169,7 @@ in nothing you wrote — the image disables seccomp and installs two unpinned VS
 Code extensions. Findings that come from merged content are reported at the
 property that pulled it in, here the `image` line.
 
-Turn it on for good with `"merge": true`, or pass `-merge` per run. It fetches
+Turn it on for good with `"merge": true`, or pass `--merge` per run. It fetches
 every referenced Feature and resolves the base image, so it needs network
 access; see [Merging](reference.md#merging) for what gets resolved and what does not.
 
@@ -191,7 +191,7 @@ directives.
 ## Add it to CI
 
 decolint exits `1` when it reports an `error`, which is all a CI job needs to
-fail. Add `-format=github` and the findings also appear as annotations on the
+fail. Add `--format=github` and the findings also appear as annotations on the
 pull request diff:
 
 ```yaml
@@ -208,12 +208,12 @@ jobs:
       - uses: actions/checkout@v7
         with:
           persist-credentials: false
-      - run: docker run --rm -v "$PWD:/workspace" ghcr.io/bare-devcontainer/decolint -format=github .
+      - run: docker run --rm -v "$PWD:/workspace" ghcr.io/bare-devcontainer/decolint --format=github .
 ```
 
 Only findings become annotations; the files that were linted go to a collapsed
 group in the run log, so a clean file does not annotate the diff. Warnings do
-not fail the build on their own; add `-deny-warnings` to make them count. See
+not fail the build on their own; add `--deny-warnings` to make them count. See
 [Exit codes](reference.md#exit-codes).
 
 To have findings tracked as alerts in the repository's Security tab instead,
@@ -230,7 +230,7 @@ scanning, so this job adds `security-events: write` to the permissions above:
       - uses: actions/checkout@v7
         with:
           persist-credentials: false
-      - run: docker run --rm -v "$PWD:/workspace" ghcr.io/bare-devcontainer/decolint -format=sarif . > decolint.sarif
+      - run: docker run --rm -v "$PWD:/workspace" ghcr.io/bare-devcontainer/decolint --format=sarif . > decolint.sarif
         continue-on-error: true # decolint exits 1 on findings; the upload must still run
       - uses: github/codeql-action/upload-sarif@v4
         with:
@@ -256,7 +256,7 @@ the directory — these are `correctness` rules, so they need no configuration:
 
 ```console
 $ decolint src/go-tools
-Config: none (defaults; run "decolint -init" to create .decolint.jsonc)
+Config: none (defaults; run "decolint --init" to create .decolint.jsonc)
 Linted 1 file:
   src/go-tools/devcontainer-feature.json (feature)
 

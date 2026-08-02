@@ -1,5 +1,5 @@
 // Config for the e2e test: selects target platforms from the config file instead of the
-// -platform flag, to exercise the "platforms" member.
+// --platform flag, to exercise the "platforms" member.
 {
 	"platforms": ["vscode", "codespaces"]
 }

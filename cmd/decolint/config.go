@@ -15,16 +15,16 @@ import (
 // Config is the on-disk shape of a decolint config file.
 type Config struct {
 	// Platforms lists target platforms whose rules are linted in addition to platform-agnostic
-	// ones. The -platform flag, when given, takes precedence.
+	// ones. The --platform flag, when given, takes precedence.
 	Platforms []linter.Platform `json:"platforms"`
 	// Merge, when true, fetches the Features referenced in each devcontainer.json and
-	// lints the merged (effective) configuration. The -merge flag can enable it as well.
+	// lints the merged (effective) configuration. The --merge flag can enable it as well.
 	Merge bool `json:"merge"`
 	// DenyWarnings, when true, lowers the fail threshold to linter.SeverityWarn so that warnings
-	// also cause exit code 1. The -deny-warnings flag can enable it as well.
+	// also cause exit code 1. The --deny-warnings flag can enable it as well.
 	DenyWarnings bool `json:"denyWarnings"`
 	// Format selects how lint issues are written to stdout: "text" (the default when empty), "json",
-	// "github", or "sarif". The -format flag takes precedence.
+	// "github", or "sarif". The --format flag takes precedence.
 	Format string `json:"format"`
 	// LocalEnv maps names to the values "${localEnv:NAME}" (and "${env:NAME}") resolve to during
 	// variable substitution, which runs with Merge; see [substitute.Context.LocalEnv]. It is also
@@ -126,10 +126,10 @@ func writeSortedMap[V any](enc *jsontext.Encoder, m map[string]V) error {
 }
 
 // mergeConfig returns cfg with any CLI-provided opts fields applied as overrides. A non-empty
-// -platform replaces the config file's Platforms (an empty -platform defers to the config file
-// rather than clearing it). -merge and -deny-warnings, when explicitly given, override Merge and
-// DenyWarnings in either direction (e.g. "-merge=false" disables merging even if the config file
-// sets "merge": true). A non-empty -format replaces the config file's Format. LocalEnv, Categories,
+// --platform replaces the config file's Platforms (an empty --platform defers to the config file
+// rather than clearing it). --merge and --deny-warnings, when explicitly given, override Merge and
+// DenyWarnings in either direction (e.g. "--merge=false" disables merging even if the config file
+// sets "merge": true). A non-empty --format replaces the config file's Format. LocalEnv, Categories,
 // and Rules are config-file only.
 func mergeConfig(opts Options, cfg Config) Config {
 	if len(opts.Platforms) > 0 {

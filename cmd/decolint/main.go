@@ -4,7 +4,6 @@ package main
 import (
 	"context"
 	"errors"
-	"flag"
 	"fmt"
 	"io"
 	"io/fs"
@@ -21,6 +20,7 @@ import (
 	"github.com/bare-devcontainer/decolint/linter"
 	"github.com/bare-devcontainer/decolint/rules"
 	"github.com/bare-devcontainer/decolint/substitute"
+	"github.com/spf13/pflag"
 )
 
 // progName is the program name, used in the flag set, usage text, and error messages.
@@ -61,7 +61,7 @@ func main() {
 func run(ctx context.Context, args []string, stdout, stderr io.Writer, getenv func(string) string) int {
 	opts, err := parseOptions(args, stderr)
 	if err != nil {
-		if errors.Is(err, flag.ErrHelp) {
+		if errors.Is(err, pflag.ErrHelp) {
 			return exitCodeSuccess
 		}
 		_, _ = fmt.Fprintln(stderr, progName+":", err)
@@ -113,14 +113,14 @@ func versionString() string {
 	return fmt.Sprintf("%s %s (revision %s)", progName, version, revision)
 }
 
-// severityEmoji renders a severity for the -rules table.
+// severityEmoji renders a severity for the --rules table.
 var severityEmoji = map[linter.Severity]string{
 	linter.SeverityOff:   "",
 	linter.SeverityWarn:  "🟡 WARN",
 	linter.SeverityError: "🔴 ERROR",
 }
 
-// rulesTableHeader is the header row of the -rules Markdown table.
+// rulesTableHeader is the header row of the --rules Markdown table.
 var rulesTableHeader = []string{"Rule ID", "Category", "Platform", "Current"}
 
 // listRules writes a Markdown table of the built-in rules to output: each rule's ID, category,
@@ -200,7 +200,7 @@ func writeTableRow(output io.Writer, cells []string, widths []int) error {
 }
 
 // displayWidth estimates s's width in terminal columns. Plain ASCII/Latin text is single-width;
-// symbols and emoji (used for severities in the -rules table) render double-width in virtually
+// symbols and emoji (used for severities in the --rules table) render double-width in virtually
 // every terminal, even though they're each a single rune, so utf8.RuneCountInString undercounts
 // them and throws off column padding. Variation selectors (e.g. U+FE0F, which requests the emoji
 // presentation of the preceding rune) contribute no width of their own.
@@ -219,7 +219,7 @@ func displayWidth(s string) int {
 	return w
 }
 
-func usage(fs *flag.FlagSet) error {
+func usage(fs *pflag.FlagSet) error {
 	if _, err := io.WriteString(fs.Output(), fmt.Sprintf(`%s
 
 usage: %s [directory ...]
@@ -259,7 +259,7 @@ func runLint(ctx context.Context, stdout, stderr io.Writer, opts Options, cfg Co
 		return false, fmt.Errorf("register rules: %w", err)
 	}
 	// Variable substitution and Feature merging together compute the effective configuration, so
-	// both are enabled by -merge: without it, decolint lints the file as written.
+	// both are enabled by --merge: without it, decolint lints the file as written.
 	var merge mergeFn
 	var subst substituteFn
 	if cfg.Merge {

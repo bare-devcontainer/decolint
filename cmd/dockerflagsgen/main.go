@@ -9,7 +9,6 @@
 package main
 
 import (
-	"flag"
 	"fmt"
 	"go/format"
 	"io"
@@ -27,8 +26,8 @@ import (
 const dockerCLIModule = "github.com/docker/cli"
 
 func main() {
-	out := flag.String("o", "", "write the table to this file instead of standard output")
-	flag.Parse()
+	out := pflag.StringP("output", "o", "", "write the table to this file instead of standard output")
+	pflag.Parse()
 
 	if err := run(*out); err != nil {
 		fmt.Fprintln(os.Stderr, "dockerflagsgen:", err)

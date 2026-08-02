@@ -31,34 +31,34 @@ the config file when given:
 
 | Setting | Config member | Flag |
 | --- | --- | --- |
-| [Target platforms](#target-platforms) | `platforms` | `-platform` |
-| [Merge features](#merging) | `merge` | `-merge` |
-| [Deny warnings](#exit-codes) | `denyWarnings` | `-deny-warnings` |
-| [Output format](#output-formats) | `format` | `-format` |
+| [Target platforms](#target-platforms) | `platforms` | `-p`, `--platform` |
+| [Merge features](#merging) | `merge` | `-m`, `--merge` |
+| [Deny warnings](#exit-codes) | `denyWarnings` | `--deny-warnings` |
+| [Output format](#output-formats) | `format` | `-f`, `--format` |
 | [Category severities](#rule-categories) | `categories` | — |
 | [Rule severities](#rules) | `rules` | — |
 
-`-merge` and `-deny-warnings` override in either direction when given
-explicitly — e.g. `-merge=false` disables merging even if the config file sets
+`--merge` and `--deny-warnings` override in either direction when given
+explicitly — e.g. `--merge=false` disables merging even if the config file sets
 `"merge": true`. Category and rule severities are config-file only, and
-[color](#color) is set by the `-color` flag only.
+[color](#color) is set by the `--color` flag only.
 
-The remaining flags perform a one-off action and exit; run `decolint -help`
+The remaining flags perform a one-off action and exit; run `decolint --help`
 for the full list:
 
 | Flag | Action |
 | --- | --- |
-| `-config <path>` | use the config file at `<path>` instead of [auto-discovery](#config-file) |
-| `-init` | write a new `.decolint.jsonc` listing every rule at its default severity |
-| `-rules` | print the built-in rules as a Markdown table |
-| `-version` | print version information |
-| `-help` | print usage |
+| `-c`, `--config <path>` | use the config file at `<path>` instead of [auto-discovery](#config-file) |
+| `--init` | write a new `.decolint.jsonc` listing every rule at its default severity |
+| `--rules` | print the built-in rules as a Markdown table |
+| `-v`, `--version` | print version information |
+| `-h`, `--help` | print usage |
 
 ## Config file
 
 decolint looks for `.decolint.jsonc`, then `.decolint.json`, in the current
-directory; the first one found is used. Pass `-config <path>` to use a file at
-a different location instead. It is an error (exit code 2) if `-config` points
+directory; the first one found is used. Pass `--config <path>` to use a file at
+a different location instead. It is an error (exit code 2) if `--config` points
 at a file that doesn't exist or fails to parse, or if the config references an
 unknown rule ID or category name.
 
@@ -98,11 +98,11 @@ The remaining members mirror their flags: `platforms`, `merge`,
 
 Each rule optionally targets specific platforms (`vscode`, `codespaces`); a
 rule with no target platform applies to every platform and always runs. By
-default, only those platform-agnostic rules run; pass `-platform` with a
+default, only those platform-agnostic rules run; pass `--platform` with a
 comma-separated list to also run rules scoped to specific platforms:
 
 ```console
-decolint -platform=vscode,codespaces
+decolint --platform=vscode,codespaces
 ```
 
 ## Merging
@@ -119,7 +119,7 @@ bind-mounts the Docker socket) goes unnoticed.
 Enable merging to lint the merged configuration instead:
 
 ```console
-decolint -merge
+decolint --merge
 ```
 
 This fetches every referenced Feature and resolves the base image, including
@@ -218,14 +218,14 @@ terminal, and writes plain text otherwise — so a report piped into another
 command, or redirected to a file, stays free of escape sequences. The other
 formats are never colored.
 
-Pass `-color` to decide instead of leaving it to the terminal:
+Pass `--color` to decide instead of leaving it to the terminal:
 
 ```console
-decolint -color=always | less -R   # always color
-decolint -color=never              # never color
+decolint --color=always | less -R   # always color
+decolint --color=never              # never color
 ```
 
-Those two decide on their own. Under the default `-color=auto`, the `NO_COLOR`
+Those two decide on their own. Under the default `--color=auto`, the `NO_COLOR`
 and `FORCE_COLOR` environment variables apply instead: set `NO_COLOR` to any
 non-empty value to turn color off, or `FORCE_COLOR` to color output that does
 not go to a terminal, such as a CI log — `FORCE_COLOR=0` turns color off
@@ -237,7 +237,7 @@ instead. `NO_COLOR` wins over `FORCE_COLOR`.
 - `1` — at least one `error`-severity finding was reported
 - `2` — an error occurred (e.g. a file could not be parsed)
 
-Enable deny-warnings (the `-deny-warnings` flag or `"denyWarnings": true`) to
+Enable deny-warnings (the `--deny-warnings` flag or `"denyWarnings": true`) to
 also fail (exit code 1) on `warn`-severity findings. Exit codes are unaffected
 by the output format.
 
@@ -252,7 +252,7 @@ platforms.
 The [rule reference](https://bare-devcontainer.github.io/decolint/rules/) lists
 every rule by category, and each rule's page covers why it exists, the
 configuration it accepts and rejects, and the specification it is based on. Run
-`decolint -rules` to print the same list with the severity your configuration
+`decolint --rules` to print the same list with the severity your configuration
 gives each rule.
 
 The [SARIF output](#output-formats) links every rule it reports to its page, so

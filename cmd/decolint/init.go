@@ -14,7 +14,7 @@ import (
 
 // initConfigFile writes a fresh .decolint.jsonc file to the current directory, listing every
 // built-in rule at its default severity. It writes a confirmation message to output. It is an
-// error if the file already exists, so -init never silently overwrites a user's customized config.
+// error if the file already exists, so --init never silently overwrites a user's customized config.
 func initConfigFile(output io.Writer) error {
 	name := defaultConfigNames[0] // ".decolint.jsonc"
 
@@ -35,16 +35,16 @@ func initConfigFile(output io.Writer) error {
 // under "categories"; per-rule entries take precedence, e.g.:
 //   "categories": { "security": "error" }
 // "platforms" lists target platforms whose rules run in addition to
-// platform-agnostic ones (the -platform flag takes precedence), e.g.:
+// platform-agnostic ones (the --platform flag takes precedence), e.g.:
 //   "platforms": ["vscode", "codespaces"]
 // "merge", when true, fetches the Features referenced in each
 // devcontainer.json and lints the merged (effective) configuration, e.g.:
 //   "merge": true
 // "denyWarnings", when true, treats warnings as failures (exit code 1);
-// the -deny-warnings flag takes precedence, e.g.:
+// the --deny-warnings flag takes precedence, e.g.:
 //   "denyWarnings": true
 // "format" selects the output format ("text", "json", "github", or
-// "sarif"); the -format flag takes precedence, e.g.:
+// "sarif"); the --format flag takes precedence, e.g.:
 //   "format": "github"
 // "localEnv" supplies the values ${localEnv:NAME} resolves to when merging,
 // and the environment Compose-file interpolation reads; environment

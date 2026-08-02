@@ -95,7 +95,7 @@ func writeSummary(w io.Writer, st styler, numErrors, numWarnings int) error {
 func writeConfigLine(w io.Writer, st styler, path string) error {
 	line := st.bold("Config:") + " " + path
 	if path == "" {
-		line = st.bold("Config:") + " " + st.dim(`none (defaults; run "decolint -init" to create .decolint.jsonc)`)
+		line = st.bold("Config:") + " " + st.dim(`none (defaults; run "decolint --init" to create .decolint.jsonc)`)
 	}
 	if _, err := fmt.Fprintln(w, line); err != nil {
 		return fmt.Errorf("write config line: %w", err)

@@ -1,12 +1,13 @@
 package main
 
 import (
-	"flag"
+	"errors"
 	"fmt"
 	"io"
 	"strings"
 
 	"github.com/bare-devcontainer/decolint/linter"
+	"github.com/spf13/pflag"
 )
 
 // Options holds the parsed command-line arguments. It is purely the CLI's view of the world; see
@@ -14,33 +15,33 @@ import (
 type Options struct {
 	// Paths are the directories to lint, as named on the command line; runLint resolves them.
 	Paths []string
-	// DenyWarnings mirrors [Config.DenyWarnings]. When -deny-warnings is explicitly given it takes
+	// DenyWarnings mirrors [Config.DenyWarnings]. When --deny-warnings is explicitly given it takes
 	// precedence over the config file's "denyWarnings" member, in either direction (see
 	// denyWarningsSet and mergeConfig).
 	DenyWarnings bool
-	// denyWarningsSet records whether -deny-warnings was explicitly passed, so mergeConfig can tell
+	// denyWarningsSet records whether --deny-warnings was explicitly passed, so mergeConfig can tell
 	// "not given" (defer to the config file) apart from "explicitly given as false" (override the
 	// config file's "denyWarnings": true).
 	denyWarningsSet bool
-	// ConfigPath is the raw -config flag value (empty if not given), resolved into a Config by
+	// ConfigPath is the raw --config flag value (empty if not given), resolved into a Config by
 	// loadConfig.
 	ConfigPath string
 	// Platforms restricts registered rules to those targeting one of these platforms, plus any rule
 	// with no target platform. If empty, only rules with no target platform are registered, unless
 	// overridden by the config file's "platforms" member (see mergeConfig).
 	Platforms []linter.Platform
-	// Merge mirrors [Config.Merge]. When -merge is explicitly given it takes precedence over the
+	// Merge mirrors [Config.Merge]. When --merge is explicitly given it takes precedence over the
 	// config file's "merge" member, in either direction (see mergeSet and mergeConfig).
 	Merge bool
-	// mergeSet records whether -merge was explicitly passed, so mergeConfig can tell "not given"
+	// mergeSet records whether --merge was explicitly passed, so mergeConfig can tell "not given"
 	// (defer to the config file) apart from "explicitly given as false" (override the config file's
 	// "merge": true).
 	mergeSet bool
-	// Format is the raw -format flag value ("" if not given), naming how lint issues are written to
+	// Format is the raw --format flag value ("" if not given), naming how lint issues are written to
 	// stdout: "text", "json", "github", or "sarif". A non-empty value replaces the config file's
 	// "format" member; it is resolved into a Format by parseFormat in runLint.
 	Format string
-	// Color is when the text output should be colored, from the -color flag. It is CLI-only: whether
+	// Color is when the text output should be colored, from the --color flag. It is CLI-only: whether
 	// escape sequences can be rendered depends on where decolint runs, not on the project it lints.
 	Color colorMode
 	// Version, when set, causes the program to print its version and exit.
@@ -52,36 +53,34 @@ type Options struct {
 	Init bool
 }
 
-// parseOptions parses args into Options. Flag errors and usage text are written to output.
+// parseOptions parses args into Options. Usage text is written to output; an error is returned for
+// the caller to report.
 func parseOptions(args []string, output io.Writer) (Options, error) {
 	var opts Options
 	var platformFlag string
 	var formatFlag string
 	var colorFlag string
 
-	fs := flag.NewFlagSet(progName, flag.ContinueOnError)
+	fs := pflag.NewFlagSet(progName, pflag.ContinueOnError)
 	fs.SetOutput(output)
 	fs.BoolVar(&opts.DenyWarnings, "deny-warnings", false, "treat warnings as failures (exit code 1); overrides the config file's \"denyWarnings\" member")
-	fs.StringVar(&opts.ConfigPath, "config", "", "path to a config file (default: auto-discover .decolint.jsonc or .decolint.json in the current directory)")
-	fs.StringVar(&platformFlag, "platform", "", "comma-separated target platforms to include in addition to \"all\" (vscode, codespaces); overrides the config file's \"platforms\" member")
-	fs.StringVar(&formatFlag, "format", "", "output format: text (default), json, github, or sarif; overrides the config file's \"format\" member")
+	fs.StringVarP(&opts.ConfigPath, "config", "c", "", "path to a config file (default: auto-discover .decolint.jsonc or .decolint.json in the current directory)")
+	fs.StringVarP(&platformFlag, "platform", "p", "", "comma-separated target platforms to include in addition to \"all\" (vscode, codespaces); overrides the config file's \"platforms\" member")
+	fs.StringVarP(&formatFlag, "format", "f", "", "output format: text (default), json, github, or sarif; overrides the config file's \"format\" member")
 	fs.StringVar(&colorFlag, "color", "", "when to color the text output: auto (default; only when writing to a terminal), always, or never")
-	fs.BoolVar(&opts.Merge, "merge", false, "lint the merged (effective) configuration, including referenced Features and base image metadata; overrides the config file's \"merge\" member")
-	fs.BoolVar(&opts.Version, "version", false, "print version information and exit")
+	fs.BoolVarP(&opts.Merge, "merge", "m", false, "lint the merged (effective) configuration, including referenced Features and base image metadata; overrides the config file's \"merge\" member")
+	fs.BoolVarP(&opts.Version, "version", "v", false, "print version information and exit")
 	fs.BoolVar(&opts.ListRules, "rules", false, "print the built-in rules as a Markdown table (category, target platforms, current severity), then exit")
 	fs.BoolVar(&opts.Init, "init", false, "write a new .decolint.jsonc config file listing every rule at its default severity, then exit")
 	fs.Usage = func() { _ = usage(fs) }
 	if err := fs.Parse(args); err != nil {
+		if !errors.Is(err, pflag.ErrHelp) {
+			_ = usage(fs)
+		}
 		return Options{}, fmt.Errorf("parse flags: %w", err)
 	}
-	fs.Visit(func(f *flag.Flag) {
-		switch f.Name {
-		case "merge":
-			opts.mergeSet = true
-		case "deny-warnings":
-			opts.denyWarningsSet = true
-		}
-	})
+	opts.mergeSet = fs.Changed("merge")
+	opts.denyWarningsSet = fs.Changed("deny-warnings")
 
 	platforms, err := parsePlatforms(platformFlag)
 	if err != nil {

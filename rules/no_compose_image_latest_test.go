@@ -53,6 +53,24 @@ func TestNoComposeImageLatest(t *testing.T) {
 			"services:\n  app:\n    image: ubuntu:${TAG}\n",
 			nil,
 		},
+		{
+			// Compose accepts the bare form as readily as "${VAR}".
+			"an image written as a bare variable is not resolved",
+			"services:\n  app:\n    image: $IMAGE\n",
+			nil,
+		},
+		{
+			// The definition continues in a file this does not read, so what is here may not be the
+			// image the service ends up running.
+			"a service extending another reports nothing",
+			"services:\n  app:\n    extends:\n      file: base.yml\n      service: base\n    image: ubuntu:latest\n",
+			nil,
+		},
+		{
+			"a file pulling in others reports nothing",
+			"include:\n  - other.yml\nservices:\n  app:\n    image: ubuntu:latest\n",
+			nil,
+		},
 		{"a service defined in no file reports nothing", "services:\n  web:\n    image: ubuntu:latest\n", nil},
 		{"a service without an image reports nothing", "services:\n  app:\n    command: sleep infinity\n", nil},
 		{"a file that does not parse reports nothing", "services:\n  app:\n   image: [\n", nil},

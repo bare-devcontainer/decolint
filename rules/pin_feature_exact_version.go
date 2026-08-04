@@ -16,9 +16,7 @@ var exactFeatureVersion = regexp.MustCompile(`^[0-9]+\.[0-9]+\.[0-9]+(?:-[0-9A-Z
 // PinFeatureExactVersion reports a Feature reference that names something other than one published
 // version, in a devcontainer.json's "features" or a Feature's "dependsOn". Unlike
 // [PinFeatureVersion], which accepts any version, this rule accepts only a full
-// "major.minor.patch", since the shorter tags are reassigned as the Feature is released. It is off
-// by default because pinning every Feature to a patch version is a heavier requirement than most
-// projects want.
+// "major.minor.patch", since the shorter tags are reassigned as the Feature is released.
 var PinFeatureExactVersion = &linter.Rule{
 	ID:          "pin-feature-exact-version",
 	Description: `disallow a Feature reference that does not pin a full "major.minor.patch" version`,

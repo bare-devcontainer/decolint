@@ -42,7 +42,7 @@ func TestPinDockerfileImageDigest(t *testing.T) {
 		{"an image reached through a variable is not resolved", "FROM ubuntu:${VARIANT}\n", nil},
 		{
 			"each unpinned stage is reported",
-			"FROM golang:1.24 AS builder\n\nFROM ubuntu:24.04\n",
+			"FROM golang:1.24 AS builder\n\nFROM ubuntu:24.04\nCOPY --from=builder /app /app\n",
 			[]linter.Issue{
 				{Path: "devcontainer.json", Line: 1, Col: 26, RuleID: "pin-dockerfile-image-digest", Message: `Dockerfile "Dockerfile" builds from image "golang:1.24", which is not pinned by digest; add an "@sha256:..." digest`},
 				{Path: "devcontainer.json", Line: 1, Col: 26, RuleID: "pin-dockerfile-image-digest", Message: `Dockerfile "Dockerfile" builds from image "ubuntu:24.04", which is not pinned by digest; add an "@sha256:..." digest`},

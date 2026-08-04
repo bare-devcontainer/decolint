@@ -7,17 +7,19 @@ import (
 	"github.com/tailscale/hujson"
 )
 
-// NoDockerfileImageLatest reports a FROM instruction of the Dockerfile a devcontainer.json builds
-// from that names an image without an explicit tag or with the "latest" tag. It is [NoImageLatest]
-// for the Dockerfile-based form, where the base image is named in the Dockerfile rather than in the
-// "image" property.
+// NoDockerfileImageLatest reports an image the Dockerfile a devcontainer.json builds from pulls
+// without an explicit tag or with the "latest" tag. It is [NoImageLatest] for the Dockerfile-based
+// form, where the images are named in the Dockerfile rather than in the "image" property.
 var NoDockerfileImageLatest = &linter.Rule{
 	ID:          "no-dockerfile-image-latest",
-	Description: `disallow a Dockerfile that builds from an image without an explicit tag or with the "latest" tag`,
+	Description: `disallow a Dockerfile that pulls an image without an explicit tag or with the "latest" tag`,
 	LongDescription: `A configuration that builds from a Dockerfile still starts from a base image, and pinning the
 devcontainer.json says nothing about what that image is: a "FROM" with no tag, or with "latest", resolves
 to whatever the publisher last released. The container then changes from one rebuild to the next while
-every file in the repository stays the same. Name the version in the "FROM" the way you would in "image".`,
+every file in the repository stays the same. Name the version in the "FROM" the way you would in "image".
+
+A "COPY --from" or a "RUN --mount=from" naming an image pulls one just as a "FROM" does, and what it
+brings into the container moves under an unpinned reference the same way, so those are named too.`,
 	References: []string{
 		`https://containers.dev/implementors/json_reference/#image-specific`,
 		`https://containers.dev/implementors/spec/#dockerfile-based`,
@@ -56,7 +58,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends jq
 `},
 			},
 		},
-		Note: "The finding is reported at the property naming the Dockerfile, since that is what the\n" +
+		Note: "Every image a build of the Dockerfile pulls is checked: the base image of each stage the\n" +
+			"build reaches, and the images its `COPY --from` and `RUN --mount=from` instructions name.\n" +
+			"The finding is reported at the property naming the Dockerfile, since that is what the\n" +
 			"devcontainer.json says about the image; the fix belongs in the Dockerfile.",
 	},
 	Check: checkNoDockerfileImageLatest,
@@ -74,16 +78,16 @@ func checkNoDockerfileImageLatest(ctx *linter.Context, node *linter.Node) []lint
 
 	var findings []linter.Finding
 	for _, image := range images {
-		tag, hasTag := refTag(image)
+		tag, hasTag := refTag(image.ref)
 		switch {
 		case !hasTag:
 			findings = append(findings, linter.Finding{
-				Message: fmt.Sprintf("Dockerfile %q builds from image %q, which has no explicit tag; pin a specific version", path, image),
+				Message: fmt.Sprintf("Dockerfile %q %s image %q, which has no explicit tag; pin a specific version", path, image.verb(), image.ref),
 				Offset:  offset,
 			})
 		case tag == "latest":
 			findings = append(findings, linter.Finding{
-				Message: fmt.Sprintf("Dockerfile %q builds from image %q, which uses the \"latest\" tag; pin a specific version", path, image),
+				Message: fmt.Sprintf("Dockerfile %q %s image %q, which uses the \"latest\" tag; pin a specific version", path, image.verb(), image.ref),
 				Offset:  offset,
 			})
 		}

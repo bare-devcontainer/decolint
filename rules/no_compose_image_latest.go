@@ -60,9 +60,10 @@ or with "latest", pulls whatever the publisher last released — a container tha
 `},
 			},
 		},
-		Note: "Only the service the dev container runs in is checked. A service that builds its own\n" +
-			"image is left to the Dockerfile rules, and a service whose image is written as a\n" +
-			"`${...}` variable is not reported: the value is not in the configuration.",
+		Note: "Only the service the dev container runs in is checked, and only when it runs a\n" +
+			"published image: the base image of a service that builds its own image is not checked,\n" +
+			"and neither is an image written as a `${...}` variable, whose value is not in the\n" +
+			"configuration.",
 	},
 	Check: checkNoComposeImageLatest,
 }

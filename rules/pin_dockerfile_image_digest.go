@@ -7,17 +7,20 @@ import (
 	"github.com/tailscale/hujson"
 )
 
-// PinDockerfileImageDigest reports a FROM instruction of the Dockerfile a devcontainer.json builds
-// from that names an image without a content digest. It is [PinImageDigest] for the
-// Dockerfile-based form, and stands to [NoDockerfileImageLatest] as that rule stands to
-// [NoImageLatest]: any unpinned reference is reported, not only a missing or "latest" tag.
+// PinDockerfileImageDigest reports an image the Dockerfile a devcontainer.json builds from pulls
+// without a content digest. It is [PinImageDigest] for the Dockerfile-based form, and stands to
+// [NoDockerfileImageLatest] as that rule stands to [NoImageLatest]: any unpinned reference is
+// reported, not only a missing or "latest" tag.
 var PinDockerfileImageDigest = &linter.Rule{
 	ID:          "pin-dockerfile-image-digest",
-	Description: `disallow a Dockerfile that builds from an image not pinned by content digest (e.g. "FROM image@sha256:...")`,
+	Description: `disallow a Dockerfile that pulls an image not pinned by content digest (e.g. "FROM image@sha256:...")`,
 	LongDescription: `A "FROM" with a fixed tag still resolves through a mutable pointer: the publisher can move the tag to
 different bits, so two builds of the same Dockerfile can start from different images. Writing the digest
 ("FROM image:tag@sha256:...") names the content itself, and the build verifies what it pulled against it.
-Keeping the tag alongside the digest leaves the reference readable.`,
+Keeping the tag alongside the digest leaves the reference readable.
+
+An image a "COPY --from" or a "RUN --mount=from" names is pulled through the same mutable pointer, so
+it takes a digest too.`,
 	References: []string{
 		`https://containers.dev/implementors/spec/#dockerfile-based`,
 		`https://github.com/opencontainers/image-spec/blob/main/descriptor.md#digests`,
@@ -56,6 +59,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends jq
 `},
 			},
 		},
+		Note: "Every image a build of the Dockerfile pulls is checked: the base image of each stage the\n" +
+			"build reaches, and the images its `COPY --from` and `RUN --mount=from` instructions name.",
 	},
 	Check: checkPinDockerfileImageDigest,
 }
@@ -72,11 +77,11 @@ func checkPinDockerfileImageDigest(ctx *linter.Context, node *linter.Node) []lin
 
 	var findings []linter.Finding
 	for _, image := range images {
-		if digestSuffix.MatchString(image) {
+		if digestSuffix.MatchString(image.ref) {
 			continue
 		}
 		findings = append(findings, linter.Finding{
-			Message: fmt.Sprintf("Dockerfile %q builds from image %q, which is not pinned by digest; add an \"@sha256:...\" digest", path, image),
+			Message: fmt.Sprintf("Dockerfile %q %s image %q, which is not pinned by digest; add an \"@sha256:...\" digest", path, image.verb(), image.ref),
 			Offset:  offset,
 		})
 	}

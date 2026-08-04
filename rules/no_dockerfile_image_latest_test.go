@@ -42,9 +42,24 @@ func TestNoDockerfileImageLatest(t *testing.T) {
 			nil,
 		},
 		{
-			"a stage name is matched case-insensitively",
+			// The parser lower-cases every stage name, so a "FROM" reaches one only in lower case.
+			"a stage name is reached in the case the parser gives it",
 			"FROM golang:1.24 AS Builder\n\nFROM builder\n",
 			nil,
+		},
+		{
+			// BuildKit reads a base name it cannot match as an image, which is why "FROM BUILDER"
+			// fails with "repository name must be lowercase" rather than building on the stage.
+			"a base name in another case is an image",
+			"FROM golang:1.24 AS builder\n\nFROM BUILDER\n",
+			issue(`Dockerfile "Dockerfile" builds from image "BUILDER", which has no explicit tag; pin a specific version`),
+		},
+		{
+			// A stage name cannot begin with a digit, so a "FROM" naming a position names an image;
+			// the stage at that position is not built and its own base never pulled.
+			"a base name written as a position is an image",
+			"FROM golang:latest\n\nFROM 0\n",
+			issue(`Dockerfile "Dockerfile" builds from image "0", which has no explicit tag; pin a specific version`),
 		},
 		{
 			"an image reached through a variable is not resolved",
@@ -96,11 +111,46 @@ func TestNoDockerfileImageLatest(t *testing.T) {
 			issue(`Dockerfile "Dockerfile" builds from image "golang:latest", which uses the "latest" tag; pin a specific version`),
 		},
 		{
+			"an image copied from is reported",
+			"FROM ubuntu:24.04\nCOPY --from=ghcr.io/astral-sh/uv:latest /uv /bin/\n",
+			issue(`Dockerfile "Dockerfile" pulls image "ghcr.io/astral-sh/uv:latest", which uses the "latest" tag; pin a specific version`),
+		},
+		{
+			"an image mounted from is reported",
+			"FROM ubuntu:24.04\nRUN --mount=from=busybox,target=/b /b/bin/echo hi\n",
+			issue(`Dockerfile "Dockerfile" pulls image "busybox", which has no explicit tag; pin a specific version`),
+		},
+		{
+			// A mount naming no source mounts the build context, and one naming no stage is matched
+			// by name alone, so neither reaches the stage at that position.
+			"a mount is not a position and needs no source",
+			"FROM golang:latest\n\nFROM ubuntu:24.04\nRUN --mount=target=/b --mount=from=0,target=/c true\n",
+			issue(`Dockerfile "Dockerfile" pulls image "0", which has no explicit tag; pin a specific version`),
+		},
+		{
+			// Out of range, the position names no stage at all and the build fails on it, so there
+			// is no image to report either.
+			"a position no stage occupies is not an image",
+			"FROM ubuntu:24.04\nCOPY --from=9 /app /app\n",
+			nil,
+		},
+		{
+			"an ordinary copy pulls nothing",
+			"FROM ubuntu:24.04\nCOPY app /app\nRUN --mount=type=cache,target=/c true\n",
+			nil,
+		},
+		{
+			"a copy from a variable is not resolved",
+			"FROM ubuntu:24.04\nCOPY --from=$BUILDER /app /app\n",
+			nil,
+		},
+		{
 			"a stage reached twice is read once",
 			"FROM ubuntu:latest AS base\n\nFROM base AS mid\nCOPY --from=base /x /x\n",
 			issue(`Dockerfile "Dockerfile" builds from image "ubuntu:latest", which uses the "latest" tag; pin a specific version`),
 		},
 		{"a Dockerfile with no stage at all reports nothing", "# nothing to build here\n", nil},
+		{"a Dockerfile of global ARGs alone reports nothing", "ARG VERSION=1.0\n", nil},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -148,7 +198,19 @@ COPY --from=tools /go /go
 			`{"build": {"dockerfile": "Dockerfile"}}`,
 			toolsIssue,
 		},
+		{
+			"a target is matched case-insensitively",
+			`{"build": {"dockerfile": "Dockerfile", "target": "DEV"}}`,
+			toolsIssue,
+		},
 		{"a target naming no stage reports nothing", `{"build": {"dockerfile": "Dockerfile", "target": "absent"}}`, nil},
+		{
+			// A target names a stage and never a position, and a stage name cannot begin with a
+			// digit, so the build fails rather than building the stage at that position.
+			"a target written as a position reports nothing",
+			`{"build": {"dockerfile": "Dockerfile", "target": "0"}}`,
+			nil,
+		},
 		{"a non-string target is no target", `{"build": {"dockerfile": "Dockerfile", "target": 42}}`, toolsIssue},
 		{
 			// The legacy top-level property names the Dockerfile; a "build" beside it that is not
@@ -164,6 +226,23 @@ COPY --from=tools /go /go
 			assertIssuesInDir(t, rules.NoDockerfileImageLatest, linter.SeverityError, "devcontainer.json", linter.Devcontainer, tt.src, dir, tt.want)
 		})
 	}
+}
+
+// TestNoDockerfileImageLatest_ForwardStageReference checks that a stage copied from before it is
+// declared is read as the stage it names rather than as an image: BuildKit resolves a "--from"
+// once the whole Dockerfile is parsed, so the order the two stages are written in does not matter.
+func TestNoDockerfileImageLatest_ForwardStageReference(t *testing.T) {
+	t.Parallel()
+
+	const dockerfile = `FROM ubuntu:24.04 AS dev
+COPY --from=tools /go /go
+
+FROM golang:latest AS tools
+`
+	dir := linter.Dir{FS: fstest.MapFS{"Dockerfile": {Data: []byte(dockerfile)}}}
+	src := `{"build": {"dockerfile": "Dockerfile", "target": "dev"}}`
+	want := []linter.Issue{{Path: "devcontainer.json", Line: 1, Col: 26, RuleID: "no-dockerfile-image-latest", Message: `Dockerfile "Dockerfile" builds from image "golang:latest", which uses the "latest" tag; pin a specific version`}}
+	assertIssuesInDir(t, rules.NoDockerfileImageLatest, linter.SeverityError, "devcontainer.json", linter.Devcontainer, src, dir, want)
 }
 
 func TestNoDockerfileImageLatest_DockerfileLocation(t *testing.T) {

@@ -48,6 +48,21 @@ func TestPinDockerfileImageDigest(t *testing.T) {
 				{Path: "devcontainer.json", Line: 1, Col: 26, RuleID: "pin-dockerfile-image-digest", Message: `Dockerfile "Dockerfile" builds from image "ubuntu:24.04", which is not pinned by digest; add an "@sha256:..." digest`},
 			},
 		},
+		{
+			"an image copied from is reported",
+			"FROM ubuntu:24.04@sha256:abc123\nCOPY --from=ghcr.io/astral-sh/uv:0.9.7 /uv /bin/\n",
+			issue(`Dockerfile "Dockerfile" pulls image "ghcr.io/astral-sh/uv:0.9.7", which is not pinned by digest; add an "@sha256:..." digest`),
+		},
+		{
+			"an image mounted from is reported",
+			"FROM ubuntu:24.04@sha256:abc123\nRUN --mount=from=busybox:1.37,target=/b /b/bin/echo hi\n",
+			issue(`Dockerfile "Dockerfile" pulls image "busybox:1.37", which is not pinned by digest; add an "@sha256:..." digest`),
+		},
+		{
+			"an image copied from by digest is pinned",
+			"FROM ubuntu:24.04@sha256:abc123\nCOPY --from=busybox@sha256:def456 /bin/busybox /bin/\n",
+			nil,
+		},
 		{"a Dockerfile that does not parse reports nothing", "FROM\n", nil},
 	}
 	for _, tt := range tests {

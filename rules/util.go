@@ -238,9 +238,9 @@ const maxConfigFileBytes = 4 << 20 // 4 MB
 //
 // It reports false rather than an error because a rule reads such a file to say something about it,
 // and can say nothing when it is absent, unreadable, or too large (see maxConfigFileBytes). A path
-// leading outside the directory is also not read: access is confined to the boundary the file was
-// discovered through (see [discovery.VisitConfigs]), so a rule reports nothing on configuration
-// that names a file decolint may not open.
+// leading outside the directory is also not read: access is confined to the boundary discovery hands
+// the rule the directory through, so a rule reports nothing on configuration that names a file
+// decolint may not open.
 func readConfigFile(dir linter.Dir, name string) ([]byte, bool) {
 	if dir.FS == nil {
 		return nil, false

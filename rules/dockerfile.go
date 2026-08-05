@@ -2,6 +2,7 @@ package rules
 
 import (
 	"bytes"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -148,9 +149,7 @@ func builtStages(stages []instructions.Stage, target string) map[int]bool {
 			continue
 		}
 		built[i] = true
-		for _, dep := range stageDeps(stages, i) {
-			queue = append(queue, dep)
-		}
+		queue = append(queue, stageDeps(stages, i)...)
 	}
 	return built
 }
@@ -237,9 +236,9 @@ func stageBase(stages []instructions.Stage, i int) (int, bool) {
 // having lower-cased them already. A name cannot begin with a digit, so no reference written as a
 // position reaches a stage here.
 func stageNamed(stages []instructions.Stage, ref string) (int, bool) {
-	for i := len(stages) - 1; i >= 0; i-- {
+	for i, stage := range slices.Backward(stages) {
 		// A stage left unnamed has no name to be reached by, whatever ref is.
-		if stages[i].Name != "" && stages[i].Name == ref {
+		if stage.Name != "" && stage.Name == ref {
 			return i, true
 		}
 	}

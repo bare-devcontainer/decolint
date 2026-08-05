@@ -9,9 +9,10 @@ import (
 )
 
 // exactFeatureVersion matches a full "major.minor.patch" Feature version, with the optional
-// prerelease suffix semver allows and an OCI tag can spell. The build metadata semver also allows
-// is not matched: "+" is not a legal character in a tag, so no Feature is published under one.
-var exactFeatureVersion = regexp.MustCompile(`^[0-9]+\.[0-9]+\.[0-9]+(?:-[0-9A-Za-z.-]+)?$`)
+// prerelease suffix semver allows. A component with a leading zero is not one: semver forbids it, so
+// no Feature is published under it. Neither is the build metadata semver allows, "+" being no legal
+// character in a tag.
+var exactFeatureVersion = regexp.MustCompile(`^(?:0|[1-9][0-9]*)(?:\.(?:0|[1-9][0-9]*)){2}(?:-[0-9A-Za-z.-]+)?$`)
 
 // PinFeatureExactVersion reports a Feature reference that names something other than one published
 // version, in a devcontainer.json's "features" or a Feature's "dependsOn". Unlike

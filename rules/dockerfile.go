@@ -230,14 +230,16 @@ func stageBase(stages []instructions.Stage, i int) (int, bool) {
 	return stageNamed(stages[:i], stages[i].BaseName)
 }
 
-// stageNamed returns the index of the stage named ref and reports whether one is. A caller whose
-// reference BuildKit lower-cases before the lookup passes it lower-cased; stage names need no
-// folding, the parser having lower-cased them already. A name cannot begin with a digit, so no
-// reference written as a position reaches a stage here.
+// stageNamed returns the index of the last stage named ref and reports whether one is. Several
+// stages may share a name, which BuildKit only warns about, and it keeps one stage per name as it
+// registers them in turn, so a reference reaches the last of them. A caller whose reference BuildKit
+// lower-cases before the lookup passes it lower-cased; stage names need no folding, the parser
+// having lower-cased them already. A name cannot begin with a digit, so no reference written as a
+// position reaches a stage here.
 func stageNamed(stages []instructions.Stage, ref string) (int, bool) {
-	for i, stage := range stages {
+	for i := len(stages) - 1; i >= 0; i-- {
 		// A stage left unnamed has no name to be reached by, whatever ref is.
-		if stage.Name != "" && stage.Name == ref {
+		if stages[i].Name != "" && stages[i].Name == ref {
 			return i, true
 		}
 	}

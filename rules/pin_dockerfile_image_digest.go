@@ -59,8 +59,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends jq
 `},
 			},
 		},
-		Note: "Every image a build of the Dockerfile pulls is checked: the base image of each stage the\n" +
-			"build reaches, and the images its `COPY --from` and `RUN --mount=from` instructions name.",
+		Note: "The images a build of the Dockerfile pulls are checked: the base image of each stage the\n" +
+			"build reaches, and the images its `COPY --from` and `RUN --mount=from` instructions name.\n" +
+			"An image written with a `$` variable is not checked, since its value can come from\n" +
+			"`build.args`.",
 	},
 	Check: checkPinDockerfileImageDigest,
 }

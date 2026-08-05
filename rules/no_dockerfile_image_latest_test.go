@@ -42,6 +42,12 @@ func TestNoDockerfileImageLatest(t *testing.T) {
 			nil,
 		},
 		{
+			// A base name reaching the last stage declared under it leaves the first one unbuilt.
+			"a base name reaches the last stage declared under it",
+			"FROM ubuntu:latest AS base\n\nFROM ubuntu:24.04 AS base\n\nFROM base AS final\n",
+			nil,
+		},
+		{
 			// The parser lower-cases every stage name, so a "FROM" reaches one only in lower case.
 			"a stage name is reached in the case the parser gives it",
 			"FROM golang:1.24 AS Builder\n\nFROM builder\n",
@@ -98,6 +104,11 @@ func TestNoDockerfileImageLatest(t *testing.T) {
 		{
 			"a stage the last one copies from is reported",
 			"FROM golang:latest AS builder\n\nFROM ubuntu:24.04\nCOPY --from=builder /app /app\n",
+			issue(`Dockerfile "Dockerfile" builds from image "golang:latest", which uses the "latest" tag; pin a specific version`),
+		},
+		{
+			"a copy reaches the last stage declared under a shared name",
+			"FROM golang:1.24 AS tools\n\nFROM golang:latest AS tools\n\nFROM ubuntu:24.04\nCOPY --from=tools /go /go\n",
 			issue(`Dockerfile "Dockerfile" builds from image "golang:latest", which uses the "latest" tag; pin a specific version`),
 		},
 		{
@@ -228,9 +239,44 @@ COPY --from=tools /go /go
 	}
 }
 
+// TestNoDockerfileImageLatest_DuplicateStageName checks that a name several stages share reaches the
+// last of them, both as a "build.target" and as a "--from" looked up across the whole Dockerfile.
+func TestNoDockerfileImageLatest_DuplicateStageName(t *testing.T) {
+	t.Parallel()
+
+	// Both cases build the "dev" stage, and "build.dockerfile" comes first, so its value starts at
+	// column 26.
+	const src = `{"build": {"dockerfile": "Dockerfile", "target": "dev"}}`
+
+	tests := []struct {
+		name       string
+		dockerfile string
+		want       []linter.Issue
+	}{
+		{
+			"a target reaches the last stage declared under its name",
+			"FROM golang:latest AS dev\n\nFROM ubuntu:24.04 AS dev\n",
+			nil,
+		},
+		{
+			"a copy reaches the last stage declared under its name",
+			"FROM golang:1.24 AS tools\n\nFROM ubuntu:24.04 AS dev\nCOPY --from=tools /go /go\n\nFROM golang:latest AS tools\n",
+			[]linter.Issue{{Path: "devcontainer.json", Line: 1, Col: 26, RuleID: "no-dockerfile-image-latest", Message: `Dockerfile "Dockerfile" builds from image "golang:latest", which uses the "latest" tag; pin a specific version`}},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			dir := linter.Dir{FS: fstest.MapFS{"Dockerfile": {Data: []byte(tt.dockerfile)}}}
+			assertIssuesInDir(t, rules.NoDockerfileImageLatest, linter.SeverityError, "devcontainer.json", linter.Devcontainer, src, dir, tt.want)
+		})
+	}
+}
+
 // TestNoDockerfileImageLatest_ForwardStageReference checks that a stage copied from before it is
-// declared is read as the stage it names rather than as an image: BuildKit resolves a "--from"
-// once the whole Dockerfile is parsed, so the order the two stages are written in does not matter.
+// declared is read as the stage it names rather than as an image: BuildKit looks a "--from" up
+// among every stage of the Dockerfile, wherever it is declared. Running such a build then fails,
+// the copy naming a stage not yet built, but what the reference names is a stage all the same.
 func TestNoDockerfileImageLatest_ForwardStageReference(t *testing.T) {
 	t.Parallel()
 

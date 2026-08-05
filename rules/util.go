@@ -264,6 +264,21 @@ func readConfigFile(dir linter.Dir, name string) ([]byte, bool) {
 	return data, true
 }
 
+// holdsFeatureRefs reports whether pointer names the property that holds Feature references in a
+// file of the given type: "features" in a devcontainer.json, "dependsOn" in a Feature. A rule
+// declares its paths for every file type it applies to, so one covering both properties is offered
+// each of them in each file — including the combinations the specification does not define.
+func holdsFeatureRefs(fileType linter.FileType, pointer string) bool {
+	switch fileType {
+	case linter.Devcontainer:
+		return pointer == "/features"
+	case linter.Feature:
+		return pointer == "/dependsOn"
+	default:
+		return false
+	}
+}
+
 // featureRef is an OCI Feature reference, as written for a key of a devcontainer.json "features" or
 // a Feature's "dependsOn", with the byte offset of that key.
 type featureRef struct {

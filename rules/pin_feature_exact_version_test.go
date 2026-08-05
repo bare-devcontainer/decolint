@@ -53,6 +53,13 @@ func TestPinFeatureExactVersion(t *testing.T) {
 			issue(`feature "localhost:5000/features/foo" has no explicit version; pin a full "major.minor.patch" version`),
 		},
 		{"registry port with a full version", `{"features": {"localhost:5000/features/foo:1.0.0": {}}}`, nil},
+		{
+			// "dependsOn" is a Feature's property; a devcontainer.json asks for Features under
+			// "features" alone, so a member spelled that way holds no Feature reference.
+			"a dependsOn member of a devcontainer.json is not a Feature reference",
+			`{"dependsOn": {"ghcr.io/devcontainers/features/go": {}}}`,
+			nil,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -81,6 +88,13 @@ func TestPinFeatureExactVersion_DependsOn(t *testing.T) {
 		},
 		{"full version", `{"dependsOn": {"ghcr.io/devcontainers/features/common-utils:2.6.2": {}}}`, nil},
 		{"no dependsOn property", `{"id": "my-feature"}`, nil},
+		{
+			// A Feature declares its dependencies under "dependsOn"; the specification gives it no
+			// "features" property, so a member spelled that way holds no Feature reference.
+			"a features member of a Feature is not a Feature reference",
+			`{"features": {"ghcr.io/devcontainers/features/common-utils": {}}}`,
+			nil,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

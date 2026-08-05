@@ -62,7 +62,11 @@ A reference pinned by digest is accepted as it already names exact content.`,
 	Check: checkPinFeatureExactVersion,
 }
 
-func checkPinFeatureExactVersion(_ *linter.Context, node *linter.Node) []linter.Finding {
+func checkPinFeatureExactVersion(ctx *linter.Context, node *linter.Node) []linter.Finding {
+	if !holdsFeatureRefs(ctx.Type, node.Pointer) {
+		return nil
+	}
+
 	var findings []linter.Finding
 	for _, f := range ociFeatureRefs(node.Value) {
 		// A digest names the content itself, whatever tag it is written alongside.

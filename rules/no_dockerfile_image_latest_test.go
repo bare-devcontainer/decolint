@@ -291,6 +291,112 @@ FROM golang:latest AS tools
 	assertIssuesInDir(t, rules.NoDockerfileImageLatest, linter.SeverityError, "devcontainer.json", linter.Devcontainer, src, dir, want)
 }
 
+// TestNoDockerfileImageLatest_ComposeBuild checks the Dockerfile a Compose service builds from, the
+// other place a configuration names one.
+func TestNoDockerfileImageLatest_ComposeBuild(t *testing.T) {
+	t.Parallel()
+
+	const src = `{"dockerComposeFile": "docker-compose.yml", "service": "app"}`
+	issue := func(message string) []linter.Issue {
+		return []linter.Issue{{Path: "devcontainer.json", Line: 1, Col: 23, RuleID: "no-dockerfile-image-latest", Message: message}}
+	}
+
+	tests := []struct {
+		name       string
+		compose    string
+		dockerfile string
+		want       []linter.Issue
+	}{
+		{
+			"a build names its Dockerfile",
+			"services:\n  app:\n    build:\n      context: .\n      dockerfile: Dockerfile\n",
+			"FROM ubuntu:latest\n",
+			issue(`compose service "app" builds from image "ubuntu:latest", which uses the "latest" tag; pin a specific version`),
+		},
+		{
+			"a build written as its context alone defaults the Dockerfile",
+			"services:\n  app:\n    build: .\n",
+			"FROM ubuntu:latest\n",
+			issue(`compose service "app" builds from image "ubuntu:latest", which uses the "latest" tag; pin a specific version`),
+		},
+		{
+			"an inline Dockerfile is read from the Compose file itself",
+			"services:\n  app:\n    build:\n      dockerfile_inline: |\n        FROM ubuntu:latest\n",
+			"FROM debian:24.04\n",
+			issue(`compose service "app" builds from image "ubuntu:latest", which uses the "latest" tag; pin a specific version`),
+		},
+		{
+			"a build target leaves the stages it does not reach alone",
+			"services:\n  app:\n    build:\n      context: .\n      target: dev\n",
+			"FROM ubuntu:latest AS test\n\nFROM ubuntu:24.04 AS dev\n",
+			nil,
+		},
+		{
+			"an image the Dockerfile pulls is reported too",
+			"services:\n  app:\n    build: .\n",
+			"FROM ubuntu:24.04\nCOPY --from=busybox:latest /bin/busybox /b\n",
+			issue(`compose service "app" pulls image "busybox:latest", which uses the "latest" tag; pin a specific version`),
+		},
+		{
+			"a pinned Dockerfile reports nothing",
+			"services:\n  app:\n    build: .\n",
+			"FROM ubuntu:24.04\n",
+			nil,
+		},
+		{
+			// The Compose rule reports the image such a service runs; there is no Dockerfile here.
+			"a service running an image reports nothing",
+			"services:\n  app:\n    image: ubuntu:latest\n",
+			"FROM ubuntu:latest\n",
+			nil,
+		},
+		{
+			// The context leaves the directory the configuration is read through.
+			"a context outside the directory reports nothing",
+			"services:\n  app:\n    build:\n      context: ..\n",
+			"FROM ubuntu:latest\n",
+			nil,
+		},
+		{
+			"a missing Dockerfile reports nothing",
+			"services:\n  app:\n    build:\n      context: .\n      dockerfile: absent\n",
+			"FROM ubuntu:latest\n",
+			nil,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			dir := linter.Dir{FS: fstest.MapFS{
+				"docker-compose.yml": {Data: []byte(tt.compose)},
+				"Dockerfile":         {Data: []byte(tt.dockerfile)},
+			}}
+			assertIssuesInDir(t, rules.NoDockerfileImageLatest, linter.SeverityError, "devcontainer.json", linter.Devcontainer, src, dir, tt.want)
+		})
+	}
+
+	t.Run("a Compose configuration without a service reports nothing", func(t *testing.T) {
+		t.Parallel()
+		dir := linter.Dir{FS: fstest.MapFS{
+			"docker-compose.yml": {Data: []byte("services:\n  app:\n    build: .\n")},
+			"Dockerfile":         {Data: []byte("FROM ubuntu:latest\n")},
+		}}
+		assertIssuesInDir(t, rules.NoDockerfileImageLatest, linter.SeverityError, "devcontainer.json", linter.Devcontainer, `{"dockerComposeFile": "docker-compose.yml"}`, dir, nil)
+	})
+
+	t.Run("a Compose configuration is read instead of a build property beside it", func(t *testing.T) {
+		t.Parallel()
+		dir := linter.Dir{FS: fstest.MapFS{
+			"docker-compose.yml": {Data: []byte("services:\n  app:\n    image: ubuntu:24.04\n")},
+			"Dockerfile":         {Data: []byte("FROM ubuntu:latest\n")},
+		}}
+		// A configuration declaring both is reported by conflicting-container-def; the base image
+		// resolves through Compose, as the reference implementation resolves it.
+		src := `{"dockerComposeFile": "docker-compose.yml", "service": "app", "build": {"dockerfile": "Dockerfile"}}`
+		assertIssuesInDir(t, rules.NoDockerfileImageLatest, linter.SeverityError, "devcontainer.json", linter.Devcontainer, src, dir, nil)
+	})
+}
+
 func TestNoDockerfileImageLatest_DockerfileLocation(t *testing.T) {
 	t.Parallel()
 

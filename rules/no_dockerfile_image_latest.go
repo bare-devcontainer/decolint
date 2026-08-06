@@ -19,7 +19,10 @@ to whatever the publisher last released. The container then changes from one reb
 every file in the repository stays the same. Name the version in the "FROM" the way you would in "image".
 
 A "COPY --from" or a "RUN --mount=from" naming an image pulls one just as a "FROM" does, and what it
-brings into the container moves under an unpinned reference the same way, so those are named too.`,
+brings into the container moves under an unpinned reference the same way, so those are named too.
+
+The Dockerfile is the one the configuration names, or, for a Compose-based configuration, the one the
+service it runs is built by.`,
 	References: []string{
 		`https://containers.dev/implementors/json_reference/#image-specific`,
 		`https://containers.dev/implementors/spec/#dockerfile-based`,
@@ -61,7 +64,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends jq
 		Note: "The images a build of the Dockerfile pulls are checked: the base image of each stage the\n" +
 			"build reaches, and the images its `COPY --from` and `RUN --mount=from` instructions name.\n" +
 			"An image written with a `$` variable is not checked, since its value can come from\n" +
-			"`build.args`.\n" +
+			"`build.args`. A Compose service that builds its own image is read the same way,\n" +
+			"through the Dockerfile its `build` names.\n" +
 			"The finding is reported at the property naming the Dockerfile, since that is what the\n" +
 			"devcontainer.json says about the image; the fix belongs in the Dockerfile.",
 	},
@@ -73,7 +77,7 @@ func checkNoDockerfileImageLatest(ctx *linter.Context, node *linter.Node) []lint
 	if !ok {
 		return nil
 	}
-	images, path, offset, ok := dockerfileBuildImages(ctx.Dir, obj)
+	images, subject, offset, ok := dockerfileBuildImages(ctx.Dir, obj)
 	if !ok {
 		return nil
 	}
@@ -84,12 +88,12 @@ func checkNoDockerfileImageLatest(ctx *linter.Context, node *linter.Node) []lint
 		switch {
 		case !hasTag:
 			findings = append(findings, linter.Finding{
-				Message: fmt.Sprintf("Dockerfile %q %s image %q, which has no explicit tag; pin a specific version", path, image.verb(), image.ref),
+				Message: fmt.Sprintf("%s %s image %q, which has no explicit tag; pin a specific version", subject, image.verb(), image.ref),
 				Offset:  offset,
 			})
 		case tag == "latest":
 			findings = append(findings, linter.Finding{
-				Message: fmt.Sprintf("Dockerfile %q %s image %q, which uses the \"latest\" tag; pin a specific version", path, image.verb(), image.ref),
+				Message: fmt.Sprintf("%s %s image %q, which uses the \"latest\" tag; pin a specific version", subject, image.verb(), image.ref),
 				Offset:  offset,
 			})
 		}

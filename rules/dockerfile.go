@@ -2,6 +2,7 @@ package rules
 
 import (
 	"bytes"
+	"fmt"
 	"slices"
 	"strconv"
 	"strings"
@@ -245,12 +246,20 @@ func stageNamed(stages []instructions.Stage, ref string) (int, bool) {
 	return 0, false
 }
 
-// dockerfileBuildImages returns the images the build the Dockerfile that obj, a devcontainer.json,
-// declares pulls (see [dockerfilePulledImages]), along with the Dockerfile's path as written and the
-// offset to anchor findings at. ok is false when obj declares no Dockerfile, or when the file
-// cannot be read (see [readConfigFile]).
-func dockerfileBuildImages(dir linter.Dir, obj *hujson.Object) (images []dockerfileImage, path string, offset int, ok bool) {
-	path, offset, ok = dockerfileRef(obj)
+// dockerfileBuildImages returns the images the build that obj, a devcontainer.json, declares pulls
+// (see [dockerfilePulledImages]), along with the subject naming that build in a finding and the
+// offset to anchor findings at.
+//
+// The build is the Dockerfile the configuration names itself, or, for a Compose-based configuration,
+// the one the service it runs is built by. Compose is looked at first, as the reference
+// implementation resolves the base image in that order. ok is false when the configuration builds
+// nothing of its own, or when the Dockerfile cannot be read (see [readConfigFile]).
+func dockerfileBuildImages(dir linter.Dir, obj *hujson.Object) (images []dockerfileImage, subject string, offset int, ok bool) {
+	if paths, composeOffset, declared := composeFilePaths(obj); declared {
+		return composeBuildImages(dir, obj, paths, composeOffset)
+	}
+
+	path, offset, ok := dockerfileRef(obj)
 	if !ok {
 		return nil, "", 0, false
 	}
@@ -258,5 +267,28 @@ func dockerfileBuildImages(dir linter.Dir, obj *hujson.Object) (images []dockerf
 	if !ok {
 		return nil, "", 0, false
 	}
-	return dockerfilePulledImages(src, buildTarget(obj)), path, offset, true
+	return dockerfilePulledImages(src, buildTarget(obj)), fmt.Sprintf("Dockerfile %q", path), offset, true
+}
+
+// composeBuildImages returns the images the build of the Compose service the dev container runs
+// pulls, named by that service. ok is false when the service runs an image instead of building one,
+// which [NoComposeImageLatest] reports on.
+func composeBuildImages(dir linter.Dir, obj *hujson.Object, paths []string, offset int) (images []dockerfileImage, subject string, anchor int, ok bool) {
+	service, ok := stringMember(obj, "service")
+	if !ok {
+		return nil, "", 0, false
+	}
+	source, ok := composeServiceSource(dir, paths, service)
+	if !ok || source.build == nil {
+		return nil, "", 0, false
+	}
+
+	src := []byte(source.build.inline)
+	if source.build.dockerfile != "" {
+		src, ok = readConfigFile(dir, source.build.dockerfile)
+		if !ok {
+			return nil, "", 0, false
+		}
+	}
+	return dockerfilePulledImages(src, source.build.target), fmt.Sprintf("compose service %q", service), offset, true
 }

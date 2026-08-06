@@ -20,7 +20,10 @@ different bits, so two builds of the same Dockerfile can start from different im
 Keeping the tag alongside the digest leaves the reference readable.
 
 An image a "COPY --from" or a "RUN --mount=from" names is pulled through the same mutable pointer, so
-it takes a digest too.`,
+it takes a digest too.
+
+The Dockerfile is the one the configuration names, or, for a Compose-based configuration, the one the
+service it runs is built by.`,
 	References: []string{
 		`https://containers.dev/implementors/spec/#dockerfile-based`,
 		`https://github.com/opencontainers/image-spec/blob/main/descriptor.md#digests`,
@@ -62,7 +65,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends jq
 		Note: "The images a build of the Dockerfile pulls are checked: the base image of each stage the\n" +
 			"build reaches, and the images its `COPY --from` and `RUN --mount=from` instructions name.\n" +
 			"An image written with a `$` variable is not checked, since its value can come from\n" +
-			"`build.args`.",
+			"`build.args`. A Compose service that builds its own image is read the same way,\n" +
+			"through the Dockerfile its `build` names.",
 	},
 	Check: checkPinDockerfileImageDigest,
 }
@@ -72,7 +76,7 @@ func checkPinDockerfileImageDigest(ctx *linter.Context, node *linter.Node) []lin
 	if !ok {
 		return nil
 	}
-	images, path, offset, ok := dockerfileBuildImages(ctx.Dir, obj)
+	images, subject, offset, ok := dockerfileBuildImages(ctx.Dir, obj)
 	if !ok {
 		return nil
 	}
@@ -83,7 +87,7 @@ func checkPinDockerfileImageDigest(ctx *linter.Context, node *linter.Node) []lin
 			continue
 		}
 		findings = append(findings, linter.Finding{
-			Message: fmt.Sprintf("Dockerfile %q %s image %q, which is not pinned by digest; add an \"@sha256:...\" digest", path, image.verb(), image.ref),
+			Message: fmt.Sprintf("%s %s image %q, which is not pinned by digest; add an \"@sha256:...\" digest", subject, image.verb(), image.ref),
 			Offset:  offset,
 		})
 	}

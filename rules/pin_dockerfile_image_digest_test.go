@@ -84,6 +84,17 @@ func TestPinDockerfileImageDigest(t *testing.T) {
 		assertIssuesInDir(t, rules.PinDockerfileImageDigest, linter.SeverityError, "devcontainer.json", linter.Devcontainer, src, linter.Dir{FS: fstest.MapFS{}}, nil)
 	})
 
+	t.Run("the Dockerfile a Compose service builds from is read", func(t *testing.T) {
+		t.Parallel()
+		dir := linter.Dir{FS: fstest.MapFS{
+			"docker-compose.yml": {Data: []byte("services:\n  app:\n    build: .\n")},
+			"Dockerfile":         {Data: []byte("FROM ubuntu:24.04\n")},
+		}}
+		src := `{"dockerComposeFile": "docker-compose.yml", "service": "app"}`
+		want := []linter.Issue{{Path: "devcontainer.json", Line: 1, Col: 23, RuleID: "pin-dockerfile-image-digest", Message: `compose service "app" builds from image "ubuntu:24.04", which is not pinned by digest; add an "@sha256:..." digest`}}
+		assertIssuesInDir(t, rules.PinDockerfileImageDigest, linter.SeverityError, "devcontainer.json", linter.Devcontainer, src, dir, want)
+	})
+
 	t.Run("a document that is not an object reports nothing", func(t *testing.T) {
 		t.Parallel()
 		dir := linter.Dir{FS: fstest.MapFS{"Dockerfile": {Data: []byte("FROM ubuntu\n")}}}

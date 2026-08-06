@@ -2,11 +2,9 @@ package rules
 
 import (
 	"fmt"
-	"strings"
 
 	"github.com/bare-devcontainer/decolint/linter"
 	"github.com/tailscale/hujson"
-	"go.yaml.in/yaml/v3"
 )
 
 // NoComposeImageLatest reports the Compose service a devcontainer.json attaches to when it runs an
@@ -61,9 +59,10 @@ or with "latest", pulls whatever the publisher last released — a container tha
 			},
 		},
 		Note: "Only the service the dev container runs in is checked, and only when it runs a\n" +
-			"published image: the base image of a service that builds its own image is not checked,\n" +
-			"and neither is an image written as a `${...}` variable, whose value is not in the\n" +
-			"configuration.",
+			"published image; a service that builds its own image is covered by\n" +
+			"[`no-dockerfile-image-latest`](../no-dockerfile-image-latest/), which reads the\n" +
+			"Dockerfile its `build` names. An image written as a `${...}` variable is not checked,\n" +
+			"its value not being in the configuration.",
 	},
 	Check: checkNoComposeImageLatest,
 }
@@ -81,10 +80,11 @@ func checkNoComposeImageLatest(ctx *linter.Context, node *linter.Node) []linter.
 	if !ok {
 		return nil
 	}
-	image, ok := composeServiceImage(ctx.Dir, paths, service)
-	if !ok {
+	source, ok := composeServiceSource(ctx.Dir, paths, service)
+	if !ok || source.image == "" {
 		return nil
 	}
+	image := source.image
 
 	tag, hasTag := refTag(image)
 	switch {
@@ -100,94 +100,4 @@ func checkNoComposeImageLatest(ctx *linter.Context, node *linter.Node) []linter.
 		}}
 	}
 	return nil
-}
-
-// composeFilePaths returns the Compose file paths obj declares, with the byte offset of the value
-// declaring them. The property is a single path or an array of paths, later ones overriding earlier
-// ones; the merge reads the same property in feature's composeFilePaths.
-func composeFilePaths(obj *hujson.Object) (paths []string, offset int, ok bool) {
-	m := memberNamed(obj, "dockerComposeFile")
-	if m == nil {
-		return nil, 0, false
-	}
-	switch v := m.Value.Value.(type) {
-	case hujson.Literal:
-		if v.Kind() != '"' {
-			return nil, 0, false
-		}
-		paths = []string{v.String()}
-	case *hujson.Array:
-		for _, e := range v.Elements {
-			lit, isLit := e.Value.(hujson.Literal)
-			if !isLit || lit.Kind() != '"' {
-				return nil, 0, false
-			}
-			paths = append(paths, lit.String())
-		}
-	default:
-		return nil, 0, false
-	}
-	return paths, m.Value.StartOffset, true
-}
-
-// composeService is the part of a Compose service definition that says which image the service
-// runs, or that the definition is not all in this file.
-type composeService struct {
-	Image   string `yaml:"image"`
-	Build   any    `yaml:"build"`
-	Extends any    `yaml:"extends"`
-}
-
-// composeDoc is the part of a Compose file that defines the services, or pulls definitions in from
-// files of its own.
-type composeDoc struct {
-	Services map[string]composeService `yaml:"services"`
-	Include  any                       `yaml:"include"`
-}
-
-// composeServiceImage returns the image the named Compose service runs, reading the files at paths
-// in the order they are declared, each later one overriding the earlier ones as Compose merges them.
-//
-// This reads the declared files and nothing else, which is narrower than the resolution the merge
-// performs through compose-go (see feature's loadComposeService: it applies "extends" and "include"
-// and interpolates variables, reading files outside the linted directory and an environment a rule
-// does not have). ok is therefore false for everything this cannot settle from the files
-// themselves, so that what it does report is what the full resolution would report too:
-//
-//   - a file that cannot be read (see [readConfigFile]) or does not parse;
-//   - a file declaring "include", or a service declaring "extends", either of which can define or
-//     override the service from a file not named here;
-//   - a service none of the files defines;
-//   - a service that declares "build", whose "image" names what the build produces rather than what
-//     it starts from;
-//   - an image written with a variable, whose value comes from the environment.
-func composeServiceImage(dir linter.Dir, paths []string, service string) (string, bool) {
-	var image string
-	var found bool
-	for _, p := range paths {
-		src, ok := readConfigFile(dir, p)
-		if !ok {
-			return "", false
-		}
-		var doc composeDoc
-		if err := yaml.Unmarshal(src, &doc); err != nil || doc.Include != nil {
-			return "", false
-		}
-		svc, ok := doc.Services[service]
-		if !ok {
-			continue
-		}
-		found = true
-		if svc.Build != nil || svc.Extends != nil {
-			return "", false
-		}
-		if svc.Image != "" {
-			image = svc.Image
-		}
-	}
-	// Both "${VAR}" and the bare "$VAR" Compose accepts leave the image unresolved here.
-	if !found || image == "" || strings.Contains(image, "$") {
-		return "", false
-	}
-	return image, true
 }

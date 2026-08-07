@@ -9,48 +9,7 @@ import (
 	"github.com/moby/buildkit/frontend/dockerfile/instructions"
 	dflinter "github.com/moby/buildkit/frontend/dockerfile/linter"
 	"github.com/moby/buildkit/frontend/dockerfile/parser"
-	"github.com/tailscale/hujson"
 )
-
-// dockerfileRef locates the Dockerfile a devcontainer.json builds from: its path as written, and
-// the byte offset of the value declaring it, which is where a rule reporting the Dockerfile's
-// contents anchors its findings.
-//
-// The specification defines two mutually exclusive forms, the top-level "dockerFile" and the nested
-// "build.dockerfile". The top-level one is preferred, as the reference implementation prefers it;
-// the merge resolves the same two the same way, in feature's dockerfilePath.
-func dockerfileRef(obj *hujson.Object) (path string, offset int, ok bool) {
-	if m := memberNamed(obj, "dockerFile"); m != nil {
-		if lit, isLit := m.Value.Value.(hujson.Literal); isLit && lit.Kind() == '"' {
-			return lit.String(), m.Value.StartOffset, true
-		}
-	}
-	if m := memberNamed(obj, "build"); m != nil {
-		if build, isObj := m.Value.Value.(*hujson.Object); isObj {
-			if d := memberNamed(build, "dockerfile"); d != nil {
-				if lit, isLit := d.Value.Value.(hujson.Literal); isLit && lit.Kind() == '"' {
-					return lit.String(), d.Value.StartOffset, true
-				}
-			}
-		}
-	}
-	return "", 0, false
-}
-
-// buildTarget returns the stage "build.target" names, or "" when the configuration names none and
-// the build produces the Dockerfile's last stage.
-func buildTarget(obj *hujson.Object) string {
-	m := memberNamed(obj, "build")
-	if m == nil {
-		return ""
-	}
-	build, ok := m.Value.Value.(*hujson.Object)
-	if !ok {
-		return ""
-	}
-	target, _ := stringMember(build, "target")
-	return target
-}
 
 // dockerfilePulledImages returns the images a build of the Dockerfile in src pulls when target is
 // built: the one each stage's FROM builds on, and the ones its COPY and RUN --mount instructions

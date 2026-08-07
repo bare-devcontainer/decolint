@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"slices"
 
+	"github.com/bare-devcontainer/decolint/containerdef"
 	"github.com/tailscale/hujson"
 )
 
@@ -85,11 +86,12 @@ func dockerfileContributors(ctx context.Context, f *Fetcher, fsRoot *os.Root, co
 	if !ok {
 		return nil, false, nil
 	}
-	path, anchor, ok := dockerfilePath(obj)
+	path, decl, ok := containerdef.Dockerfile(obj)
 	if !ok {
 		return nil, false, nil
 	}
-	args, target := buildOptions(obj)
+	anchor := decl.KeyOffset
+	args, target := containerdef.BuildOptions(obj)
 	src, err := readBounded(fsRoot, filepath.Join(configDir, path), maxDockerfileBytes)
 	if err != nil {
 		return nil, true, err
@@ -103,62 +105,6 @@ func dockerfileContributors(ctx context.Context, f *Fetcher, fsRoot *os.Root, co
 		contribs = append(contribs, &contributor{ref: path, anchor: anchor, md: md})
 	}
 	return contribs, true, nil
-}
-
-// dockerfilePath returns the Dockerfile path root declares, with the byte offset of the declaring
-// key. The Dev Container schema defines two mutually exclusive Dockerfile forms: the top-level
-// "dockerFile" property and the nested "build.dockerfile". The reference implementation prefers the
-// top-level property (getDockerfile: 'dockerFile' in config ? config.dockerFile :
-// config.build.dockerfile), so it is checked first; a valid configuration declares only one.
-func dockerfilePath(obj *hujson.Object) (string, int, bool) {
-	if i := findMember(obj, "dockerFile"); i >= 0 {
-		if lit, ok := obj.Members[i].Value.Value.(hujson.Literal); ok && lit.Kind() == '"' {
-			return lit.String(), obj.Members[i].Name.StartOffset, true
-		}
-	}
-	if i := findMember(obj, "build"); i >= 0 {
-		if buildObj, ok := obj.Members[i].Value.Value.(*hujson.Object); ok {
-			if j := findMember(buildObj, "dockerfile"); j >= 0 {
-				if lit, ok := buildObj.Members[j].Value.Value.(hujson.Literal); ok && lit.Kind() == '"' {
-					return lit.String(), buildObj.Members[j].Name.StartOffset, true
-				}
-			}
-		}
-	}
-	return "", 0, false
-}
-
-// buildOptions extracts the "args" and "target" of the "/build" object.
-func buildOptions(obj *hujson.Object) (args map[string]string, target string) {
-	i := findMember(obj, "build")
-	if i < 0 {
-		return nil, ""
-	}
-	buildObj, isObj := obj.Members[i].Value.Value.(*hujson.Object)
-	if !isObj {
-		return nil, ""
-	}
-	if j := findMember(buildObj, "args"); j >= 0 {
-		if argsObj, isObj := buildObj.Members[j].Value.Value.(*hujson.Object); isObj {
-			for _, m := range argsObj.Members {
-				name, nameOK := m.Name.Value.(hujson.Literal)
-				val, valOK := m.Value.Value.(hujson.Literal)
-				if !nameOK || name.Kind() != '"' || !valOK || val.Kind() != '"' {
-					continue
-				}
-				if args == nil {
-					args = map[string]string{}
-				}
-				args[name.String()] = val.String()
-			}
-		}
-	}
-	if j := findMember(buildObj, "target"); j >= 0 {
-		if lit, isStr := buildObj.Members[j].Value.Value.(hujson.Literal); isStr && lit.Kind() == '"' {
-			target = lit.String()
-		}
-	}
-	return args, target
 }
 
 // readBounded reads the file at path through fsRoot, so its resolution cannot escape fsRoot's
@@ -186,20 +132,15 @@ func imageContributors(ctx context.Context, f *Fetcher, root *hujson.Value) ([]*
 	if !ok {
 		return nil, nil
 	}
-	i := findMember(obj, "image")
-	if i < 0 {
+	image, decl, ok := containerdef.Image(obj)
+	if !ok {
 		return nil, nil
 	}
-	lit, ok := obj.Members[i].Value.Value.(hujson.Literal)
-	if !ok || lit.Kind() != '"' {
-		return nil, nil
-	}
-	image := lit.String()
 	entries, err := f.FetchImageMetadata(ctx, image)
 	if err != nil {
 		return nil, err
 	}
-	anchor := obj.Members[i].Name.StartOffset
+	anchor := decl.KeyOffset
 	contribs := make([]*contributor, 0, len(entries))
 	for _, md := range entries {
 		contribs = append(contribs, &contributor{ref: image, anchor: anchor, md: md})

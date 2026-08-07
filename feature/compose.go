@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/bare-devcontainer/decolint/containerdef"
 	"github.com/compose-spec/compose-go/v2/loader"
 	"github.com/compose-spec/compose-go/v2/template"
 	"github.com/compose-spec/compose-go/v2/types"
@@ -31,14 +32,15 @@ func composeContributors(ctx context.Context, f *Fetcher, fsRoot *os.Root, confi
 	if !ok {
 		return nil, false, nil
 	}
-	paths, anchor, ok := composeFilePaths(obj)
-	if !ok {
+	paths, decl, declared := containerdef.ComposeFiles(obj)
+	if !declared {
 		return nil, false, nil
 	}
+	anchor := decl.KeyOffset
 	if len(paths) == 0 {
 		return nil, true, nil
 	}
-	service, ok := composeServiceName(obj)
+	service, _, ok := containerdef.ComposeService(obj)
 	if !ok {
 		return nil, true, nil
 	}
@@ -62,46 +64,6 @@ func composeContributors(ctx context.Context, f *Fetcher, fsRoot *os.Root, confi
 		contribs = append(contribs, &contributor{ref: ref, anchor: anchor, md: md})
 	}
 	return contribs, true, nil
-}
-
-// composeFilePaths returns the Compose file paths root declares, relative to the devcontainer.json
-// directory, with the byte offset of the "dockerComposeFile" key. The property is a single path or
-// an array of paths, later ones overriding earlier ones. ok reports whether the member exists at
-// all; a present but unusable value returns ok=true with no paths, so the caller still treats
-// Compose as declared and does not fall back to "build" or "image".
-func composeFilePaths(obj *hujson.Object) (paths []string, anchor int, ok bool) {
-	i := findMember(obj, "dockerComposeFile")
-	if i < 0 {
-		return nil, 0, false
-	}
-	anchor = obj.Members[i].Name.StartOffset
-	switch v := obj.Members[i].Value.Value.(type) {
-	case hujson.Literal:
-		if v.Kind() == '"' {
-			paths = []string{v.String()}
-		}
-	case *hujson.Array:
-		for _, e := range v.Elements {
-			if lit, isLit := e.Value.(hujson.Literal); isLit && lit.Kind() == '"' {
-				paths = append(paths, lit.String())
-			}
-		}
-	}
-	return paths, anchor, true
-}
-
-// composeServiceName returns the "service" property of root; ok is false when it is absent or not
-// a string.
-func composeServiceName(obj *hujson.Object) (string, bool) {
-	i := findMember(obj, "service")
-	if i < 0 {
-		return "", false
-	}
-	lit, ok := obj.Members[i].Value.Value.(hujson.Literal)
-	if !ok || lit.Kind() != '"' {
-		return "", false
-	}
-	return lit.String(), true
 }
 
 // loadComposeService reads each Compose file at baseDir and returns the named service resolved by

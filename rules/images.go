@@ -3,6 +3,7 @@ package rules
 import (
 	"fmt"
 
+	"github.com/bare-devcontainer/decolint/containerdef"
 	"github.com/bare-devcontainer/decolint/linter"
 	"github.com/tailscale/hujson"
 )
@@ -33,13 +34,11 @@ type pulledImage struct {
 // [dockerfilePulledImages] and [composeServiceSource] for what each leaves behind.
 func configImages(dir linter.Dir, obj *hujson.Object) []pulledImage {
 	var images []pulledImage
-	if m := memberNamed(obj, "image"); m != nil {
-		if lit, ok := m.Value.Value.(hujson.Literal); ok && lit.Kind() == '"' {
-			images = append(images, pulledImage{ref: lit.String(), offset: m.Value.StartOffset})
-		}
+	if ref, decl, ok := containerdef.Image(obj); ok {
+		images = append(images, pulledImage{ref: ref, offset: decl.ValueOffset})
 	}
-	if paths, offset, declared := composeFilePaths(obj); declared {
-		return append(images, composeImages(dir, obj, paths, offset)...)
+	if paths, decl, declared := containerdef.ComposeFiles(obj); declared {
+		return append(images, composeImages(dir, obj, paths, decl.ValueOffset)...)
 	}
 	return append(images, dockerfileImages(dir, obj)...)
 }
@@ -47,7 +46,7 @@ func configImages(dir linter.Dir, obj *hujson.Object) []pulledImage {
 // dockerfileImages returns the images the Dockerfile obj names pulls, anchored at the property
 // naming it.
 func dockerfileImages(dir linter.Dir, obj *hujson.Object) []pulledImage {
-	path, offset, ok := dockerfileRef(obj)
+	path, decl, ok := containerdef.Dockerfile(obj)
 	if !ok {
 		return nil
 	}
@@ -55,13 +54,14 @@ func dockerfileImages(dir linter.Dir, obj *hujson.Object) []pulledImage {
 	if !ok {
 		return nil
 	}
-	return locate(dockerfilePulledImages(src, buildTarget(obj)), fmt.Sprintf("Dockerfile %q: ", path), offset)
+	_, target := containerdef.BuildOptions(obj)
+	return locate(dockerfilePulledImages(src, target), fmt.Sprintf("Dockerfile %q: ", path), decl.ValueOffset)
 }
 
 // composeImages returns the images the Compose service the dev container runs pulls: the one it
 // runs, or the ones the Dockerfile it builds from pulls.
 func composeImages(dir linter.Dir, obj *hujson.Object, paths []string, offset int) []pulledImage {
-	service, ok := stringMember(obj, "service")
+	service, _, ok := containerdef.ComposeService(obj)
 	if !ok {
 		return nil
 	}

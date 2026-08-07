@@ -5,7 +5,6 @@ import (
 	"strings"
 
 	"github.com/bare-devcontainer/decolint/linter"
-	"github.com/tailscale/hujson"
 	"go.yaml.in/yaml/v3"
 )
 
@@ -26,34 +25,6 @@ type composeBuild struct {
 	inline string
 	// target is the stage "target" names, empty when it names none.
 	target string
-}
-
-// composeFilePaths returns the Compose file paths obj declares, with the byte offset of the value
-// declaring them. The property is a single path or an array of paths, later ones overriding earlier
-// ones; the merge reads the same property in feature's composeFilePaths.
-func composeFilePaths(obj *hujson.Object) (paths []string, offset int, ok bool) {
-	m := memberNamed(obj, "dockerComposeFile")
-	if m == nil {
-		return nil, 0, false
-	}
-	switch v := m.Value.Value.(type) {
-	case hujson.Literal:
-		if v.Kind() != '"' {
-			return nil, 0, false
-		}
-		paths = []string{v.String()}
-	case *hujson.Array:
-		for _, e := range v.Elements {
-			lit, isLit := e.Value.(hujson.Literal)
-			if !isLit || lit.Kind() != '"' {
-				return nil, 0, false
-			}
-			paths = append(paths, lit.String())
-		}
-	default:
-		return nil, 0, false
-	}
-	return paths, m.Value.StartOffset, true
 }
 
 // composeService is the part of a Compose service definition that says what the service runs, or

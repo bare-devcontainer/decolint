@@ -3,14 +3,15 @@ package rules
 import (
 	"fmt"
 
+	"github.com/bare-devcontainer/decolint/feature"
 	"github.com/bare-devcontainer/decolint/linter"
 )
 
 // PinFeatureVersion reports a "features" entry whose key references an OCI Feature without an
 // explicit version tag or with the "latest" tag. Such references are not reproducible: the Feature
-// they resolve to changes over time. Local path Features (e.g. "./my-feature") and direct tarball
-// URIs (e.g. "https://.../devcontainer-feature.tgz") have no version tag to pin and are not
-// checked.
+// they resolve to changes over time. The other two forms the specification defines — a relative path
+// (e.g. "./my-feature") and a direct HTTPS tarball URI — carry no version to pin and are not
+// checked; see [featureRefsOfKind].
 var PinFeatureVersion = &linter.Rule{
 	ID:          "pin-feature-version",
 	Description: `disallow a Feature reference without an explicit version or with the "latest" version`,
@@ -54,7 +55,7 @@ devcontainer.json changing at all. Features are published under their full versi
 
 func checkPinFeatureVersion(_ *linter.Context, node *linter.Node) []linter.Finding {
 	var findings []linter.Finding
-	for _, f := range ociFeatureRefs(node.Value) {
+	for _, f := range featureRefsOfKind(node.Value, feature.KindOCI) {
 		tag, hasTag := refTag(f.ref)
 		switch {
 		case !hasTag:

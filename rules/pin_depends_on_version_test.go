@@ -25,10 +25,13 @@ func TestPinDependsOnVersion(t *testing.T) {
 			{Path: path, Line: 1, Col: 16, RuleID: "pin-depends-on-version", Message: `"dependsOn" feature "ghcr.io/devcontainers/features/node:latest" uses the "latest" version; pin a specific version`},
 		}},
 		{"pinned version", `{"dependsOn": {"ghcr.io/devcontainers/features/node:1": {}}}`, nil},
-		{"pinned digest", `{"dependsOn": {"ghcr.io/devcontainers/features/node@sha256:abc123": {}}}`, nil},
+		{"pinned digest", `{"dependsOn": {"ghcr.io/devcontainers/features/node@sha256:0000000000000000000000000000000000000000000000000000000000000000": {}}}`, nil},
 		{"local path dependency", `{"dependsOn": {"./local-feature": {}}}`, nil},
 		{"tarball uri dependency", `{"dependsOn": {"https://example.invalid/devcontainer-feature.tgz": {}}}`, nil},
 		{"non-object dependsOn", `{"dependsOn": "invalid"}`, nil},
+		// A reference in none of the three forms the specification defines names no Feature.
+		{"absolute path dependency", `{"dependsOn": {"/absolute/feature": {}}}`, nil},
+		{"dependency with no registry", `{"dependsOn": {"no-slash": {}}}`, nil},
 		{"installsAfter is not checked", `{"installsAfter": ["ghcr.io/devcontainers/features/node"]}`, nil},
 		{"multiple dependencies mixed", `{"dependsOn": {
   "ghcr.io/devcontainers/features/node:1.6.0": {},

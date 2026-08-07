@@ -5,6 +5,7 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/bare-devcontainer/decolint/feature"
 	"github.com/bare-devcontainer/decolint/linter"
 )
 
@@ -69,7 +70,7 @@ func checkPinFeatureExactVersion(ctx *linter.Context, node *linter.Node) []linte
 	}
 
 	var findings []linter.Finding
-	for _, f := range ociFeatureRefs(node.Value) {
+	for _, f := range featureRefsOfKind(node.Value, feature.KindOCI) {
 		// A digest names the content itself, whatever tag it is written alongside.
 		if strings.Contains(f.ref, "@") {
 			continue

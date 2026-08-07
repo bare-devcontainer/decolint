@@ -3,6 +3,7 @@ package rules
 import (
 	"fmt"
 
+	"github.com/bare-devcontainer/decolint/feature"
 	"github.com/bare-devcontainer/decolint/linter"
 )
 
@@ -60,7 +61,7 @@ without the Feature's version changing.`,
 
 func checkPinDependsOnVersion(_ *linter.Context, node *linter.Node) []linter.Finding {
 	var findings []linter.Finding
-	for _, f := range ociFeatureRefs(node.Value) {
+	for _, f := range featureRefsOfKind(node.Value, feature.KindOCI) {
 		tag, hasTag := refTag(f.ref)
 		switch {
 		case !hasTag:

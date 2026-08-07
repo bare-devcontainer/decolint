@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/bare-devcontainer/decolint/dockerargs"
+	"github.com/bare-devcontainer/decolint/feature"
 	"github.com/bare-devcontainer/decolint/linter"
 	"github.com/tailscale/hujson"
 )
@@ -286,12 +287,18 @@ type featureRef struct {
 	offset int
 }
 
-// ociFeatureRefs returns the OCI Feature references the members of v are keyed by, for a v that is
-// an object of them. It returns none for a value that is not one.
+// featureRefsOfKind returns the Feature references of the given kind the members of v are keyed by,
+// for a v that is an object of them. It returns none for a value that is not one.
 //
-// The local path and tarball URI forms are left out: neither carries a version to pin. See
-// [isLocalFeature] and [isTarballFeature].
-func ociFeatureRefs(v *hujson.Value) []featureRef {
+// References are told apart by [feature.ParseRef], which is what resolves them for the merge, so a
+// rule reads the three forms the specification defines and the reference implementation accepts. One
+// that parses as none of them names no Feature to report on, and is left out along with the kinds
+// not asked for.
+//
+// A caller reading the version a reference names takes it from the reference as written, not from
+// the parsed [feature.Ref]: ParseRef normalizes a reference with no version to the "latest" tag, and
+// a rule telling those two apart would lose the distinction.
+func featureRefsOfKind(v *hujson.Value, kind feature.RefKind) []featureRef {
 	obj, ok := v.Value.(*hujson.Object)
 	if !ok {
 		return nil
@@ -303,24 +310,13 @@ func ociFeatureRefs(v *hujson.Value) []featureRef {
 			continue
 		}
 		ref := name.String()
-		if isLocalFeature(ref) || isTarballFeature(ref) {
+		parsed, err := feature.ParseRef(ref)
+		if err != nil || parsed.Kind != kind {
 			continue
 		}
 		refs = append(refs, featureRef{ref: ref, offset: m.Name.StartOffset})
 	}
 	return refs
-}
-
-// isLocalFeature reports whether ref names a Feature by a relative path, which has no version tag
-// to pin.
-func isLocalFeature(ref string) bool {
-	return strings.HasPrefix(ref, "./") || strings.HasPrefix(ref, "../")
-}
-
-// isTarballFeature reports whether ref names a Feature by a direct HTTP(S) URI to a tarball, which
-// has no version tag to pin.
-func isTarballFeature(ref string) bool {
-	return strings.HasPrefix(ref, "http://") || strings.HasPrefix(ref, "https://")
 }
 
 // refTag extracts the tag from an OCI-style reference, e.g. a container image or Feature reference.

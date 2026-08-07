@@ -54,11 +54,14 @@ func TestPinFeatureExactVersion(t *testing.T) {
 			`{"features": {"ghcr.io/devcontainers/features/go:v1.3.2": {}}}`,
 			issue(`feature "ghcr.io/devcontainers/features/go:v1.3.2" uses version "v1.3.2"; pin a full "major.minor.patch" version`),
 		},
-		{"digest alone", `{"features": {"ghcr.io/devcontainers/features/go@sha256:abc123": {}}}`, nil},
-		{"partial version alongside a digest", `{"features": {"ghcr.io/devcontainers/features/go:1@sha256:abc123": {}}}`, nil},
+		{"digest alone", `{"features": {"ghcr.io/devcontainers/features/go@sha256:0000000000000000000000000000000000000000000000000000000000000000": {}}}`, nil},
+		{"partial version alongside a digest", `{"features": {"ghcr.io/devcontainers/features/go:1@sha256:0000000000000000000000000000000000000000000000000000000000000000": {}}}`, nil},
 		{"local path feature", `{"features": {"./local-feature": {}}}`, nil},
 		{"tarball uri feature", `{"features": {"https://example.invalid/devcontainer-feature.tgz": {}}}`, nil},
 		{"non-object features", `{"features": "invalid"}`, nil},
+		// A reference in none of the three forms the specification defines names no Feature.
+		{"absolute path", `{"features": {"/absolute/feature": {}}}`, nil},
+		{"no registry", `{"features": {"no-slash": {}}}`, nil},
 		{
 			"registry port without a version",
 			`{"features": {"localhost:5000/features/foo": {}}}`,

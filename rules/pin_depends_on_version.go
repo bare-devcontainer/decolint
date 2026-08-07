@@ -61,14 +61,19 @@ without the Feature's version changing.`,
 func checkPinDependsOnVersion(_ *linter.Context, node *linter.Node) []linter.Finding {
 	var findings []linter.Finding
 	for _, f := range ociFeatureRefs(node.Value) {
-		problem := unpinnedFeatureVersion(f.ref)
-		if problem == "" {
-			continue
+		tag, hasTag := refTag(f.ref)
+		switch {
+		case !hasTag:
+			findings = append(findings, linter.Finding{
+				Message: fmt.Sprintf(`"dependsOn" feature %q has no explicit version; pin a specific version`, f.ref),
+				Offset:  f.offset,
+			})
+		case tag == "latest":
+			findings = append(findings, linter.Finding{
+				Message: fmt.Sprintf(`"dependsOn" feature %q uses the "latest" version; pin a specific version`, f.ref),
+				Offset:  f.offset,
+			})
 		}
-		findings = append(findings, linter.Finding{
-			Message: fmt.Sprintf(`"dependsOn" feature %q %s`, f.ref, problem),
-			Offset:  f.offset,
-		})
 	}
 	return findings
 }

@@ -323,21 +323,6 @@ func isTarballFeature(ref string) bool {
 	return strings.HasPrefix(ref, "http://") || strings.HasPrefix(ref, "https://")
 }
 
-// unpinnedFeatureVersion describes how ref fails to name a specific Feature version, or "" if it
-// names one. The text completes a message that begins with the reference, e.g.
-// `feature "ghcr.io/devcontainers/features/go" has no explicit version; ...`.
-func unpinnedFeatureVersion(ref string) string {
-	tag, hasTag := refTag(ref)
-	switch {
-	case !hasTag:
-		return "has no explicit version; pin a specific version"
-	case tag == "latest":
-		return `uses the "latest" version; pin a specific version`
-	default:
-		return ""
-	}
-}
-
 // refTag extracts the tag from an OCI-style reference, e.g. a container image or Feature reference.
 // A reference pinned by digest (e.g. "ref@sha256:...") is treated as tagged. The colon in a
 // registry host with a port (e.g. "localhost:5000/img") is not a tag separator.

@@ -13,25 +13,28 @@ import (
 // the last component of an image reference.
 var digestSuffix = regexp.MustCompile(`@[a-z0-9]+(?:[+._-][a-z0-9]+)*:[a-zA-Z0-9=_-]+$`)
 
-// PinImageDigest reports the "image" property when it references a container image without a
-// content digest (e.g. "ubuntu@sha256:..."). Unlike [NoImageLatest], which only flags a missing or
-// "latest" tag, this rule flags any reference that isn't pinned by digest, since even a fixed tag
-// can later be reassigned to point at a different image. It is off by default because
-// digest-pinning every image is a heavier requirement than most projects want.
+// PinImageDigest reports an image the configuration pulls without a content digest (e.g.
+// "ubuntu@sha256:..."), wherever it is named (see [configImages]). Unlike [NoImageLatest], which
+// only flags a missing or "latest" tag, this rule flags any reference that isn't pinned by digest,
+// since even a fixed tag can later be reassigned to point at a different image.
 var PinImageDigest = &linter.Rule{
 	ID:          "pin-image-digest",
 	Description: `disallow an "image" property that does not pin the image by content digest (e.g. "image@sha256:...")`,
 	LongDescription: `A tag is a mutable pointer: the publisher can move even a fully specified one to different bits, and a
 registry can serve a different image for the same tag on a different day. A digest names the content
 itself, so "image@sha256:..." always resolves to the exact image the project was tested with, and the
-client verifies what it pulled against it.`,
+client verifies what it pulled against it.
+
+Every image a container of this configuration pulls is checked, whichever way the configuration names
+it: the "image" property, the "FROM" and "COPY --from" of the Dockerfile it builds from, and, for a
+Compose-based configuration, the image its service runs or the Dockerfile that service builds from.`,
 	References: []string{
 		`https://containers.dev/implementors/json_reference/#image-specific`,
 		`https://github.com/opencontainers/image-spec/blob/main/descriptor.md#digests`,
 	},
 	Category:  linter.CategoryReproducibility,
 	FileTypes: []linter.FileType{linter.Devcontainer},
-	Paths:     []string{"/image"},
+	Paths:     []string{""},
 	Example: linter.Example{
 		Bad: linter.Snippet{
 			Files: []linter.ExampleFile{
@@ -49,21 +52,27 @@ client verifies what it pulled against it.`,
 `},
 			},
 		},
+		Note: "An image written with a `$` or `${...}` variable is not checked: its value comes from\n" +
+			"the environment or from `build.args`, not from the configuration.",
 	},
 	Check: checkPinImageDigest,
 }
 
-func checkPinImageDigest(_ *linter.Context, node *linter.Node) []linter.Finding {
-	lit, ok := node.Value.Value.(hujson.Literal)
-	if !ok || lit.Kind() != '"' {
+func checkPinImageDigest(ctx *linter.Context, node *linter.Node) []linter.Finding {
+	obj, ok := node.Value.Value.(*hujson.Object)
+	if !ok {
 		return nil
 	}
-	image := lit.String()
-	if digestSuffix.MatchString(image) {
-		return nil
+
+	var findings []linter.Finding
+	for _, image := range configImages(ctx.Dir, obj) {
+		if digestSuffix.MatchString(image.ref) {
+			continue
+		}
+		findings = append(findings, linter.Finding{
+			Message: fmt.Sprintf("%simage %q is not pinned by digest; add an \"@sha256:...\" digest", image.source, image.ref),
+			Offset:  image.offset,
+		})
 	}
-	return []linter.Finding{{
-		Message: fmt.Sprintf("image %q is not pinned by digest; add an \"@sha256:...\" digest", image),
-		Offset:  node.Value.StartOffset,
-	}}
+	return findings
 }

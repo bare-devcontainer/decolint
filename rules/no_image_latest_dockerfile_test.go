@@ -8,14 +8,14 @@ import (
 	"github.com/bare-devcontainer/decolint/rules"
 )
 
-func TestNoDockerfileImageLatest(t *testing.T) {
+func TestNoImageLatest_Dockerfile(t *testing.T) {
 	t.Parallel()
 
 	// Every case declares the Dockerfile at "build.dockerfile", whose value starts at column 26, so
 	// the findings all anchor there.
 	const src = `{"build": {"dockerfile": "Dockerfile"}}`
 	issue := func(message string) []linter.Issue {
-		return []linter.Issue{{Path: "devcontainer.json", Line: 1, Col: 26, RuleID: "no-dockerfile-image-latest", Message: message}}
+		return []linter.Issue{{Path: "devcontainer.json", Line: 1, Col: 26, RuleID: "no-image-latest", Message: message}}
 	}
 
 	tests := []struct {
@@ -26,12 +26,12 @@ func TestNoDockerfileImageLatest(t *testing.T) {
 		{
 			"untagged base image",
 			"FROM ubuntu\n",
-			issue(`Dockerfile "Dockerfile" builds from image "ubuntu", which has no explicit tag; pin a specific version`),
+			issue(`Dockerfile "Dockerfile": image "ubuntu" has no explicit tag; pin a specific version`),
 		},
 		{
 			"latest base image",
 			"FROM ubuntu:latest\n",
-			issue(`Dockerfile "Dockerfile" builds from image "ubuntu:latest", which uses the "latest" tag; pin a specific version`),
+			issue(`Dockerfile "Dockerfile": image "ubuntu:latest" uses the "latest" tag; pin a specific version`),
 		},
 		{"pinned tag", "FROM ubuntu:24.04\n", nil},
 		{"pinned digest", "FROM ubuntu@sha256:abc123\n", nil},
@@ -58,14 +58,14 @@ func TestNoDockerfileImageLatest(t *testing.T) {
 			// fails with "repository name must be lowercase" rather than building on the stage.
 			"a base name in another case is an image",
 			"FROM golang:1.24 AS builder\n\nFROM BUILDER\n",
-			issue(`Dockerfile "Dockerfile" builds from image "BUILDER", which has no explicit tag; pin a specific version`),
+			issue(`Dockerfile "Dockerfile": image "BUILDER" has no explicit tag; pin a specific version`),
 		},
 		{
 			// A stage name cannot begin with a digit, so a "FROM" naming a position names an image;
 			// the stage at that position is not built and its own base never pulled.
 			"a base name written as a position is an image",
 			"FROM golang:latest\n\nFROM 0\n",
-			issue(`Dockerfile "Dockerfile" builds from image "0", which has no explicit tag; pin a specific version`),
+			issue(`Dockerfile "Dockerfile": image "0" has no explicit tag; pin a specific version`),
 		},
 		{
 			"an image reached through a variable is not resolved",
@@ -76,14 +76,14 @@ func TestNoDockerfileImageLatest(t *testing.T) {
 			"each unpinned stage is reported",
 			"FROM golang:latest AS builder\nRUN go build\n\nFROM ubuntu\nCOPY --from=builder /app /app\n",
 			[]linter.Issue{
-				{Path: "devcontainer.json", Line: 1, Col: 26, RuleID: "no-dockerfile-image-latest", Message: `Dockerfile "Dockerfile" builds from image "golang:latest", which uses the "latest" tag; pin a specific version`},
-				{Path: "devcontainer.json", Line: 1, Col: 26, RuleID: "no-dockerfile-image-latest", Message: `Dockerfile "Dockerfile" builds from image "ubuntu", which has no explicit tag; pin a specific version`},
+				{Path: "devcontainer.json", Line: 1, Col: 26, RuleID: "no-image-latest", Message: `Dockerfile "Dockerfile": image "golang:latest" uses the "latest" tag; pin a specific version`},
+				{Path: "devcontainer.json", Line: 1, Col: 26, RuleID: "no-image-latest", Message: `Dockerfile "Dockerfile": image "ubuntu" has no explicit tag; pin a specific version`},
 			},
 		},
 		{
 			"the same unpinned image in several stages is reported once",
 			"FROM ubuntu:latest AS a\n\nFROM ubuntu:latest AS b\nCOPY --from=a /x /x\n",
-			issue(`Dockerfile "Dockerfile" builds from image "ubuntu:latest", which uses the "latest" tag; pin a specific version`),
+			issue(`Dockerfile "Dockerfile": image "ubuntu:latest" uses the "latest" tag; pin a specific version`),
 		},
 		{"a Dockerfile whose instructions do not parse reports nothing", "FROM\n", nil},
 		{"a Dockerfile that does not tokenize reports nothing", "FROM ubuntu\nRUN <<EOF\necho hi\n", nil},
@@ -92,7 +92,7 @@ func TestNoDockerfileImageLatest(t *testing.T) {
 			// one of; the rule reads the stages as usual rather than failing on it.
 			"a Dockerfile configuring buildkit's linter is read as usual",
 			"FROM ubuntu:latest\n# check=skip=all\nRUN echo hi\n",
-			issue(`Dockerfile "Dockerfile" builds from image "ubuntu:latest", which uses the "latest" tag; pin a specific version`),
+			issue(`Dockerfile "Dockerfile": image "ubuntu:latest" uses the "latest" tag; pin a specific version`),
 		},
 		{
 			// BuildKit builds the last stage and what it depends on, so a stage nothing reaches is
@@ -104,39 +104,39 @@ func TestNoDockerfileImageLatest(t *testing.T) {
 		{
 			"a stage the last one copies from is reported",
 			"FROM golang:latest AS builder\n\nFROM ubuntu:24.04\nCOPY --from=builder /app /app\n",
-			issue(`Dockerfile "Dockerfile" builds from image "golang:latest", which uses the "latest" tag; pin a specific version`),
+			issue(`Dockerfile "Dockerfile": image "golang:latest" uses the "latest" tag; pin a specific version`),
 		},
 		{
 			"a copy reaches the last stage declared under a shared name",
 			"FROM golang:1.24 AS tools\n\nFROM golang:latest AS tools\n\nFROM ubuntu:24.04\nCOPY --from=tools /go /go\n",
-			issue(`Dockerfile "Dockerfile" builds from image "golang:latest", which uses the "latest" tag; pin a specific version`),
+			issue(`Dockerfile "Dockerfile": image "golang:latest" uses the "latest" tag; pin a specific version`),
 		},
 		{
 			"a stage the last one mounts from is reported",
 			"FROM golang:latest AS builder\n\nFROM ubuntu:24.04\nRUN --mount=from=builder,target=/app echo hi\n",
-			issue(`Dockerfile "Dockerfile" builds from image "golang:latest", which uses the "latest" tag; pin a specific version`),
+			issue(`Dockerfile "Dockerfile": image "golang:latest" uses the "latest" tag; pin a specific version`),
 		},
 		{
 			"a stage copied from by its position is reported",
 			"FROM golang:latest\n\nFROM ubuntu:24.04\nCOPY --from=0 /app /app\n",
-			issue(`Dockerfile "Dockerfile" builds from image "golang:latest", which uses the "latest" tag; pin a specific version`),
+			issue(`Dockerfile "Dockerfile": image "golang:latest" uses the "latest" tag; pin a specific version`),
 		},
 		{
 			"an image copied from is reported",
 			"FROM ubuntu:24.04\nCOPY --from=ghcr.io/astral-sh/uv:latest /uv /bin/\n",
-			issue(`Dockerfile "Dockerfile" pulls image "ghcr.io/astral-sh/uv:latest", which uses the "latest" tag; pin a specific version`),
+			issue(`Dockerfile "Dockerfile": image "ghcr.io/astral-sh/uv:latest" uses the "latest" tag; pin a specific version`),
 		},
 		{
 			"an image mounted from is reported",
 			"FROM ubuntu:24.04\nRUN --mount=from=busybox,target=/b /b/bin/echo hi\n",
-			issue(`Dockerfile "Dockerfile" pulls image "busybox", which has no explicit tag; pin a specific version`),
+			issue(`Dockerfile "Dockerfile": image "busybox" has no explicit tag; pin a specific version`),
 		},
 		{
 			// A mount naming no source mounts the build context, and one naming no stage is matched
 			// by name alone, so neither reaches the stage at that position.
 			"a mount is not a position and needs no source",
 			"FROM golang:latest\n\nFROM ubuntu:24.04\nRUN --mount=target=/b --mount=from=0,target=/c true\n",
-			issue(`Dockerfile "Dockerfile" pulls image "0", which has no explicit tag; pin a specific version`),
+			issue(`Dockerfile "Dockerfile": image "0" has no explicit tag; pin a specific version`),
 		},
 		{
 			// Out of range, the position names no stage at all and the build fails on it, so there
@@ -158,7 +158,7 @@ func TestNoDockerfileImageLatest(t *testing.T) {
 		{
 			"a stage reached twice is read once",
 			"FROM ubuntu:latest AS base\n\nFROM base AS mid\nCOPY --from=base /x /x\n",
-			issue(`Dockerfile "Dockerfile" builds from image "ubuntu:latest", which uses the "latest" tag; pin a specific version`),
+			issue(`Dockerfile "Dockerfile": image "ubuntu:latest" uses the "latest" tag; pin a specific version`),
 		},
 		{"a Dockerfile with no stage at all reports nothing", "# nothing to build here\n", nil},
 		{"a Dockerfile of global ARGs alone reports nothing", "ARG VERSION=1.0\n", nil},
@@ -167,14 +167,14 @@ func TestNoDockerfileImageLatest(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			dir := linter.Dir{FS: fstest.MapFS{"Dockerfile": {Data: []byte(tt.dockerfile)}}}
-			assertIssuesInDir(t, rules.NoDockerfileImageLatest, linter.SeverityError, "devcontainer.json", linter.Devcontainer, src, dir, tt.want)
+			assertIssuesInDir(t, rules.NoImageLatest, linter.SeverityError, "devcontainer.json", linter.Devcontainer, src, dir, tt.want)
 		})
 	}
 }
 
-// TestNoDockerfileImageLatest_BuildTarget checks that only the stages a build of "build.target"
+// TestNoImageLatest_Dockerfile_BuildTarget checks that only the stages a build of "build.target"
 // reaches are read, since the others are never built.
-func TestNoDockerfileImageLatest_BuildTarget(t *testing.T) {
+func TestNoImageLatest_Dockerfile_BuildTarget(t *testing.T) {
 	t.Parallel()
 
 	const dockerfile = `FROM ubuntu:latest AS test
@@ -187,7 +187,7 @@ COPY --from=tools /go /go
 `
 	dir := linter.Dir{FS: fstest.MapFS{"Dockerfile": {Data: []byte(dockerfile)}}}
 	// "build.dockerfile" comes first in each case below, so its value starts at column 26.
-	toolsIssue := []linter.Issue{{Path: "devcontainer.json", Line: 1, Col: 26, RuleID: "no-dockerfile-image-latest", Message: `Dockerfile "Dockerfile" builds from image "golang:latest", which uses the "latest" tag; pin a specific version`}}
+	toolsIssue := []linter.Issue{{Path: "devcontainer.json", Line: 1, Col: 26, RuleID: "no-image-latest", Message: `Dockerfile "Dockerfile": image "golang:latest" uses the "latest" tag; pin a specific version`}}
 
 	tests := []struct {
 		name string
@@ -202,7 +202,7 @@ COPY --from=tools /go /go
 		{
 			"the target's own unpinned base is reported",
 			`{"build": {"dockerfile": "Dockerfile", "target": "test"}}`,
-			[]linter.Issue{{Path: "devcontainer.json", Line: 1, Col: 26, RuleID: "no-dockerfile-image-latest", Message: `Dockerfile "Dockerfile" builds from image "ubuntu:latest", which uses the "latest" tag; pin a specific version`}},
+			[]linter.Issue{{Path: "devcontainer.json", Line: 1, Col: 26, RuleID: "no-image-latest", Message: `Dockerfile "Dockerfile": image "ubuntu:latest" uses the "latest" tag; pin a specific version`}},
 		},
 		{
 			"no target builds the last stage and what it reaches",
@@ -228,20 +228,20 @@ COPY --from=tools /go /go
 			// an object names no target.
 			"a non-object build alongside the legacy property is no target",
 			`{"dockerFile": "Dockerfile", "build": "nonsense"}`,
-			[]linter.Issue{{Path: "devcontainer.json", Line: 1, Col: 16, RuleID: "no-dockerfile-image-latest", Message: `Dockerfile "Dockerfile" builds from image "golang:latest", which uses the "latest" tag; pin a specific version`}},
+			[]linter.Issue{{Path: "devcontainer.json", Line: 1, Col: 16, RuleID: "no-image-latest", Message: `Dockerfile "Dockerfile": image "golang:latest" uses the "latest" tag; pin a specific version`}},
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			assertIssuesInDir(t, rules.NoDockerfileImageLatest, linter.SeverityError, "devcontainer.json", linter.Devcontainer, tt.src, dir, tt.want)
+			assertIssuesInDir(t, rules.NoImageLatest, linter.SeverityError, "devcontainer.json", linter.Devcontainer, tt.src, dir, tt.want)
 		})
 	}
 }
 
-// TestNoDockerfileImageLatest_DuplicateStageName checks that a name several stages share reaches the
+// TestNoImageLatest_Dockerfile_DuplicateStageName checks that a name several stages share reaches the
 // last of them, both as a "build.target" and as a "--from" looked up across the whole Dockerfile.
-func TestNoDockerfileImageLatest_DuplicateStageName(t *testing.T) {
+func TestNoImageLatest_Dockerfile_DuplicateStageName(t *testing.T) {
 	t.Parallel()
 
 	// Both cases build the "dev" stage, and "build.dockerfile" comes first, so its value starts at
@@ -261,23 +261,23 @@ func TestNoDockerfileImageLatest_DuplicateStageName(t *testing.T) {
 		{
 			"a copy reaches the last stage declared under its name",
 			"FROM golang:1.24 AS tools\n\nFROM ubuntu:24.04 AS dev\nCOPY --from=tools /go /go\n\nFROM golang:latest AS tools\n",
-			[]linter.Issue{{Path: "devcontainer.json", Line: 1, Col: 26, RuleID: "no-dockerfile-image-latest", Message: `Dockerfile "Dockerfile" builds from image "golang:latest", which uses the "latest" tag; pin a specific version`}},
+			[]linter.Issue{{Path: "devcontainer.json", Line: 1, Col: 26, RuleID: "no-image-latest", Message: `Dockerfile "Dockerfile": image "golang:latest" uses the "latest" tag; pin a specific version`}},
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			dir := linter.Dir{FS: fstest.MapFS{"Dockerfile": {Data: []byte(tt.dockerfile)}}}
-			assertIssuesInDir(t, rules.NoDockerfileImageLatest, linter.SeverityError, "devcontainer.json", linter.Devcontainer, src, dir, tt.want)
+			assertIssuesInDir(t, rules.NoImageLatest, linter.SeverityError, "devcontainer.json", linter.Devcontainer, src, dir, tt.want)
 		})
 	}
 }
 
-// TestNoDockerfileImageLatest_ForwardStageReference checks that a stage copied from before it is
+// TestNoImageLatest_Dockerfile_ForwardStageReference checks that a stage copied from before it is
 // declared is read as the stage it names rather than as an image: BuildKit looks a "--from" up
 // among every stage of the Dockerfile, wherever it is declared. Running such a build then fails,
 // the copy naming a stage not yet built, but what the reference names is a stage all the same.
-func TestNoDockerfileImageLatest_ForwardStageReference(t *testing.T) {
+func TestNoImageLatest_Dockerfile_ForwardStageReference(t *testing.T) {
 	t.Parallel()
 
 	const dockerfile = `FROM ubuntu:24.04 AS dev
@@ -287,18 +287,18 @@ FROM golang:latest AS tools
 `
 	dir := linter.Dir{FS: fstest.MapFS{"Dockerfile": {Data: []byte(dockerfile)}}}
 	src := `{"build": {"dockerfile": "Dockerfile", "target": "dev"}}`
-	want := []linter.Issue{{Path: "devcontainer.json", Line: 1, Col: 26, RuleID: "no-dockerfile-image-latest", Message: `Dockerfile "Dockerfile" builds from image "golang:latest", which uses the "latest" tag; pin a specific version`}}
-	assertIssuesInDir(t, rules.NoDockerfileImageLatest, linter.SeverityError, "devcontainer.json", linter.Devcontainer, src, dir, want)
+	want := []linter.Issue{{Path: "devcontainer.json", Line: 1, Col: 26, RuleID: "no-image-latest", Message: `Dockerfile "Dockerfile": image "golang:latest" uses the "latest" tag; pin a specific version`}}
+	assertIssuesInDir(t, rules.NoImageLatest, linter.SeverityError, "devcontainer.json", linter.Devcontainer, src, dir, want)
 }
 
-// TestNoDockerfileImageLatest_ComposeBuild checks the Dockerfile a Compose service builds from, the
+// TestNoImageLatest_Dockerfile_ComposeBuild checks the Dockerfile a Compose service builds from, the
 // other place a configuration names one.
-func TestNoDockerfileImageLatest_ComposeBuild(t *testing.T) {
+func TestNoImageLatest_Dockerfile_ComposeBuild(t *testing.T) {
 	t.Parallel()
 
 	const src = `{"dockerComposeFile": "docker-compose.yml", "service": "app"}`
 	issue := func(message string) []linter.Issue {
-		return []linter.Issue{{Path: "devcontainer.json", Line: 1, Col: 23, RuleID: "no-dockerfile-image-latest", Message: message}}
+		return []linter.Issue{{Path: "devcontainer.json", Line: 1, Col: 23, RuleID: "no-image-latest", Message: message}}
 	}
 
 	tests := []struct {
@@ -311,19 +311,19 @@ func TestNoDockerfileImageLatest_ComposeBuild(t *testing.T) {
 			"a build names its Dockerfile",
 			"services:\n  app:\n    build:\n      context: .\n      dockerfile: Dockerfile\n",
 			"FROM ubuntu:latest\n",
-			issue(`compose service "app" builds from image "ubuntu:latest", which uses the "latest" tag; pin a specific version`),
+			issue(`Dockerfile "Dockerfile": image "ubuntu:latest" uses the "latest" tag; pin a specific version`),
 		},
 		{
 			"a build written as its context alone defaults the Dockerfile",
 			"services:\n  app:\n    build: .\n",
 			"FROM ubuntu:latest\n",
-			issue(`compose service "app" builds from image "ubuntu:latest", which uses the "latest" tag; pin a specific version`),
+			issue(`Dockerfile "Dockerfile": image "ubuntu:latest" uses the "latest" tag; pin a specific version`),
 		},
 		{
 			"an inline Dockerfile is read from the Compose file itself",
 			"services:\n  app:\n    build:\n      dockerfile_inline: |\n        FROM ubuntu:latest\n",
 			"FROM debian:24.04\n",
-			issue(`compose service "app" builds from image "ubuntu:latest", which uses the "latest" tag; pin a specific version`),
+			issue(`compose service "app" inline Dockerfile: image "ubuntu:latest" uses the "latest" tag; pin a specific version`),
 		},
 		{
 			"a build target leaves the stages it does not reach alone",
@@ -335,7 +335,7 @@ func TestNoDockerfileImageLatest_ComposeBuild(t *testing.T) {
 			"an image the Dockerfile pulls is reported too",
 			"services:\n  app:\n    build: .\n",
 			"FROM ubuntu:24.04\nCOPY --from=busybox:latest /bin/busybox /b\n",
-			issue(`compose service "app" pulls image "busybox:latest", which uses the "latest" tag; pin a specific version`),
+			issue(`Dockerfile "Dockerfile": image "busybox:latest" uses the "latest" tag; pin a specific version`),
 		},
 		{
 			"a pinned Dockerfile reports nothing",
@@ -344,11 +344,12 @@ func TestNoDockerfileImageLatest_ComposeBuild(t *testing.T) {
 			nil,
 		},
 		{
-			// The Compose rule reports the image such a service runs; there is no Dockerfile here.
-			"a service running an image reports nothing",
+			// The service runs a published image rather than building one, so the image it runs is
+			// what the rule reports; no Dockerfile is read.
+			"a service running an image is reported as the image it runs",
 			"services:\n  app:\n    image: ubuntu:latest\n",
 			"FROM ubuntu:latest\n",
-			nil,
+			issue(`compose service "app": image "ubuntu:latest" uses the "latest" tag; pin a specific version`),
 		},
 		{
 			// The context leaves the directory the configuration is read through.
@@ -371,7 +372,7 @@ func TestNoDockerfileImageLatest_ComposeBuild(t *testing.T) {
 				"docker-compose.yml": {Data: []byte(tt.compose)},
 				"Dockerfile":         {Data: []byte(tt.dockerfile)},
 			}}
-			assertIssuesInDir(t, rules.NoDockerfileImageLatest, linter.SeverityError, "devcontainer.json", linter.Devcontainer, src, dir, tt.want)
+			assertIssuesInDir(t, rules.NoImageLatest, linter.SeverityError, "devcontainer.json", linter.Devcontainer, src, dir, tt.want)
 		})
 	}
 
@@ -381,7 +382,7 @@ func TestNoDockerfileImageLatest_ComposeBuild(t *testing.T) {
 			"docker-compose.yml": {Data: []byte("services:\n  app:\n    build: .\n")},
 			"Dockerfile":         {Data: []byte("FROM ubuntu:latest\n")},
 		}}
-		assertIssuesInDir(t, rules.NoDockerfileImageLatest, linter.SeverityError, "devcontainer.json", linter.Devcontainer, `{"dockerComposeFile": "docker-compose.yml"}`, dir, nil)
+		assertIssuesInDir(t, rules.NoImageLatest, linter.SeverityError, "devcontainer.json", linter.Devcontainer, `{"dockerComposeFile": "docker-compose.yml"}`, dir, nil)
 	})
 
 	t.Run("a Compose configuration is read instead of a build property beside it", func(t *testing.T) {
@@ -393,11 +394,11 @@ func TestNoDockerfileImageLatest_ComposeBuild(t *testing.T) {
 		// A configuration declaring both is reported by conflicting-container-def; the base image
 		// resolves through Compose, as the reference implementation resolves it.
 		src := `{"dockerComposeFile": "docker-compose.yml", "service": "app", "build": {"dockerfile": "Dockerfile"}}`
-		assertIssuesInDir(t, rules.NoDockerfileImageLatest, linter.SeverityError, "devcontainer.json", linter.Devcontainer, src, dir, nil)
+		assertIssuesInDir(t, rules.NoImageLatest, linter.SeverityError, "devcontainer.json", linter.Devcontainer, src, dir, nil)
 	})
 }
 
-func TestNoDockerfileImageLatest_DockerfileLocation(t *testing.T) {
+func TestNoImageLatest_Dockerfile_DockerfileLocation(t *testing.T) {
 	t.Parallel()
 
 	dir := linter.Dir{FS: fstest.MapFS{
@@ -410,11 +411,17 @@ func TestNoDockerfileImageLatest_DockerfileLocation(t *testing.T) {
 		src  string
 		want []linter.Issue
 	}{
-		{"no Dockerfile declared", `{"image": "ubuntu:latest"}`, nil},
+		{
+			// The rule reads every image the configuration pulls, so a configuration naming one
+			// outright is reported at the "image" property rather than through a Dockerfile.
+			"no Dockerfile declared",
+			`{"image": "ubuntu:latest"}`,
+			[]linter.Issue{{Path: "devcontainer.json", Line: 1, Col: 11, RuleID: "no-image-latest", Message: `image "ubuntu:latest" uses the "latest" tag; pin a specific version`}},
+		},
 		{
 			"the legacy top-level property is read",
 			`{"dockerFile": "build/Dockerfile"}`,
-			[]linter.Issue{{Path: "devcontainer.json", Line: 1, Col: 16, RuleID: "no-dockerfile-image-latest", Message: `Dockerfile "build/Dockerfile" builds from image "ubuntu:latest", which uses the "latest" tag; pin a specific version`}},
+			[]linter.Issue{{Path: "devcontainer.json", Line: 1, Col: 16, RuleID: "no-image-latest", Message: `Dockerfile "build/Dockerfile": image "ubuntu:latest" uses the "latest" tag; pin a specific version`}},
 		},
 		{
 			// The reference implementation prefers the top-level property, so the pinned Dockerfile
@@ -424,7 +431,7 @@ func TestNoDockerfileImageLatest_DockerfileLocation(t *testing.T) {
 			nil,
 		},
 		{"a subdirectory path is read", `{"build": {"dockerfile": "build/Dockerfile"}}`, []linter.Issue{
-			{Path: "devcontainer.json", Line: 1, Col: 26, RuleID: "no-dockerfile-image-latest", Message: `Dockerfile "build/Dockerfile" builds from image "ubuntu:latest", which uses the "latest" tag; pin a specific version`},
+			{Path: "devcontainer.json", Line: 1, Col: 26, RuleID: "no-image-latest", Message: `Dockerfile "build/Dockerfile": image "ubuntu:latest" uses the "latest" tag; pin a specific version`},
 		}},
 		{"a missing Dockerfile reports nothing", `{"build": {"dockerfile": "absent/Dockerfile"}}`, nil},
 		{
@@ -443,18 +450,18 @@ func TestNoDockerfileImageLatest_DockerfileLocation(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			assertIssuesInDir(t, rules.NoDockerfileImageLatest, linter.SeverityError, "devcontainer.json", linter.Devcontainer, tt.src, dir, tt.want)
+			assertIssuesInDir(t, rules.NoImageLatest, linter.SeverityError, "devcontainer.json", linter.Devcontainer, tt.src, dir, tt.want)
 		})
 	}
 
 	t.Run("unreadable directory reports nothing", func(t *testing.T) {
 		t.Parallel()
 		src := `{"build": {"dockerfile": "Dockerfile"}}`
-		assertIssuesInDir(t, rules.NoDockerfileImageLatest, linter.SeverityError, "devcontainer.json", linter.Devcontainer, src, linter.Dir{FS: errFS{}}, nil)
+		assertIssuesInDir(t, rules.NoImageLatest, linter.SeverityError, "devcontainer.json", linter.Devcontainer, src, linter.Dir{FS: errFS{}}, nil)
 	})
 
 	t.Run("nil directory reports nothing", func(t *testing.T) {
 		t.Parallel()
-		assertIssues(t, rules.NoDockerfileImageLatest, linter.SeverityError, `{"build": {"dockerfile": "Dockerfile"}}`, nil)
+		assertIssues(t, rules.NoImageLatest, linter.SeverityError, `{"build": {"dockerfile": "Dockerfile"}}`, nil)
 	})
 }

@@ -2,12 +2,10 @@ package rules
 
 import (
 	"bytes"
-	"fmt"
 	"slices"
 	"strconv"
 	"strings"
 
-	"github.com/bare-devcontainer/decolint/linter"
 	"github.com/moby/buildkit/frontend/dockerfile/instructions"
 	dflinter "github.com/moby/buildkit/frontend/dockerfile/linter"
 	"github.com/moby/buildkit/frontend/dockerfile/parser"
@@ -54,24 +52,6 @@ func buildTarget(obj *hujson.Object) string {
 	return target
 }
 
-// dockerfileImage is an image a build of a Dockerfile pulls, and the instruction form that reaches
-// it, which is all a rule needs to name it in a finding.
-type dockerfileImage struct {
-	ref string
-	// base distinguishes the image a stage's FROM builds on from one a COPY or a RUN --mount pulls
-	// through "--from".
-	base bool
-}
-
-// verb describes how the Dockerfile reaches the image, for a message that continues with the image:
-// `Dockerfile "Dockerfile" builds from image "ubuntu"`.
-func (img dockerfileImage) verb() string {
-	if img.base {
-		return "builds from"
-	}
-	return "pulls"
-}
-
 // dockerfilePulledImages returns the images a build of the Dockerfile in src pulls when target is
 // built: the one each stage's FROM builds on, and the ones its COPY and RUN --mount instructions
 // read through "--from". They come in the order the instructions name them, one entry per
@@ -83,7 +63,7 @@ func (img dockerfileImage) verb() string {
 //
 // It returns nothing for a Dockerfile that does not parse, or a target it does not define, leaving
 // a rule with nothing to report rather than a guess.
-func dockerfilePulledImages(src []byte, target string) []dockerfileImage {
+func dockerfilePulledImages(src []byte, target string) []string {
 	result, err := parser.Parse(bytes.NewReader(src))
 	if err != nil {
 		return nil
@@ -97,17 +77,17 @@ func dockerfilePulledImages(src []byte, target string) []dockerfileImage {
 	}
 
 	built := builtStages(stages, target)
-	var images []dockerfileImage
+	var images []string
 	for i := range stages {
 		if !built[i] {
 			continue
 		}
 		if _, isStage := stageBase(stages, i); !isStage && isPulledImage(stages[i].BaseName) {
-			images = append(images, dockerfileImage{ref: stages[i].BaseName, base: true})
+			images = append(images, stages[i].BaseName)
 		}
 		for _, from := range stageFroms(stages, i) {
 			if from.stage < 0 && isPulledImage(from.ref) {
-				images = append(images, dockerfileImage{ref: from.ref})
+				images = append(images, from.ref)
 			}
 		}
 	}
@@ -244,51 +224,4 @@ func stageNamed(stages []instructions.Stage, ref string) (int, bool) {
 		}
 	}
 	return 0, false
-}
-
-// dockerfileBuildImages returns the images the build that obj, a devcontainer.json, declares pulls
-// (see [dockerfilePulledImages]), along with the subject naming that build in a finding and the
-// offset to anchor findings at.
-//
-// The build is the Dockerfile the configuration names itself, or, for a Compose-based configuration,
-// the one the service it runs is built by. Compose is looked at first, as the reference
-// implementation resolves the base image in that order. ok is false when the configuration builds
-// nothing of its own, or when the Dockerfile cannot be read (see [readConfigFile]).
-func dockerfileBuildImages(dir linter.Dir, obj *hujson.Object) (images []dockerfileImage, subject string, offset int, ok bool) {
-	if paths, composeOffset, declared := composeFilePaths(obj); declared {
-		return composeBuildImages(dir, obj, paths, composeOffset)
-	}
-
-	path, offset, ok := dockerfileRef(obj)
-	if !ok {
-		return nil, "", 0, false
-	}
-	src, ok := readConfigFile(dir, path)
-	if !ok {
-		return nil, "", 0, false
-	}
-	return dockerfilePulledImages(src, buildTarget(obj)), fmt.Sprintf("Dockerfile %q", path), offset, true
-}
-
-// composeBuildImages returns the images the build of the Compose service the dev container runs
-// pulls, named by that service. ok is false when the service runs an image instead of building one,
-// which [NoComposeImageLatest] reports on.
-func composeBuildImages(dir linter.Dir, obj *hujson.Object, paths []string, offset int) (images []dockerfileImage, subject string, anchor int, ok bool) {
-	service, ok := stringMember(obj, "service")
-	if !ok {
-		return nil, "", 0, false
-	}
-	source, ok := composeServiceSource(dir, paths, service)
-	if !ok || source.build == nil {
-		return nil, "", 0, false
-	}
-
-	src := []byte(source.build.inline)
-	if source.build.dockerfile != "" {
-		src, ok = readConfigFile(dir, source.build.dockerfile)
-		if !ok {
-			return nil, "", 0, false
-		}
-	}
-	return dockerfilePulledImages(src, source.build.target), fmt.Sprintf("compose service %q", service), offset, true
 }

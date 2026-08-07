@@ -8,14 +8,14 @@ import (
 	"github.com/bare-devcontainer/decolint/rules"
 )
 
-func TestNoComposeImageLatest(t *testing.T) {
+func TestNoImageLatest_Compose(t *testing.T) {
 	t.Parallel()
 
 	// Every case declares one Compose file, whose path starts at column 23, so the findings all
 	// anchor there.
 	const src = `{"dockerComposeFile": "docker-compose.yml", "service": "app"}`
 	issue := func(message string) []linter.Issue {
-		return []linter.Issue{{Path: "devcontainer.json", Line: 1, Col: 23, RuleID: "no-compose-image-latest", Message: message}}
+		return []linter.Issue{{Path: "devcontainer.json", Line: 1, Col: 23, RuleID: "no-image-latest", Message: message}}
 	}
 
 	tests := []struct {
@@ -26,12 +26,12 @@ func TestNoComposeImageLatest(t *testing.T) {
 		{
 			"untagged image",
 			"services:\n  app:\n    image: ubuntu\n",
-			issue(`compose service "app" runs image "ubuntu", which has no explicit tag; pin a specific version`),
+			issue(`compose service "app": image "ubuntu" has no explicit tag; pin a specific version`),
 		},
 		{
 			"latest image",
 			"services:\n  app:\n    image: ubuntu:latest\n",
-			issue(`compose service "app" runs image "ubuntu:latest", which uses the "latest" tag; pin a specific version`),
+			issue(`compose service "app": image "ubuntu:latest" uses the "latest" tag; pin a specific version`),
 		},
 		{"pinned tag", "services:\n  app:\n    image: ubuntu:24.04\n", nil},
 		{"pinned digest", "services:\n  app:\n    image: ubuntu@sha256:abc123\n", nil},
@@ -80,12 +80,12 @@ func TestNoComposeImageLatest(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			dir := linter.Dir{FS: fstest.MapFS{"docker-compose.yml": {Data: []byte(tt.compose)}}}
-			assertIssuesInDir(t, rules.NoComposeImageLatest, linter.SeverityError, "devcontainer.json", linter.Devcontainer, src, dir, tt.want)
+			assertIssuesInDir(t, rules.NoImageLatest, linter.SeverityError, "devcontainer.json", linter.Devcontainer, src, dir, tt.want)
 		})
 	}
 }
 
-func TestNoComposeImageLatest_ComposeFileList(t *testing.T) {
+func TestNoImageLatest_Compose_ComposeFileList(t *testing.T) {
 	t.Parallel()
 
 	dir := linter.Dir{FS: fstest.MapFS{
@@ -108,14 +108,18 @@ func TestNoComposeImageLatest_ComposeFileList(t *testing.T) {
 		{
 			"a later file leaving the image alone does not clear it",
 			`{"dockerComposeFile": ["docker-compose.yml", "command.yml"], "service": "app"}`,
-			[]linter.Issue{{Path: "devcontainer.json", Line: 1, Col: 23, RuleID: "no-compose-image-latest", Message: `compose service "app" runs image "ubuntu:latest", which uses the "latest" tag; pin a specific version`}},
+			[]linter.Issue{{Path: "devcontainer.json", Line: 1, Col: 23, RuleID: "no-image-latest", Message: `compose service "app": image "ubuntu:latest" uses the "latest" tag; pin a specific version`}},
 		},
 		{
 			"an earlier file overridden by a later one is not reported",
 			`{"dockerComposeFile": ["docker-compose.override.yml", "docker-compose.yml"], "service": "app"}`,
-			[]linter.Issue{{Path: "devcontainer.json", Line: 1, Col: 23, RuleID: "no-compose-image-latest", Message: `compose service "app" runs image "ubuntu:latest", which uses the "latest" tag; pin a specific version`}},
+			[]linter.Issue{{Path: "devcontainer.json", Line: 1, Col: 23, RuleID: "no-image-latest", Message: `compose service "app": image "ubuntu:latest" uses the "latest" tag; pin a specific version`}},
 		},
-		{"no dockerComposeFile property", `{"image": "ubuntu:latest", "service": "app"}`, nil},
+		{
+			"no dockerComposeFile property",
+			`{"image": "ubuntu:latest", "service": "app"}`,
+			[]linter.Issue{{Path: "devcontainer.json", Line: 1, Col: 11, RuleID: "no-image-latest", Message: `image "ubuntu:latest" uses the "latest" tag; pin a specific version`}},
+		},
 		{"no service property", `{"dockerComposeFile": "docker-compose.yml"}`, nil},
 		{"an empty file list reports nothing", `{"dockerComposeFile": [], "service": "app"}`, nil},
 		{"a non-string entry reports nothing", `{"dockerComposeFile": [42], "service": "app"}`, nil},
@@ -135,18 +139,18 @@ func TestNoComposeImageLatest_ComposeFileList(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			assertIssuesInDir(t, rules.NoComposeImageLatest, linter.SeverityError, "devcontainer.json", linter.Devcontainer, tt.src, dir, tt.want)
+			assertIssuesInDir(t, rules.NoImageLatest, linter.SeverityError, "devcontainer.json", linter.Devcontainer, tt.src, dir, tt.want)
 		})
 	}
 
 	t.Run("unreadable directory reports nothing", func(t *testing.T) {
 		t.Parallel()
 		src := `{"dockerComposeFile": "docker-compose.yml", "service": "app"}`
-		assertIssuesInDir(t, rules.NoComposeImageLatest, linter.SeverityError, "devcontainer.json", linter.Devcontainer, src, linter.Dir{FS: errFS{}}, nil)
+		assertIssuesInDir(t, rules.NoImageLatest, linter.SeverityError, "devcontainer.json", linter.Devcontainer, src, linter.Dir{FS: errFS{}}, nil)
 	})
 
 	t.Run("nil directory reports nothing", func(t *testing.T) {
 		t.Parallel()
-		assertIssues(t, rules.NoComposeImageLatest, linter.SeverityError, `{"dockerComposeFile": "docker-compose.yml", "service": "app"}`, nil)
+		assertIssues(t, rules.NoImageLatest, linter.SeverityError, `{"dockerComposeFile": "docker-compose.yml", "service": "app"}`, nil)
 	})
 }

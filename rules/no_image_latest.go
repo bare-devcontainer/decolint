@@ -45,8 +45,9 @@ Compose-based configuration, the image its service runs or the Dockerfile that s
 `},
 			},
 		},
-		Note: "An image written with a `$` or `${...}` variable is not checked: its value comes from\n" +
-			"the environment or from `build.args`, not from the configuration.",
+		Note: "A `FROM` written with a variable is resolved against the Dockerfile's `ARG` defaults\n" +
+			"and the `build.args` the configuration passes, as a build resolves it. One whose value\n" +
+			"neither declares is left unchecked, naming no image the configuration settles.",
 	},
 	Check: checkNoImageLatest,
 }

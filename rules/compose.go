@@ -25,6 +25,8 @@ type composeBuild struct {
 	inline string
 	// target is the stage "target" names, empty when it names none.
 	target string
+	// args are the build arguments, which a FROM of the Dockerfile is expanded against.
+	args map[string]string
 }
 
 // composeService is the part of a Compose service definition that says what the service runs, or
@@ -119,6 +121,7 @@ func composeServiceSource(dir linter.Dir, paths []string, service string) (compo
 // file's own directory.
 func composeServiceBuild(value any, baseDir string) *composeBuild {
 	var context, dockerfile, inline, target string
+	var args map[string]string
 	switch v := value.(type) {
 	case string:
 		// The short form is the build context alone.
@@ -128,12 +131,13 @@ func composeServiceBuild(value any, baseDir string) *composeBuild {
 		dockerfile, _ = v["dockerfile"].(string)
 		inline, _ = v["dockerfile_inline"].(string)
 		target, _ = v["target"].(string)
+		args = composeBuildArgs(v["args"])
 	default:
 		return nil
 	}
 
 	if inline != "" {
-		return &composeBuild{inline: inline, target: target}
+		return &composeBuild{inline: inline, target: target, args: args}
 	}
 	// A context naming a remote repository, or one written as a variable, is no path the Dockerfile
 	// can be read through.
@@ -146,5 +150,34 @@ func composeServiceBuild(value any, baseDir string) *composeBuild {
 	if strings.Contains(dockerfile, "$") {
 		return nil
 	}
-	return &composeBuild{dockerfile: path.Join(baseDir, context, dockerfile), target: target}
+	return &composeBuild{dockerfile: path.Join(baseDir, context, dockerfile), target: target, args: args}
+}
+
+// composeBuildArgs reads a build's "args", which Compose writes as a mapping of names to values or
+// as a list of "NAME=value" entries. An entry with no value takes it from the environment, which is
+// not the configuration's to give, and is left out along with any value that is not a string.
+func composeBuildArgs(value any) map[string]string {
+	args := map[string]string{}
+	switch v := value.(type) {
+	case map[string]any:
+		for name, raw := range v {
+			if s, ok := raw.(string); ok {
+				args[name] = s
+			}
+		}
+	case []any:
+		for _, raw := range v {
+			entry, ok := raw.(string)
+			if !ok {
+				continue
+			}
+			if name, val, found := strings.Cut(entry, "="); found {
+				args[name] = val
+			}
+		}
+	}
+	if len(args) == 0 {
+		return nil
+	}
+	return args
 }

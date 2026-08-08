@@ -54,8 +54,8 @@ func dockerfileImages(dir linter.Dir, obj *hujson.Object) []pulledImage {
 	if !ok {
 		return nil
 	}
-	_, target := containerdef.BuildOptions(obj)
-	return locate(dockerfilePulledImages(src, target), fmt.Sprintf("Dockerfile %q: ", path), decl.ValueOffset)
+	args, target := containerdef.BuildOptions(obj)
+	return locate(dockerfilePulledImages(src, args, target), fmt.Sprintf("Dockerfile %q: ", path), decl.ValueOffset)
 }
 
 // composeImages returns the images the Compose service the dev container runs pulls: the one it
@@ -84,7 +84,7 @@ func composeImages(dir linter.Dir, obj *hujson.Object, paths []string, offset in
 		}
 		where = fmt.Sprintf("Dockerfile %q: ", source.build.dockerfile)
 	}
-	return locate(dockerfilePulledImages(src, source.build.target), where, offset)
+	return locate(dockerfilePulledImages(src, source.build.args, source.build.target), where, offset)
 }
 
 // locate pairs each reference with where it was found and the offset to report it at.

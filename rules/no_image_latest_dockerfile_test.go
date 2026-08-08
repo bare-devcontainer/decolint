@@ -68,8 +68,40 @@ func TestNoImageLatest_Dockerfile(t *testing.T) {
 			issue(`Dockerfile "Dockerfile": image "0" has no explicit tag; pin a specific version`),
 		},
 		{
-			"an image reached through a variable is not resolved",
+			// BuildKit expands a FROM against the global ARGs, so the image the default names is the
+			// one the build pulls.
+			"an ARG default resolves the image",
+			"ARG VARIANT=latest\nFROM ubuntu:${VARIANT}\n",
+			issue(`Dockerfile "Dockerfile": image "ubuntu:latest" uses the "latest" tag; pin a specific version`),
+		},
+		{
+			"a resolved image that is pinned reports nothing",
 			"ARG VARIANT=24.04\nFROM ubuntu:${VARIANT}\n",
+			nil,
+		},
+		{
+			// Nothing declares the variable, so BuildKit expands it to nothing and the reference
+			// names no image.
+			"an undeclared variable leaves no image",
+			"FROM ubuntu:${VARIANT}\n",
+			nil,
+		},
+		{
+			// An ARG with no default takes its value from the build, which passes none here.
+			"an ARG left without a value leaves no image",
+			"ARG VARIANT\nFROM ubuntu:${VARIANT}\n",
+			nil,
+		},
+		{
+			// The first ARG's default cannot be resolved, which leaves the ARGs after it alone.
+			"an ARG default of its own variable does not settle the ones after it",
+			"ARG BASE=${UNDECLARED}\nARG VARIANT=latest\nFROM ubuntu:${VARIANT}\n",
+			issue(`Dockerfile "Dockerfile": image "ubuntu:latest" uses the "latest" tag; pin a specific version`),
+		},
+		{
+			// A variable in a "--from" fails the build outright.
+			"a variable in a copy reports nothing",
+			"FROM ubuntu:24.04\nCOPY --from=$TOOLS /x /x\n",
 			nil,
 		},
 		{
@@ -168,6 +200,39 @@ func TestNoImageLatest_Dockerfile(t *testing.T) {
 			t.Parallel()
 			dir := linter.Dir{FS: fstest.MapFS{"Dockerfile": {Data: []byte(tt.dockerfile)}}}
 			assertIssuesInDir(t, rules.NoImageLatest, linter.SeverityError, "devcontainer.json", linter.Devcontainer, src, dir, tt.want)
+		})
+	}
+}
+
+// TestNoImageLatest_Dockerfile_BuildArgs checks that the arguments the configuration passes settle a
+// FROM written with a variable, as they do for the build itself.
+func TestNoImageLatest_Dockerfile_BuildArgs(t *testing.T) {
+	t.Parallel()
+
+	dir := linter.Dir{FS: fstest.MapFS{"Dockerfile": {Data: []byte("ARG VARIANT=24.04\nFROM ubuntu:${VARIANT}\n")}}}
+
+	tests := []struct {
+		name string
+		src  string
+		want []linter.Issue
+	}{
+		{
+			"an argument overriding the ARG default is the one resolved",
+			`{"build": {"dockerfile": "Dockerfile", "args": {"VARIANT": "latest"}}}`,
+			[]linter.Issue{{Path: "devcontainer.json", Line: 1, Col: 26, RuleID: "no-image-latest", Message: `Dockerfile "Dockerfile": image "ubuntu:latest" uses the "latest" tag; pin a specific version`}},
+		},
+		{"the ARG default stands when no argument overrides it", `{"build": {"dockerfile": "Dockerfile"}}`, nil},
+		{
+			// An argument the Dockerfile never declares is out of scope for a FROM.
+			"an argument no ARG declares settles nothing",
+			`{"build": {"dockerfile": "Dockerfile", "args": {"OTHER": "latest"}}}`,
+			nil,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			assertIssuesInDir(t, rules.NoImageLatest, linter.SeverityError, "devcontainer.json", linter.Devcontainer, tt.src, dir, tt.want)
 		})
 	}
 }

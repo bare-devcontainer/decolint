@@ -9,12 +9,18 @@ import (
 	"github.com/moby/buildkit/frontend/dockerfile/instructions"
 	dflinter "github.com/moby/buildkit/frontend/dockerfile/linter"
 	"github.com/moby/buildkit/frontend/dockerfile/parser"
+	"github.com/moby/buildkit/frontend/dockerfile/shell"
 )
 
 // dockerfilePulledImages returns the images a build of the Dockerfile in src pulls when target is
-// built: the one each stage's FROM builds on, and the ones its COPY and RUN --mount instructions
-// read through "--from". They come in the order the instructions name them, one entry per
-// instruction. An empty target builds the last stage, as "docker build" does.
+// built with args: the one each stage's FROM builds on, and the ones its COPY and RUN --mount
+// instructions read through "--from". They come in the order the instructions name them, one entry
+// per instruction. An empty target builds the last stage, as "docker build" does.
+//
+// A FROM is expanded against the Dockerfile's global ARGs, which args overrides, as BuildKit expands
+// it (buildMetaArgs and buildDispatchStates in dockerfile2llb) — so "FROM ubuntu:${VARIANT}" names
+// the image the declared VARIANT resolves to. A "--from" is not expanded, BuildKit rejecting a
+// variable there outright.
 //
 // Only the stages the build actually reaches are considered, since a stage nothing depends on is
 // never built and its images never pulled. Within them, a reference naming another stage is left
@@ -22,7 +28,7 @@ import (
 //
 // It returns nothing for a Dockerfile that does not parse, or a target it does not define, leaving
 // a rule with nothing to report rather than a guess.
-func dockerfilePulledImages(src []byte, target string) []string {
+func dockerfilePulledImages(src []byte, args map[string]string, target string) []string {
 	result, err := parser.Parse(bytes.NewReader(src))
 	if err != nil {
 		return nil
@@ -30,22 +36,28 @@ func dockerfilePulledImages(src []byte, target string) []string {
 	// A Dockerfile may configure buildkit's own linter through a "# check=..." comment, which is
 	// merged onto the one passed here — a nil one is dereferenced, so pass a linter that reports
 	// nothing instead. Its zero Config leaves Warn nil, which is what turns the warnings off.
-	stages, _, err := instructions.Parse(result.AST, dflinter.New(&dflinter.Config{}))
+	stages, metaArgs, err := instructions.Parse(result.AST, dflinter.New(&dflinter.Config{}))
 	if err != nil {
 		return nil
 	}
 
+	lex := shell.NewLex(result.EscapeToken)
+	env := buildArgEnv(lex, metaArgs, args)
 	built := builtStages(stages, target)
 	var images []string
 	for i := range stages {
 		if !built[i] {
 			continue
 		}
-		if _, isStage := stageBase(stages, i); !isStage && isPulledImage(stages[i].BaseName) {
-			images = append(images, stages[i].BaseName)
+		if _, isStage := stageBase(stages, i); !isStage {
+			if base, ok := expand(lex, env, stages[i].BaseName); ok && isPulledImage(base) {
+				images = append(images, base)
+			}
 		}
 		for _, from := range stageFroms(stages, i) {
-			if from.stage < 0 && isPulledImage(from.ref) {
+			// A "--from" carrying a variable fails the build ("variable expansion is not supported
+			// for --from"), so it names no image to report on.
+			if from.stage < 0 && !strings.Contains(from.ref, "$") && isPulledImage(from.ref) {
 				images = append(images, from.ref)
 			}
 		}
@@ -54,13 +66,44 @@ func dockerfilePulledImages(src []byte, target string) []string {
 }
 
 // isPulledImage reports whether ref, a reference naming no stage, names an image the build pulls.
-// Left out are:
-//   - the empty reference;
-//   - "scratch", the empty base, which BuildKit recognizes in that spelling alone;
-//   - a reference containing a variable, whose value comes from "build.args" or an ARG default and
-//     is not the linter's to resolve.
+// Left out are the empty reference and "scratch", the empty base, which BuildKit recognizes in that
+// spelling alone.
 func isPulledImage(ref string) bool {
-	return ref != "" && ref != "scratch" && !strings.Contains(ref, "$")
+	return ref != "" && ref != "scratch"
+}
+
+// buildArgEnv returns the values a FROM is expanded against: the Dockerfile's global ARGs, each
+// taking its value from args when that declares one and from its own default otherwise, with a
+// default itself expanded against the ARGs before it. An arg args gives but the Dockerfile never
+// declares is left out, as it is out of scope for a FROM.
+func buildArgEnv(lex *shell.Lex, metaArgs []instructions.ArgCommand, args map[string]string) shell.EnvGetter {
+	var env []string
+	for _, cmd := range metaArgs {
+		for _, arg := range cmd.Args {
+			if value, ok := args[arg.Key]; ok {
+				env = append(env, arg.Key+"="+value)
+				continue
+			}
+			if arg.Value == nil {
+				continue
+			}
+			if value, ok := expand(lex, shell.EnvsFromSlice(env), *arg.Value); ok {
+				env = append(env, arg.Key+"="+value)
+			}
+		}
+	}
+	return shell.EnvsFromSlice(env)
+}
+
+// expand resolves the variables in word against env. ok is false when a variable has no value there:
+// BuildKit expands it to nothing, leaving a reference that names no image, so a rule has nothing to
+// report on rather than a truncated reference to report wrongly.
+func expand(lex *shell.Lex, env shell.EnvGetter, word string) (string, bool) {
+	result, err := lex.ProcessWordWithMatches(word, env)
+	if err != nil || len(result.Unmatched) > 0 {
+		return "", false
+	}
+	return result.Result, true
 }
 
 // builtStages returns the indexes of the stages a build of target reaches: the target stage itself,

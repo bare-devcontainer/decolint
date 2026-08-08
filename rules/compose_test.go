@@ -5,6 +5,7 @@ import (
 	"testing/fstest"
 
 	"github.com/bare-devcontainer/decolint/linter"
+	"github.com/google/go-cmp/cmp"
 )
 
 // TestComposeServiceSource covers what a service is read as — an image, a build, or neither — since
@@ -47,6 +48,28 @@ func TestComposeServiceSource(t *testing.T) {
 			paths:     []string{"compose/docker-compose.yml"},
 			wantOK:    true,
 			wantBuild: &composeBuild{dockerfile: "build/Dockerfile"},
+		},
+		{
+			name:      "a build carries its args",
+			files:     map[string]string{"docker-compose.yml": "services:\n  app:\n    build:\n      context: .\n      args:\n        VARIANT: \"24.04\"\n"},
+			paths:     []string{"docker-compose.yml"},
+			wantOK:    true,
+			wantBuild: &composeBuild{dockerfile: "Dockerfile", args: map[string]string{"VARIANT": "24.04"}},
+		},
+		{
+			// Compose accepts a list of "NAME=value" entries as readily as a mapping.
+			name:      "a build carries its args written as a list",
+			files:     map[string]string{"docker-compose.yml": "services:\n  app:\n    build:\n      context: .\n      args:\n        - VARIANT=24.04\n        - FROM_ENV\n"},
+			paths:     []string{"docker-compose.yml"},
+			wantOK:    true,
+			wantBuild: &composeBuild{dockerfile: "Dockerfile", args: map[string]string{"VARIANT": "24.04"}},
+		},
+		{
+			name:      "a build arg that is not a string is left out",
+			files:     map[string]string{"docker-compose.yml": "services:\n  app:\n    build:\n      context: .\n      args:\n        - 42\n"},
+			paths:     []string{"docker-compose.yml"},
+			wantOK:    true,
+			wantBuild: &composeBuild{dockerfile: "Dockerfile"},
 		},
 		{
 			name:      "a build carries its target",
@@ -180,7 +203,7 @@ func TestComposeServiceSource(t *testing.T) {
 				t.Errorf("build = %+v, want none", *got.build)
 			case tt.wantBuild != nil && got.build == nil:
 				t.Errorf("build = none, want %+v", *tt.wantBuild)
-			case tt.wantBuild != nil && *got.build != *tt.wantBuild:
+			case tt.wantBuild != nil && !cmp.Equal(*got.build, *tt.wantBuild, cmp.AllowUnexported(composeBuild{})):
 				t.Errorf("build = %+v, want %+v", *got.build, *tt.wantBuild)
 			}
 		})

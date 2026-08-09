@@ -3,8 +3,8 @@
 // and nothing else — resolving it is the caller's, whether that is the merge fetching what the
 // declaration names or a lint rule reading it from the linted directory.
 //
-// A declaration carries the byte offsets of both the key and the value, so a caller can anchor at
-// whichever the reader of its output expects to see.
+// Each declaration carries the byte offsets of the property name declaring it and of its value, so
+// a caller can anchor what it reports at whichever the reader of its output expects to see.
 package containerdef
 
 import (
@@ -12,14 +12,6 @@ import (
 
 	"github.com/tailscale/hujson"
 )
-
-// Decl is a property's value as declared, with where it is written.
-type Decl struct {
-	// KeyOffset is the byte offset of the property name.
-	KeyOffset int
-	// ValueOffset is the byte offset of the value.
-	ValueOffset int
-}
 
 // Def is one form a devcontainer.json declares its container in: [*ImageDef], [*BuildDef] or
 // [*ComposeDef]. A caller tells them apart with a type switch.
@@ -31,8 +23,10 @@ type Def interface {
 type ImageDef struct {
 	// Ref is the image reference as written.
 	Ref string
-	// Decl is where "image" is written.
-	Decl Decl
+	// KeyOffset is the byte offset of the "image" property name.
+	KeyOffset int
+	// ValueOffset is the byte offset of the reference.
+	ValueOffset int
 }
 
 func (*ImageDef) containerDef()   {}
@@ -70,7 +64,7 @@ func image(obj *hujson.Object) *ImageDef {
 	if !isLit || lit.Kind() != '"' {
 		return nil
 	}
-	return &ImageDef{Ref: lit.String(), Decl: declOf(m)}
+	return &ImageDef{Ref: lit.String(), KeyOffset: m.Name.StartOffset, ValueOffset: m.Value.StartOffset}
 }
 
 // BuildDef is the Dockerfile build a devcontainer.json declares: the Dockerfile it builds and
@@ -79,8 +73,11 @@ func image(obj *hujson.Object) *ImageDef {
 type BuildDef struct {
 	// Dockerfile is the Dockerfile's path, relative to the devcontainer.json.
 	Dockerfile string
-	// DockerfileDecl is where the Dockerfile is named, whichever of the two properties names it.
-	DockerfileDecl Decl
+	// DockerfileKeyOffset is the byte offset of the property naming the Dockerfile, whichever of the
+	// two names it.
+	DockerfileKeyOffset int
+	// DockerfileValueOffset is the byte offset of that property's value.
+	DockerfileValueOffset int
 	// Args are the arguments passed to the build, nil when it declares none.
 	Args map[string]string
 	// Target is the stage the build stops at, empty when it declares none.
@@ -96,11 +93,11 @@ type BuildDef struct {
 // config.build.dockerfile). The options are always the "build" object's, which the legacy top-level
 // form carries alongside it.
 func build(obj *hujson.Object) *BuildDef {
-	path, decl, ok := dockerfilePath(obj)
+	path, keyOffset, valueOffset, ok := dockerfilePath(obj)
 	if !ok {
 		return nil
 	}
-	config := &BuildDef{Dockerfile: path, DockerfileDecl: decl}
+	config := &BuildDef{Dockerfile: path, DockerfileKeyOffset: keyOffset, DockerfileValueOffset: valueOffset}
 	build := buildObject(obj)
 	if build == nil {
 		return config
@@ -128,21 +125,22 @@ func build(obj *hujson.Object) *BuildDef {
 	return config
 }
 
-// dockerfilePath returns the path the configuration names its Dockerfile by, in either form.
-func dockerfilePath(obj *hujson.Object) (string, Decl, bool) {
+// dockerfilePath returns the path the configuration names its Dockerfile by, in either form, with
+// the byte offset of the naming property.
+func dockerfilePath(obj *hujson.Object) (path string, keyOffset, valueOffset int, ok bool) {
 	if m := memberNamed(obj, "dockerFile"); m != nil {
 		if lit, isLit := m.Value.Value.(hujson.Literal); isLit && lit.Kind() == '"' {
-			return lit.String(), declOf(m), true
+			return lit.String(), m.Name.StartOffset, m.Value.StartOffset, true
 		}
 	}
 	if build := buildObject(obj); build != nil {
 		if m := memberNamed(build, "dockerfile"); m != nil {
 			if lit, isLit := m.Value.Value.(hujson.Literal); isLit && lit.Kind() == '"' {
-				return lit.String(), declOf(m), true
+				return lit.String(), m.Name.StartOffset, m.Value.StartOffset, true
 			}
 		}
 	}
-	return "", Decl{}, false
+	return "", 0, 0, false
 }
 
 // ComposeDef is the Compose declaration of a devcontainer.json: the files it names and the
@@ -153,13 +151,13 @@ type ComposeDef struct {
 	// Files are the Compose file paths, in the order declared, later ones overriding earlier ones.
 	// It is empty when the declaration names no readable path.
 	Files []string
-	// FilesDecl is where "dockerComposeFile" is written.
-	FilesDecl Decl
+	// FilesKeyOffset is the byte offset of the "dockerComposeFile" property name.
+	FilesKeyOffset int
+	// FilesValueOffset is the byte offset of that property's value.
+	FilesValueOffset int
 	// Service is the service the dev container runs in, empty when the configuration names none or
 	// names it as something other than a string.
 	Service string
-	// ServiceDecl is where "service" is written; the zero value when the configuration has none.
-	ServiceDecl Decl
 }
 
 // Usable reports whether the declaration settles a container: a service to attach to, and at least
@@ -194,11 +192,11 @@ func compose(obj *hujson.Object) *ComposeDef {
 			}
 		}
 	}
-	config.FilesDecl = declOf(m)
+	config.FilesKeyOffset, config.FilesValueOffset = m.Name.StartOffset, m.Value.StartOffset
 
 	if m := memberNamed(obj, "service"); m != nil {
 		if lit, isLit := m.Value.Value.(hujson.Literal); isLit && lit.Kind() == '"' {
-			config.Service, config.ServiceDecl = lit.String(), declOf(m)
+			config.Service = lit.String()
 		}
 	}
 	return &config
@@ -226,8 +224,4 @@ func memberNamed(obj *hujson.Object, name string) *hujson.ObjectMember {
 		}
 	}
 	return nil
-}
-
-func declOf(m *hujson.ObjectMember) Decl {
-	return Decl{KeyOffset: m.Name.StartOffset, ValueOffset: m.Value.StartOffset}
 }

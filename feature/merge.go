@@ -72,7 +72,7 @@ func baseImageContributors(ctx context.Context, f *Fetcher, fsRoot *os.Root, con
 // dockerfileContributors fetches the metadata the image built from def would carry, anchored at the
 // key declaring the Dockerfile path.
 func dockerfileContributors(ctx context.Context, f *Fetcher, fsRoot *os.Root, configDir string, def *containerdef.BuildDef) ([]*contributor, error) {
-	path, anchor := def.Dockerfile, def.DockerfileDecl.KeyOffset
+	path, anchor := def.Dockerfile, def.DockerfileKeyOffset
 	src, err := readBounded(fsRoot, filepath.Join(configDir, path), maxDockerfileBytes)
 	if err != nil {
 		return nil, err
@@ -112,10 +112,9 @@ func imageContributors(ctx context.Context, f *Fetcher, def *containerdef.ImageD
 	if err != nil {
 		return nil, err
 	}
-	anchor := def.Decl.KeyOffset
 	contribs := make([]*contributor, 0, len(entries))
 	for _, md := range entries {
-		contribs = append(contribs, &contributor{ref: def.Ref, anchor: anchor, md: md})
+		contribs = append(contribs, &contributor{ref: def.Ref, anchor: def.KeyOffset, md: md})
 	}
 	return contribs, nil
 }

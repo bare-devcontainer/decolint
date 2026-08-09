@@ -2,6 +2,7 @@ package containerdef_test
 
 import (
 	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/bare-devcontainer/decolint/containerdef"
@@ -54,6 +55,7 @@ func TestDefs_Image(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
+
 			got := defOf[*containerdef.ImageDef](t, tt.src)
 			if (got != nil) != tt.ok {
 				t.Fatalf("image def = %v, want one: %v", got, tt.ok)
@@ -102,6 +104,11 @@ func TestDefs_Build(t *testing.T) {
 			wantFile: "Dockerfile", wantArgs: map[string]string{"B": "2"}, ok: true,
 		},
 		{
+			name:     "a non-object args declares none",
+			src:      `{"build": {"dockerfile": "Dockerfile", "args": "A=1"}}`,
+			wantFile: "Dockerfile", ok: true,
+		},
+		{
 			name:     "a non-string target is no target",
 			src:      `{"build": {"dockerfile": "Dockerfile", "target": 42}}`,
 			wantFile: "Dockerfile", ok: true,
@@ -109,6 +116,7 @@ func TestDefs_Build(t *testing.T) {
 		{name: "no Dockerfile", src: `{"image": "ubuntu:24.04"}`},
 		{name: "a non-object build", src: `{"build": "Dockerfile"}`},
 		{name: "a non-string dockerfile", src: `{"build": {"dockerfile": 42}}`},
+		{name: "a non-string legacy property", src: `{"dockerFile": 42}`},
 		{name: "options without a Dockerfile build nothing", src: `{"build": {"target": "dev"}}`},
 	}
 	for _, tt := range tests {
@@ -132,19 +140,6 @@ func TestDefs_Build(t *testing.T) {
 				t.Errorf("target = %q, want %q", got.Target, tt.wantTgt)
 			}
 		})
-	}
-}
-
-func TestDefs_BuildOffsets(t *testing.T) {
-	t.Parallel()
-
-	// `{"build": {"dockerfile": "Dockerfile"}}` — the key opens at 11 and the value at 25.
-	got := defOf[*containerdef.BuildDef](t, `{"build": {"dockerfile": "Dockerfile"}}`)
-	if got == nil {
-		t.Fatal("no build declared")
-	}
-	if got.DockerfileDecl.KeyOffset != 11 || got.DockerfileDecl.ValueOffset != 25 {
-		t.Errorf("decl = %+v, want {KeyOffset:11 ValueOffset:25}", got.DockerfileDecl)
 	}
 }
 
@@ -229,22 +224,64 @@ func TestDefs_Compose(t *testing.T) {
 	}
 }
 
-// TestCompose_Offsets checks that both properties are located, since the merge anchors its findings
-// at the key and a rule at the value.
-func TestDefs_ComposeOffsets(t *testing.T) {
+// TestDefs_Offsets checks that each form is located at the property declaring it and at that
+// property's value, which is where a caller anchors what it reports.
+func TestDefs_Offsets(t *testing.T) {
 	t.Parallel()
 
-	// `{"dockerComposeFile": "c.yml", "service": "app"}` — the key opens at 1 and the value at 22;
-	// "service" opens at 31 with its value at 42.
-	got := defOf[*containerdef.ComposeDef](t, `{"dockerComposeFile": "c.yml", "service": "app"}`)
-	if got == nil {
+	// One configuration declaring every form, so each offset is read from the same source.
+	const src = `{"dockerComposeFile": "c.yml", "service": "app", "build": {"dockerfile": "Dockerfile"}, "image": "ubuntu:24.04"}`
+
+	compose := defOf[*containerdef.ComposeDef](t, src)
+	if compose == nil {
 		t.Fatal("no compose declared")
 	}
-	if got.FilesDecl.KeyOffset != 1 || got.FilesDecl.ValueOffset != 22 {
-		t.Errorf("FilesDecl = %+v, want {KeyOffset:1 ValueOffset:22}", got.FilesDecl)
+	if want := strings.Index(src, `"dockerComposeFile"`); compose.FilesKeyOffset != want {
+		t.Errorf("FilesKeyOffset = %d, want %d", compose.FilesKeyOffset, want)
 	}
-	if got.ServiceDecl.KeyOffset != 31 || got.ServiceDecl.ValueOffset != 42 {
-		t.Errorf("ServiceDecl = %+v, want {KeyOffset:31 ValueOffset:42}", got.ServiceDecl)
+	if want := strings.Index(src, `"c.yml"`); compose.FilesValueOffset != want {
+		t.Errorf("FilesValueOffset = %d, want %d", compose.FilesValueOffset, want)
+	}
+
+	build := defOf[*containerdef.BuildDef](t, src)
+	if build == nil {
+		t.Fatal("no build declared")
+	}
+	if want := strings.Index(src, `"dockerfile"`); build.DockerfileKeyOffset != want {
+		t.Errorf("DockerfileKeyOffset = %d, want %d", build.DockerfileKeyOffset, want)
+	}
+	if want := strings.Index(src, `"Dockerfile"`); build.DockerfileValueOffset != want {
+		t.Errorf("DockerfileValueOffset = %d, want %d", build.DockerfileValueOffset, want)
+	}
+
+	image := defOf[*containerdef.ImageDef](t, src)
+	if image == nil {
+		t.Fatal("no image declared")
+	}
+	if want := strings.Index(src, `"image"`); image.KeyOffset != want {
+		t.Errorf("KeyOffset = %d, want %d", image.KeyOffset, want)
+	}
+	if want := strings.Index(src, `"ubuntu:24.04"`); image.ValueOffset != want {
+		t.Errorf("ValueOffset = %d, want %d", image.ValueOffset, want)
+	}
+}
+
+// TestDefs_LegacyDockerfileOffsets checks that the legacy form anchors at its own property, not at
+// the "build" object the options come from.
+func TestDefs_LegacyDockerfileOffsets(t *testing.T) {
+	t.Parallel()
+
+	const src = `{"dockerFile": "top", "build": {"dockerfile": "nested"}}`
+
+	got := defOf[*containerdef.BuildDef](t, src)
+	if got == nil {
+		t.Fatal("no build declared")
+	}
+	if want := strings.Index(src, `"dockerFile"`); got.DockerfileKeyOffset != want {
+		t.Errorf("DockerfileKeyOffset = %d, want %d", got.DockerfileKeyOffset, want)
+	}
+	if want := strings.Index(src, `"top"`); got.DockerfileValueOffset != want {
+		t.Errorf("DockerfileValueOffset = %d, want %d", got.DockerfileValueOffset, want)
 	}
 }
 

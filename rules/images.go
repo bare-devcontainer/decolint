@@ -34,7 +34,7 @@ func configImages(dir linter.Dir, obj *hujson.Object) []pulledImage {
 	for def := range containerdef.Defs(obj) {
 		switch def := def.(type) {
 		case *containerdef.ImageDef:
-			images = append(images, pulledImage{ref: def.Ref, offset: def.Decl.ValueOffset})
+			images = append(images, pulledImage{ref: def.Ref, offset: def.ValueOffset})
 		case *containerdef.BuildDef:
 			images = append(images, dockerfileImages(dir, def)...)
 		case *containerdef.ComposeDef:
@@ -52,7 +52,7 @@ func dockerfileImages(dir linter.Dir, def *containerdef.BuildDef) []pulledImage 
 		return nil
 	}
 	images := dockerfilePulledImages(src, def.Args, def.Target)
-	return locate(images, fmt.Sprintf("Dockerfile %q: ", def.Dockerfile), def.DockerfileDecl.ValueOffset)
+	return locate(images, fmt.Sprintf("Dockerfile %q: ", def.Dockerfile), def.DockerfileValueOffset)
 }
 
 // composeImages returns the images the Compose service the dev container runs pulls: the one it
@@ -61,7 +61,7 @@ func composeImages(dir linter.Dir, def *containerdef.ComposeDef) []pulledImage {
 	if !def.Usable() {
 		return nil
 	}
-	service, offset := def.Service, def.FilesDecl.ValueOffset
+	service, offset := def.Service, def.FilesValueOffset
 	source, ok := composeServiceSource(dir, def.Files, service)
 	if !ok {
 		return nil

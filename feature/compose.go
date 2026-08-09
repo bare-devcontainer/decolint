@@ -13,13 +13,11 @@ import (
 	"github.com/compose-spec/compose-go/v2/types"
 )
 
-// composeContributors returns the metadata contributors of the base image reached through
-// "dockerComposeFile" and "service" of root: the image the named service's "build" would produce,
-// or, absent one, the image its "image" names. The Compose files are interpolated with localEnv as
-// the environment (see [loadComposeService]). declared reports whether root declares
-// "dockerComposeFile" at all, which [baseImageContributors] uses to choose the base-image form. A
-// declaration with a missing "service" property (which a lint rule already flags) contributes
-// nothing.
+// composeContributors returns the metadata contributors of the base image def reaches: the image
+// the named service's "build" would produce, or, absent one, the image its "image" names. The
+// Compose files are interpolated with localEnv as the environment (see [loadComposeService]). A
+// declaration that settles no container ([containerdef.ComposeDef.Usable]) contributes nothing — a
+// lint rule already flags it.
 //
 // Unlike the rest of the merge, Compose resolution reads from the real filesystem rather than
 // through fsRoot: the reference implementation runs "docker compose config", which resolves
@@ -30,7 +28,7 @@ func composeContributors(ctx context.Context, f *Fetcher, fsRoot *os.Root, confi
 	if !def.Usable() {
 		return nil, nil
 	}
-	paths, service, anchor := def.Files, def.Service, def.FilesDecl.KeyOffset
+	paths, service, anchor := def.Files, def.Service, def.FilesKeyOffset
 	// The Compose files resolve relative to the referencing devcontainer.json's directory on the real
 	// filesystem, as "docker compose" itself would. The directory is made absolute so that compose-go
 	// resolves the build context to an absolute path too, which composeDisplayRef relies on.

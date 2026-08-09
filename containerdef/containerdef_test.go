@@ -97,11 +97,11 @@ func TestBuild(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			got, ok := containerdef.Build(object(t, tt.src))
-			if ok != tt.ok {
-				t.Fatalf("Build ok = %v, want %v", ok, tt.ok)
+			got := containerdef.Build(object(t, tt.src))
+			if (got != nil) != tt.ok {
+				t.Fatalf("Build = %v, want a build: %v", got, tt.ok)
 			}
-			if !ok {
+			if got == nil {
 				return
 			}
 			if got.Dockerfile != tt.wantFile {
@@ -121,8 +121,8 @@ func TestBuild_Offsets(t *testing.T) {
 	t.Parallel()
 
 	// `{"build": {"dockerfile": "Dockerfile"}}` — the key opens at 11 and the value at 25.
-	got, ok := containerdef.Build(object(t, `{"build": {"dockerfile": "Dockerfile"}}`))
-	if !ok {
+	got := containerdef.Build(object(t, `{"build": {"dockerfile": "Dockerfile"}}`))
+	if got == nil {
 		t.Fatal("Build: no Dockerfile")
 	}
 	if got.DockerfileDecl.KeyOffset != 11 || got.DockerfileDecl.ValueOffset != 25 {
@@ -191,9 +191,12 @@ func TestCompose(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			got, declared := containerdef.Compose(object(t, tt.src))
-			if declared != tt.wantDeclared {
-				t.Fatalf("declared = %v, want %v", declared, tt.wantDeclared)
+			got := containerdef.Compose(object(t, tt.src))
+			if (got != nil) != tt.wantDeclared {
+				t.Fatalf("Compose = %v, want a declaration: %v", got, tt.wantDeclared)
+			}
+			if got == nil {
+				return
 			}
 			if diff := cmp.Diff(tt.wantFiles, got.Files); diff != "" {
 				t.Errorf("files mismatch (-want +got):\n%s", diff)
@@ -215,8 +218,8 @@ func TestCompose_Offsets(t *testing.T) {
 
 	// `{"dockerComposeFile": "c.yml", "service": "app"}` — the key opens at 1 and the value at 22;
 	// "service" opens at 31 with its value at 42.
-	got, declared := containerdef.Compose(object(t, `{"dockerComposeFile": "c.yml", "service": "app"}`))
-	if !declared {
+	got := containerdef.Compose(object(t, `{"dockerComposeFile": "c.yml", "service": "app"}`))
+	if got == nil {
 		t.Fatal("Compose: not declared")
 	}
 	if got.FilesDecl.KeyOffset != 1 || got.FilesDecl.ValueOffset != 22 {

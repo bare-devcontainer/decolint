@@ -86,8 +86,8 @@ func dockerfileContributors(ctx context.Context, f *Fetcher, fsRoot *os.Root, co
 	if !ok {
 		return nil, false, nil
 	}
-	build, ok := containerdef.Build(obj)
-	if !ok {
+	build := containerdef.Build(obj)
+	if build == nil {
 		return nil, false, nil
 	}
 	path, anchor := build.Dockerfile, build.DockerfileDecl.KeyOffset

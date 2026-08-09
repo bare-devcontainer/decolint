@@ -32,8 +32,8 @@ func composeContributors(ctx context.Context, f *Fetcher, fsRoot *os.Root, confi
 	if !ok {
 		return nil, false, nil
 	}
-	compose, declared := containerdef.Compose(obj)
-	if !declared {
+	compose := containerdef.Compose(obj)
+	if compose == nil {
 		return nil, false, nil
 	}
 	if !compose.Usable() {

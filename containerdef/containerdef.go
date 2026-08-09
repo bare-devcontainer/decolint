@@ -44,22 +44,23 @@ type BuildConfig struct {
 	Target string
 }
 
-// Build returns the Dockerfile build obj declares. ok is false when it declares no Dockerfile, the
-// options alone building nothing.
+// Build returns the Dockerfile build obj declares, or nil when it declares no Dockerfile — the
+// options alone build nothing.
 //
 // The specification defines two mutually exclusive ways to name the Dockerfile, the top-level
 // "dockerFile" and the nested "build.dockerfile"; the top-level one wins, as the reference
 // implementation prefers it (getDockerfile: 'dockerFile' in config ? config.dockerFile :
 // config.build.dockerfile). The options are always the "build" object's, which the legacy top-level
 // form carries alongside it.
-func Build(obj *hujson.Object) (config BuildConfig, ok bool) {
-	config.Dockerfile, config.DockerfileDecl, ok = dockerfilePath(obj)
+func Build(obj *hujson.Object) *BuildConfig {
+	path, decl, ok := dockerfilePath(obj)
 	if !ok {
-		return BuildConfig{}, false
+		return nil
 	}
+	config := &BuildConfig{Dockerfile: path, DockerfileDecl: decl}
 	build := buildObject(obj)
 	if build == nil {
-		return config, true
+		return config
 	}
 	if m := memberNamed(build, "args"); m != nil {
 		if argsObj, isObj := m.Value.Value.(*hujson.Object); isObj {
@@ -81,7 +82,7 @@ func Build(obj *hujson.Object) (config BuildConfig, ok bool) {
 			config.Target = lit.String()
 		}
 	}
-	return config, true
+	return config
 }
 
 // dockerfilePath returns the path the configuration names its Dockerfile by, in either form.
@@ -125,17 +126,19 @@ func (c ComposeConfig) Usable() bool {
 	return len(c.Files) > 0 && c.Service != ""
 }
 
-// Compose returns the Compose declaration of obj. declared reports whether "dockerComposeFile" is
-// there at all, which is what tells a Compose-based configuration from one that builds or pulls an
-// image; whether the declaration settles a container is [ComposeConfig.Usable].
+// Compose returns the Compose declaration of obj, or nil when "dockerComposeFile" is not there —
+// which is what tells a Compose-based configuration from one that builds or pulls an image. A
+// declaration that is there settles a container only if [ComposeConfig.Usable], and a caller must
+// not fall back to another form on one that does not.
 //
 // "dockerComposeFile" is a single path or an array of them. A value, or an element, that is not a
 // string contributes no path, so a declaration can be there with no path to read.
-func Compose(obj *hujson.Object) (config ComposeConfig, declared bool) {
+func Compose(obj *hujson.Object) *ComposeConfig {
 	m := memberNamed(obj, "dockerComposeFile")
 	if m == nil {
-		return ComposeConfig{}, false
+		return nil
 	}
+	var config ComposeConfig
 	switch v := m.Value.Value.(type) {
 	case hujson.Literal:
 		if v.Kind() == '"' {
@@ -155,7 +158,7 @@ func Compose(obj *hujson.Object) (config ComposeConfig, declared bool) {
 			config.Service, config.ServiceDecl = lit.String(), declOf(m)
 		}
 	}
-	return config, true
+	return &config
 }
 
 // buildObject returns the "build" object, or nil when the configuration declares none or declares it

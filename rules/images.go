@@ -31,7 +31,7 @@ type pulledImage struct {
 // guessed at; see [dockerfilePulledImages] and [composeServiceSource] for what each leaves behind.
 func configImages(dir linter.Dir, obj *hujson.Object) []pulledImage {
 	var images []pulledImage
-	for _, def := range containerdef.Defs(obj) {
+	for def := range containerdef.Defs(obj) {
 		switch def := def.(type) {
 		case *containerdef.ImageDef:
 			images = append(images, pulledImage{ref: def.Ref, offset: def.Decl.ValueOffset})

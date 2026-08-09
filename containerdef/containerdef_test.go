@@ -1,6 +1,7 @@
 package containerdef_test
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/bare-devcontainer/decolint/containerdef"
@@ -29,7 +30,7 @@ func defOf[T containerdef.Def](t *testing.T, src string) T {
 	t.Helper()
 
 	var found T
-	for _, def := range containerdef.Defs(object(t, src)) {
+	for def := range containerdef.Defs(object(t, src)) {
 		if typed, ok := def.(T); ok {
 			found = typed
 		}
@@ -280,7 +281,7 @@ func TestDefs_Order(t *testing.T) {
 			t.Parallel()
 
 			var got []string
-			for _, def := range containerdef.Defs(object(t, tt.src)) {
+			for def := range containerdef.Defs(object(t, tt.src)) {
 				switch def.(type) {
 				case *containerdef.ComposeDef:
 					got = append(got, "compose")
@@ -292,6 +293,32 @@ func TestDefs_Order(t *testing.T) {
 			}
 			if diff := cmp.Diff(tt.want, got); diff != "" {
 				t.Errorf("forms mismatch (-want +got):\n%s", diff)
+			}
+		})
+	}
+}
+
+// TestDefs_StopsEarly checks that a caller stops where it says it does: the forms after the one it
+// stops at are read as they are reached, not before, so a caller taking the first reads only it.
+func TestDefs_StopsEarly(t *testing.T) {
+	t.Parallel()
+
+	// A configuration declaring all three, so there is always a form left to stop before.
+	const src = `{"dockerComposeFile": "c.yml", "service": "app", "build": {"dockerfile": "Dockerfile"}, "image": "ubuntu:24.04"}`
+
+	for _, stopAfter := range []int{1, 2, 3} {
+		t.Run(fmt.Sprintf("stopping after %d", stopAfter), func(t *testing.T) {
+			t.Parallel()
+
+			var read int
+			for range containerdef.Defs(object(t, src)) {
+				read++
+				if read == stopAfter {
+					break
+				}
+			}
+			if read != stopAfter {
+				t.Errorf("read %d definitions, want %d", read, stopAfter)
 			}
 		})
 	}

@@ -7,7 +7,11 @@
 // whichever the reader of its output expects to see.
 package containerdef
 
-import "github.com/tailscale/hujson"
+import (
+	"iter"
+
+	"github.com/tailscale/hujson"
+)
 
 // Decl is a property's value as declared, with where it is written.
 type Decl struct {
@@ -35,24 +39,25 @@ func (*ImageDef) containerDef()   {}
 func (*BuildDef) containerDef()   {}
 func (*ComposeDef) containerDef() {}
 
-// Defs returns the container definitions obj declares, in the order the reference implementation
-// resolves them: the Compose declaration, then the Dockerfile build, then the image.
+// Defs yields the container definitions obj declares, in the order the reference implementation
+// resolves them: the Compose declaration, then the Dockerfile build, then the image. Each is read as
+// it is reached, so a caller that stops at the first reads no further than it.
 //
-// Only one form is valid at a time, so the order matters only for a configuration declaring several
-// — which [ConflictingContainerDef] reports. A caller resolving the container the configuration
-// produces takes the first; one reading everything the configuration names takes them all.
-func Defs(obj *hujson.Object) []Def {
-	var defs []Def
-	if compose := compose(obj); compose != nil {
-		defs = append(defs, compose)
+// Only one form is valid at a time, so the order matters only for a configuration declaring several.
+// A caller resolving the container the configuration produces takes the first; one reading
+// everything the configuration names takes them all.
+func Defs(obj *hujson.Object) iter.Seq[Def] {
+	return func(yield func(Def) bool) {
+		if def := compose(obj); def != nil && !yield(def) {
+			return
+		}
+		if def := build(obj); def != nil && !yield(def) {
+			return
+		}
+		if def := image(obj); def != nil {
+			yield(def)
+		}
 	}
-	if build := build(obj); build != nil {
-		defs = append(defs, build)
-	}
-	if image := image(obj); image != nil {
-		defs = append(defs, image)
-	}
-	return defs
 }
 
 // image returns the image "image" names, or nil when the property is absent or is not a string.

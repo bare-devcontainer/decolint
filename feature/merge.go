@@ -55,20 +55,18 @@ func baseImageContributors(ctx context.Context, f *Fetcher, fsRoot *os.Root, con
 	if !ok {
 		return nil, nil
 	}
-	defs := containerdef.Defs(obj)
-	if len(defs) == 0 {
-		return nil, nil
+	// The first form declared is the one the tooling builds, so the rest is never read.
+	for def := range containerdef.Defs(obj) {
+		switch def := def.(type) {
+		case *containerdef.ComposeDef:
+			return composeContributors(ctx, f, fsRoot, configDir, localEnv, def)
+		case *containerdef.BuildDef:
+			return dockerfileContributors(ctx, f, fsRoot, configDir, def)
+		case *containerdef.ImageDef:
+			return imageContributors(ctx, f, def)
+		}
 	}
-	switch def := defs[0].(type) {
-	case *containerdef.ComposeDef:
-		return composeContributors(ctx, f, fsRoot, configDir, localEnv, def)
-	case *containerdef.BuildDef:
-		return dockerfileContributors(ctx, f, fsRoot, configDir, def)
-	case *containerdef.ImageDef:
-		return imageContributors(ctx, f, def)
-	default:
-		return nil, nil
-	}
+	return nil, nil
 }
 
 // dockerfileContributors fetches the metadata the image built from def would carry, anchored at the

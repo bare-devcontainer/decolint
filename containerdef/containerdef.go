@@ -30,11 +30,62 @@ func Image(obj *hujson.Object) (ref string, decl Decl, ok bool) {
 	return lit.String(), declOf(m), true
 }
 
-// Dockerfile returns the Dockerfile path the configuration builds from. The specification defines
-// two mutually exclusive forms, the top-level "dockerFile" and the nested "build.dockerfile"; the
-// top-level one wins, as the reference implementation prefers it (getDockerfile: 'dockerFile' in
-// config ? config.dockerFile : config.build.dockerfile). ok is false when neither names one.
-func Dockerfile(obj *hujson.Object) (path string, decl Decl, ok bool) {
+// BuildConfig is the Dockerfile build a devcontainer.json declares: the Dockerfile it builds and
+// the options shaping what that build produces. They are read together because the options say
+// nothing without the Dockerfile they shape.
+type BuildConfig struct {
+	// Dockerfile is the Dockerfile's path, relative to the devcontainer.json.
+	Dockerfile string
+	// DockerfileDecl is where the Dockerfile is named, whichever of the two properties names it.
+	DockerfileDecl Decl
+	// Args are the arguments passed to the build, nil when it declares none.
+	Args map[string]string
+	// Target is the stage the build stops at, empty when it declares none.
+	Target string
+}
+
+// Build returns the Dockerfile build obj declares. ok is false when it declares no Dockerfile, the
+// options alone building nothing.
+//
+// The specification defines two mutually exclusive ways to name the Dockerfile, the top-level
+// "dockerFile" and the nested "build.dockerfile"; the top-level one wins, as the reference
+// implementation prefers it (getDockerfile: 'dockerFile' in config ? config.dockerFile :
+// config.build.dockerfile). The options are always the "build" object's, which the legacy top-level
+// form carries alongside it.
+func Build(obj *hujson.Object) (config BuildConfig, ok bool) {
+	config.Dockerfile, config.DockerfileDecl, ok = dockerfilePath(obj)
+	if !ok {
+		return BuildConfig{}, false
+	}
+	build := buildObject(obj)
+	if build == nil {
+		return config, true
+	}
+	if m := memberNamed(build, "args"); m != nil {
+		if argsObj, isObj := m.Value.Value.(*hujson.Object); isObj {
+			for _, arg := range argsObj.Members {
+				name, nameOK := arg.Name.Value.(hujson.Literal)
+				value, valueOK := arg.Value.Value.(hujson.Literal)
+				if !nameOK || name.Kind() != '"' || !valueOK || value.Kind() != '"' {
+					continue
+				}
+				if config.Args == nil {
+					config.Args = map[string]string{}
+				}
+				config.Args[name.String()] = value.String()
+			}
+		}
+	}
+	if m := memberNamed(build, "target"); m != nil {
+		if lit, isLit := m.Value.Value.(hujson.Literal); isLit && lit.Kind() == '"' {
+			config.Target = lit.String()
+		}
+	}
+	return config, true
+}
+
+// dockerfilePath returns the path the configuration names its Dockerfile by, in either form.
+func dockerfilePath(obj *hujson.Object) (string, Decl, bool) {
 	if m := memberNamed(obj, "dockerFile"); m != nil {
 		if lit, isLit := m.Value.Value.(hujson.Literal); isLit && lit.Kind() == '"' {
 			return lit.String(), declOf(m), true
@@ -48,36 +99,6 @@ func Dockerfile(obj *hujson.Object) (path string, decl Decl, ok bool) {
 		}
 	}
 	return "", Decl{}, false
-}
-
-// BuildOptions returns the "build" options that shape what the Dockerfile produces: the arguments
-// passed to the build, and the stage it stops at. Both are zero when "build" declares none.
-func BuildOptions(obj *hujson.Object) (args map[string]string, target string) {
-	build := buildObject(obj)
-	if build == nil {
-		return nil, ""
-	}
-	if m := memberNamed(build, "args"); m != nil {
-		if argsObj, isObj := m.Value.Value.(*hujson.Object); isObj {
-			for _, arg := range argsObj.Members {
-				name, nameOK := arg.Name.Value.(hujson.Literal)
-				value, valueOK := arg.Value.Value.(hujson.Literal)
-				if !nameOK || name.Kind() != '"' || !valueOK || value.Kind() != '"' {
-					continue
-				}
-				if args == nil {
-					args = map[string]string{}
-				}
-				args[name.String()] = value.String()
-			}
-		}
-	}
-	if m := memberNamed(build, "target"); m != nil {
-		if lit, isLit := m.Value.Value.(hujson.Literal); isLit && lit.Kind() == '"' {
-			target = lit.String()
-		}
-	}
-	return args, target
 }
 
 // ComposeConfig is the Compose declaration of a devcontainer.json: the files it names and the

@@ -46,16 +46,16 @@ func configImages(dir linter.Dir, obj *hujson.Object) []pulledImage {
 // dockerfileImages returns the images the Dockerfile obj names pulls, anchored at the property
 // naming it.
 func dockerfileImages(dir linter.Dir, obj *hujson.Object) []pulledImage {
-	path, decl, ok := containerdef.Dockerfile(obj)
+	build, ok := containerdef.Build(obj)
 	if !ok {
 		return nil
 	}
-	src, ok := readConfigFile(dir, path)
+	src, ok := readConfigFile(dir, build.Dockerfile)
 	if !ok {
 		return nil
 	}
-	args, target := containerdef.BuildOptions(obj)
-	return locate(dockerfilePulledImages(src, args, target), fmt.Sprintf("Dockerfile %q: ", path), decl.ValueOffset)
+	images := dockerfilePulledImages(src, build.Args, build.Target)
+	return locate(images, fmt.Sprintf("Dockerfile %q: ", build.Dockerfile), build.DockerfileDecl.ValueOffset)
 }
 
 // composeImages returns the images the Compose service the dev container runs pulls: the one it

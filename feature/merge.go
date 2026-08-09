@@ -86,17 +86,16 @@ func dockerfileContributors(ctx context.Context, f *Fetcher, fsRoot *os.Root, co
 	if !ok {
 		return nil, false, nil
 	}
-	path, decl, ok := containerdef.Dockerfile(obj)
+	build, ok := containerdef.Build(obj)
 	if !ok {
 		return nil, false, nil
 	}
-	anchor := decl.KeyOffset
-	args, target := containerdef.BuildOptions(obj)
+	path, anchor := build.Dockerfile, build.DockerfileDecl.KeyOffset
 	src, err := readBounded(fsRoot, filepath.Join(configDir, path), maxDockerfileBytes)
 	if err != nil {
 		return nil, true, err
 	}
-	entries, err := f.FetchDockerfileMetadata(ctx, src, args, nil, target)
+	entries, err := f.FetchDockerfileMetadata(ctx, src, build.Args, nil, build.Target)
 	if err != nil {
 		return nil, true, fmt.Errorf("build %s: %w", path, err)
 	}

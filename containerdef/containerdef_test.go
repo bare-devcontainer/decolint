@@ -47,79 +47,86 @@ func TestImage(t *testing.T) {
 	}
 }
 
-func TestDockerfile(t *testing.T) {
-	t.Parallel()
-
-	tests := []struct {
-		name string
-		src  string
-		want string
-		ok   bool
-	}{
-		{"build.dockerfile", `{"build": {"dockerfile": "Dockerfile"}}`, "Dockerfile", true},
-		{"the legacy top-level property", `{"dockerFile": "Dockerfile"}`, "Dockerfile", true},
-		{
-			// The reference implementation reads the top-level property first, so it is the one
-			// built when a configuration carries both.
-			"the top-level property wins",
-			`{"dockerFile": "top", "build": {"dockerfile": "nested"}}`,
-			"top", true,
-		},
-		{"neither", `{"image": "ubuntu:24.04"}`, "", false},
-		{"a non-object build", `{"build": "Dockerfile"}`, "", false},
-		{"a non-string dockerfile", `{"build": {"dockerfile": 42}}`, "", false},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-			got, _, ok := containerdef.Dockerfile(object(t, tt.src))
-			if got != tt.want || ok != tt.ok {
-				t.Errorf("Dockerfile = (%q, %v), want (%q, %v)", got, ok, tt.want, tt.ok)
-			}
-		})
-	}
-}
-
-func TestDockerfile_Offsets(t *testing.T) {
-	t.Parallel()
-
-	// `{"build": {"dockerfile": "Dockerfile"}}` — the key opens at 11 and the value at 25.
-	_, decl, ok := containerdef.Dockerfile(object(t, `{"build": {"dockerfile": "Dockerfile"}}`))
-	if !ok {
-		t.Fatal("Dockerfile: not found")
-	}
-	if decl.KeyOffset != 11 || decl.ValueOffset != 25 {
-		t.Errorf("decl = %+v, want {KeyOffset:11 ValueOffset:25}", decl)
-	}
-}
-
-func TestBuildOptions(t *testing.T) {
+func TestBuild(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
 		name     string
 		src      string
+		wantFile string
 		wantArgs map[string]string
 		wantTgt  string
+		ok       bool
 	}{
-		{"args and target", `{"build": {"args": {"A": "1"}, "target": "dev"}}`, map[string]string{"A": "1"}, "dev"},
-		{"neither", `{"build": {"dockerfile": "Dockerfile"}}`, nil, ""},
-		{"no build", `{"image": "ubuntu:24.04"}`, nil, ""},
-		{"a non-object build", `{"build": 42}`, nil, ""},
-		{"a non-string arg is left out", `{"build": {"args": {"A": 1, "B": "2"}}}`, map[string]string{"B": "2"}, ""},
-		{"a non-string target is no target", `{"build": {"target": 42}}`, nil, ""},
+		{name: "build.dockerfile", src: `{"build": {"dockerfile": "Dockerfile"}}`, wantFile: "Dockerfile", ok: true},
+		{name: "the legacy top-level property", src: `{"dockerFile": "Dockerfile"}`, wantFile: "Dockerfile", ok: true},
+		{
+			// The reference implementation reads the top-level property first, so it is the one
+			// built when a configuration carries both.
+			name:     "the top-level property wins",
+			src:      `{"dockerFile": "top", "build": {"dockerfile": "nested"}}`,
+			wantFile: "top", ok: true,
+		},
+		{
+			// The legacy form names the Dockerfile while "build" still shapes what it produces.
+			name:     "the legacy property carries the options beside it",
+			src:      `{"dockerFile": "Dockerfile", "build": {"args": {"A": "1"}, "target": "dev"}}`,
+			wantFile: "Dockerfile", wantArgs: map[string]string{"A": "1"}, wantTgt: "dev", ok: true,
+		},
+		{
+			name:     "args and target",
+			src:      `{"build": {"dockerfile": "Dockerfile", "args": {"A": "1"}, "target": "dev"}}`,
+			wantFile: "Dockerfile", wantArgs: map[string]string{"A": "1"}, wantTgt: "dev", ok: true,
+		},
+		{
+			name:     "a non-string arg is left out",
+			src:      `{"build": {"dockerfile": "Dockerfile", "args": {"A": 1, "B": "2"}}}`,
+			wantFile: "Dockerfile", wantArgs: map[string]string{"B": "2"}, ok: true,
+		},
+		{
+			name:     "a non-string target is no target",
+			src:      `{"build": {"dockerfile": "Dockerfile", "target": 42}}`,
+			wantFile: "Dockerfile", ok: true,
+		},
+		{name: "no Dockerfile", src: `{"image": "ubuntu:24.04"}`},
+		{name: "a non-object build", src: `{"build": "Dockerfile"}`},
+		{name: "a non-string dockerfile", src: `{"build": {"dockerfile": 42}}`},
+		{name: "options without a Dockerfile build nothing", src: `{"build": {"target": "dev"}}`},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			args, target := containerdef.BuildOptions(object(t, tt.src))
-			if diff := cmp.Diff(tt.wantArgs, args); diff != "" {
+
+			got, ok := containerdef.Build(object(t, tt.src))
+			if ok != tt.ok {
+				t.Fatalf("Build ok = %v, want %v", ok, tt.ok)
+			}
+			if !ok {
+				return
+			}
+			if got.Dockerfile != tt.wantFile {
+				t.Errorf("Dockerfile = %q, want %q", got.Dockerfile, tt.wantFile)
+			}
+			if diff := cmp.Diff(tt.wantArgs, got.Args); diff != "" {
 				t.Errorf("args mismatch (-want +got):\n%s", diff)
 			}
-			if target != tt.wantTgt {
-				t.Errorf("target = %q, want %q", target, tt.wantTgt)
+			if got.Target != tt.wantTgt {
+				t.Errorf("target = %q, want %q", got.Target, tt.wantTgt)
 			}
 		})
+	}
+}
+
+func TestBuild_Offsets(t *testing.T) {
+	t.Parallel()
+
+	// `{"build": {"dockerfile": "Dockerfile"}}` — the key opens at 11 and the value at 25.
+	got, ok := containerdef.Build(object(t, `{"build": {"dockerfile": "Dockerfile"}}`))
+	if !ok {
+		t.Fatal("Build: no Dockerfile")
+	}
+	if got.DockerfileDecl.KeyOffset != 11 || got.DockerfileDecl.ValueOffset != 25 {
+		t.Errorf("decl = %+v, want {KeyOffset:11 ValueOffset:25}", got.DockerfileDecl)
 	}
 }
 

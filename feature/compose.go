@@ -7,101 +7,48 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/bare-devcontainer/decolint/containerdef"
 	"github.com/compose-spec/compose-go/v2/loader"
 	"github.com/compose-spec/compose-go/v2/template"
 	"github.com/compose-spec/compose-go/v2/types"
-	"github.com/tailscale/hujson"
 )
 
-// composeContributors returns the metadata contributors of the base image reached through
-// "dockerComposeFile" and "service" of root: the image the named service's "build" would produce,
-// or, absent one, the image its "image" names. The Compose files are interpolated with localEnv as
-// the environment (see [loadComposeService]). declared reports whether root declares
-// "dockerComposeFile" at all, which [baseImageContributors] uses to choose the base-image form. A
-// declaration with a missing "service" property (which a lint rule already flags) contributes
-// nothing.
+// composeContributors returns the metadata contributors of the base image def reaches: the image
+// the named service's "build" would produce, or, absent one, the image its "image" names. The
+// Compose files are interpolated with localEnv as the environment (see [loadComposeService]). A
+// declaration that settles no container ([containerdef.ComposeDef.Usable]) contributes nothing — a
+// lint rule already flags it.
 //
 // Unlike the rest of the merge, Compose resolution reads from the real filesystem rather than
 // through fsRoot: the reference implementation runs "docker compose config", which resolves
 // "extends" and "include" against files that commonly sit outside the configuration directory (a
 // compose file named "../docker-compose.yml", or a service that extends a root-level file), so the
 // fsRoot confinement is deliberately not applied here.
-func composeContributors(ctx context.Context, f *Fetcher, fsRoot *os.Root, configDir string, localEnv map[string]string, root *hujson.Value) ([]*contributor, bool, error) {
-	obj, ok := root.Value.(*hujson.Object)
-	if !ok {
-		return nil, false, nil
+func composeContributors(ctx context.Context, f *Fetcher, fsRoot *os.Root, configDir string, localEnv map[string]string, def *containerdef.ComposeDef) ([]*contributor, error) {
+	if !def.Usable() {
+		return nil, nil
 	}
-	paths, anchor, ok := composeFilePaths(obj)
-	if !ok {
-		return nil, false, nil
-	}
-	if len(paths) == 0 {
-		return nil, true, nil
-	}
-	service, ok := composeServiceName(obj)
-	if !ok {
-		return nil, true, nil
-	}
+	paths, service, anchor := def.Files, def.Service, def.FilesKeyOffset
 	// The Compose files resolve relative to the referencing devcontainer.json's directory on the real
 	// filesystem, as "docker compose" itself would. The directory is made absolute so that compose-go
 	// resolves the build context to an absolute path too, which composeDisplayRef relies on.
 	baseDir, err := filepath.Abs(filepath.Join(fsRoot.Name(), configDir))
 	if err != nil {
-		return nil, true, fmt.Errorf("resolve %s: %w", configDir, err)
+		return nil, fmt.Errorf("resolve %s: %w", configDir, err)
 	}
 	svc, err := loadComposeService(ctx, baseDir, paths, service, localEnv)
 	if err != nil {
-		return nil, true, err
+		return nil, err
 	}
 	entries, ref, err := composeServiceMetadata(ctx, f, baseDir, paths[0], svc)
 	if err != nil {
-		return nil, true, err
+		return nil, err
 	}
 	contribs := make([]*contributor, 0, len(entries))
 	for _, md := range entries {
 		contribs = append(contribs, &contributor{ref: ref, anchor: anchor, md: md})
 	}
-	return contribs, true, nil
-}
-
-// composeFilePaths returns the Compose file paths root declares, relative to the devcontainer.json
-// directory, with the byte offset of the "dockerComposeFile" key. The property is a single path or
-// an array of paths, later ones overriding earlier ones. ok reports whether the member exists at
-// all; a present but unusable value returns ok=true with no paths, so the caller still treats
-// Compose as declared and does not fall back to "build" or "image".
-func composeFilePaths(obj *hujson.Object) (paths []string, anchor int, ok bool) {
-	i := findMember(obj, "dockerComposeFile")
-	if i < 0 {
-		return nil, 0, false
-	}
-	anchor = obj.Members[i].Name.StartOffset
-	switch v := obj.Members[i].Value.Value.(type) {
-	case hujson.Literal:
-		if v.Kind() == '"' {
-			paths = []string{v.String()}
-		}
-	case *hujson.Array:
-		for _, e := range v.Elements {
-			if lit, isLit := e.Value.(hujson.Literal); isLit && lit.Kind() == '"' {
-				paths = append(paths, lit.String())
-			}
-		}
-	}
-	return paths, anchor, true
-}
-
-// composeServiceName returns the "service" property of root; ok is false when it is absent or not
-// a string.
-func composeServiceName(obj *hujson.Object) (string, bool) {
-	i := findMember(obj, "service")
-	if i < 0 {
-		return "", false
-	}
-	lit, ok := obj.Members[i].Value.Value.(hujson.Literal)
-	if !ok || lit.Kind() != '"' {
-		return "", false
-	}
-	return lit.String(), true
+	return contribs, nil
 }
 
 // loadComposeService reads each Compose file at baseDir and returns the named service resolved by

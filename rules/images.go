@@ -21,51 +21,48 @@ type pulledImage struct {
 	offset int
 }
 
-// configImages returns every image a build of obj, a devcontainer.json, pulls, in the order the
-// configuration reaches them:
-//   - the one "image" names;
-//   - for a Compose-based configuration, the image its service runs, or the ones the Dockerfile that
-//     service builds from pulls;
-//   - otherwise the ones the Dockerfile the configuration itself names pulls.
+// configImages returns every image a build of obj, a devcontainer.json, pulls: the one "image"
+// names, the ones the Dockerfile it builds pulls, and, for a Compose-based configuration, the image
+// its service runs or the ones the Dockerfile that service builds from pulls.
 //
-// Compose is read before the configuration's own "dockerFile"/"build.dockerfile", as the reference
-// implementation resolves the base image in that order; a configuration declaring both is reported
-// by [ConflictingContainerDef]. An image this cannot resolve is left out rather than guessed at; see
-// [dockerfilePulledImages] and [composeServiceSource] for what each leaves behind.
+// Every form the configuration declares is read, not only the one the tooling would build, so that
+// an unpinned image is reported wherever it is written; a configuration declaring more than one form
+// is reported by [ConflictingContainerDef]. An image this cannot resolve is left out rather than
+// guessed at; see [dockerfilePulledImages] and [composeServiceSource] for what each leaves behind.
 func configImages(dir linter.Dir, obj *hujson.Object) []pulledImage {
 	var images []pulledImage
-	if ref, decl, ok := containerdef.Image(obj); ok {
-		images = append(images, pulledImage{ref: ref, offset: decl.ValueOffset})
+	for _, def := range containerdef.Defs(obj) {
+		switch def := def.(type) {
+		case *containerdef.ImageDef:
+			images = append(images, pulledImage{ref: def.Ref, offset: def.Decl.ValueOffset})
+		case *containerdef.BuildDef:
+			images = append(images, dockerfileImages(dir, def)...)
+		case *containerdef.ComposeDef:
+			images = append(images, composeImages(dir, def)...)
+		}
 	}
-	if compose := containerdef.Compose(obj); compose != nil {
-		return append(images, composeImages(dir, compose)...)
-	}
-	return append(images, dockerfileImages(dir, obj)...)
+	return images
 }
 
-// dockerfileImages returns the images the Dockerfile obj names pulls, anchored at the property
+// dockerfileImages returns the images the Dockerfile def names pulls, anchored at the property
 // naming it.
-func dockerfileImages(dir linter.Dir, obj *hujson.Object) []pulledImage {
-	build := containerdef.Build(obj)
-	if build == nil {
-		return nil
-	}
-	src, ok := readConfigFile(dir, build.Dockerfile)
+func dockerfileImages(dir linter.Dir, def *containerdef.BuildDef) []pulledImage {
+	src, ok := readConfigFile(dir, def.Dockerfile)
 	if !ok {
 		return nil
 	}
-	images := dockerfilePulledImages(src, build.Args, build.Target)
-	return locate(images, fmt.Sprintf("Dockerfile %q: ", build.Dockerfile), build.DockerfileDecl.ValueOffset)
+	images := dockerfilePulledImages(src, def.Args, def.Target)
+	return locate(images, fmt.Sprintf("Dockerfile %q: ", def.Dockerfile), def.DockerfileDecl.ValueOffset)
 }
 
 // composeImages returns the images the Compose service the dev container runs pulls: the one it
 // runs, or the ones the Dockerfile it builds from pulls.
-func composeImages(dir linter.Dir, compose *containerdef.ComposeConfig) []pulledImage {
-	if !compose.Usable() {
+func composeImages(dir linter.Dir, def *containerdef.ComposeDef) []pulledImage {
+	if !def.Usable() {
 		return nil
 	}
-	service, offset := compose.Service, compose.FilesDecl.ValueOffset
-	source, ok := composeServiceSource(dir, compose.Files, service)
+	service, offset := def.Service, def.FilesDecl.ValueOffset
+	source, ok := composeServiceSource(dir, def.Files, service)
 	if !ok {
 		return nil
 	}

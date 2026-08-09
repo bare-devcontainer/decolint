@@ -23,7 +23,21 @@ func object(t *testing.T, src string) *hujson.Object {
 	return obj
 }
 
-func TestImage(t *testing.T) {
+// defOf returns the definition of type T among the ones src declares, or the zero value when it
+// declares none of that form.
+func defOf[T containerdef.Def](t *testing.T, src string) T {
+	t.Helper()
+
+	var found T
+	for _, def := range containerdef.Defs(object(t, src)) {
+		if typed, ok := def.(T); ok {
+			found = typed
+		}
+	}
+	return found
+}
+
+func TestDefs_Image(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
@@ -39,15 +53,18 @@ func TestImage(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			got, _, ok := containerdef.Image(object(t, tt.src))
-			if got != tt.want || ok != tt.ok {
-				t.Errorf("Image = (%q, %v), want (%q, %v)", got, ok, tt.want, tt.ok)
+			got := defOf[*containerdef.ImageDef](t, tt.src)
+			if (got != nil) != tt.ok {
+				t.Fatalf("image def = %v, want one: %v", got, tt.ok)
+			}
+			if got != nil && got.Ref != tt.want {
+				t.Errorf("Ref = %q, want %q", got.Ref, tt.want)
 			}
 		})
 	}
 }
 
-func TestBuild(t *testing.T) {
+func TestDefs_Build(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
@@ -97,9 +114,9 @@ func TestBuild(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			got := containerdef.Build(object(t, tt.src))
+			got := defOf[*containerdef.BuildDef](t, tt.src)
 			if (got != nil) != tt.ok {
-				t.Fatalf("Build = %v, want a build: %v", got, tt.ok)
+				t.Fatalf("build def = %v, want one: %v", got, tt.ok)
 			}
 			if got == nil {
 				return
@@ -117,20 +134,20 @@ func TestBuild(t *testing.T) {
 	}
 }
 
-func TestBuild_Offsets(t *testing.T) {
+func TestDefs_BuildOffsets(t *testing.T) {
 	t.Parallel()
 
 	// `{"build": {"dockerfile": "Dockerfile"}}` — the key opens at 11 and the value at 25.
-	got := containerdef.Build(object(t, `{"build": {"dockerfile": "Dockerfile"}}`))
+	got := defOf[*containerdef.BuildDef](t, `{"build": {"dockerfile": "Dockerfile"}}`)
 	if got == nil {
-		t.Fatal("Build: no Dockerfile")
+		t.Fatal("no build declared")
 	}
 	if got.DockerfileDecl.KeyOffset != 11 || got.DockerfileDecl.ValueOffset != 25 {
 		t.Errorf("decl = %+v, want {KeyOffset:11 ValueOffset:25}", got.DockerfileDecl)
 	}
 }
 
-func TestCompose(t *testing.T) {
+func TestDefs_Compose(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
@@ -191,9 +208,9 @@ func TestCompose(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			got := containerdef.Compose(object(t, tt.src))
+			got := defOf[*containerdef.ComposeDef](t, tt.src)
 			if (got != nil) != tt.wantDeclared {
-				t.Fatalf("Compose = %v, want a declaration: %v", got, tt.wantDeclared)
+				t.Fatalf("compose def = %v, want one: %v", got, tt.wantDeclared)
 			}
 			if got == nil {
 				return
@@ -213,19 +230,69 @@ func TestCompose(t *testing.T) {
 
 // TestCompose_Offsets checks that both properties are located, since the merge anchors its findings
 // at the key and a rule at the value.
-func TestCompose_Offsets(t *testing.T) {
+func TestDefs_ComposeOffsets(t *testing.T) {
 	t.Parallel()
 
 	// `{"dockerComposeFile": "c.yml", "service": "app"}` — the key opens at 1 and the value at 22;
 	// "service" opens at 31 with its value at 42.
-	got := containerdef.Compose(object(t, `{"dockerComposeFile": "c.yml", "service": "app"}`))
+	got := defOf[*containerdef.ComposeDef](t, `{"dockerComposeFile": "c.yml", "service": "app"}`)
 	if got == nil {
-		t.Fatal("Compose: not declared")
+		t.Fatal("no compose declared")
 	}
 	if got.FilesDecl.KeyOffset != 1 || got.FilesDecl.ValueOffset != 22 {
 		t.Errorf("FilesDecl = %+v, want {KeyOffset:1 ValueOffset:22}", got.FilesDecl)
 	}
 	if got.ServiceDecl.KeyOffset != 31 || got.ServiceDecl.ValueOffset != 42 {
 		t.Errorf("ServiceDecl = %+v, want {KeyOffset:31 ValueOffset:42}", got.ServiceDecl)
+	}
+}
+
+// TestDefs_Order checks the order the forms come in, which is the order the reference implementation
+// resolves them: a caller taking the first takes the one the tooling would build.
+func TestDefs_Order(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		src  string
+		want []string
+	}{
+		{"nothing declared", `{"name": "x"}`, nil},
+		{"an image alone", `{"image": "ubuntu:24.04"}`, []string{"image"}},
+		{
+			"compose comes before a build beside it",
+			`{"dockerComposeFile": "c.yml", "service": "app", "build": {"dockerfile": "Dockerfile"}}`,
+			[]string{"compose", "build"},
+		},
+		{
+			"a build comes before an image beside it",
+			`{"build": {"dockerfile": "Dockerfile"}, "image": "ubuntu:24.04"}`,
+			[]string{"build", "image"},
+		},
+		{
+			"all three",
+			`{"dockerComposeFile": "c.yml", "service": "app", "build": {"dockerfile": "Dockerfile"}, "image": "ubuntu:24.04"}`,
+			[]string{"compose", "build", "image"},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			var got []string
+			for _, def := range containerdef.Defs(object(t, tt.src)) {
+				switch def.(type) {
+				case *containerdef.ComposeDef:
+					got = append(got, "compose")
+				case *containerdef.BuildDef:
+					got = append(got, "build")
+				case *containerdef.ImageDef:
+					got = append(got, "image")
+				}
+			}
+			if diff := cmp.Diff(tt.want, got); diff != "" {
+				t.Errorf("forms mismatch (-want +got):\n%s", diff)
+			}
+		})
 	}
 }

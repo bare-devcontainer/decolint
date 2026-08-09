@@ -46,64 +46,48 @@ func Merge(ctx context.Context, f *Fetcher, fsRoot *os.Root, configDir string, l
 	return nil
 }
 
-// baseImageContributors returns the metadata contributors of the configuration's base image. It
-// tries the three declaration forms in order, and the first one root declares wins — even when it
-// yields no contributors, so a later form is never used as a fallback:
-//
-//   - "dockerComposeFile" with "service" ([composeContributors])
-//   - "build", or the legacy "dockerFile" ([dockerfileContributors])
-//   - "image" ([imageContributors])
-//
-// Only one form is valid at a time, so the order matters only for an invalid config that declares
-// several; it then resolves the one the real tooling would.
+// baseImageContributors returns the metadata contributors of the configuration's base image: those
+// of the first form root declares, which is the one the real tooling builds (see
+// [containerdef.Defs]). A form that yields no contributors is still the one declared, so a later
+// form is never used as a fallback.
 func baseImageContributors(ctx context.Context, f *Fetcher, fsRoot *os.Root, configDir string, localEnv map[string]string, root *hujson.Value) ([]*contributor, error) {
-	contribs, declared, err := composeContributors(ctx, f, fsRoot, configDir, localEnv, root)
-	if err != nil {
-		return nil, err
-	}
-	if declared {
-		return contribs, nil
-	}
-	contribs, declared, err = dockerfileContributors(ctx, f, fsRoot, configDir, root)
-	if err != nil {
-		return nil, err
-	}
-	if declared {
-		return contribs, nil
-	}
-	contribs, err = imageContributors(ctx, f, root)
-	if err != nil {
-		return nil, err
-	}
-	return contribs, nil
-}
-
-// dockerfileContributors fetches the metadata the image built from the configuration's Dockerfile
-// would carry, anchored at the key declaring the Dockerfile path. declared reports whether root
-// declares a Dockerfile at all, which [baseImageContributors] uses to choose the base-image form.
-func dockerfileContributors(ctx context.Context, f *Fetcher, fsRoot *os.Root, configDir string, root *hujson.Value) ([]*contributor, bool, error) {
 	obj, ok := root.Value.(*hujson.Object)
 	if !ok {
-		return nil, false, nil
+		return nil, nil
 	}
-	build := containerdef.Build(obj)
-	if build == nil {
-		return nil, false, nil
+	defs := containerdef.Defs(obj)
+	if len(defs) == 0 {
+		return nil, nil
 	}
-	path, anchor := build.Dockerfile, build.DockerfileDecl.KeyOffset
+	switch def := defs[0].(type) {
+	case *containerdef.ComposeDef:
+		return composeContributors(ctx, f, fsRoot, configDir, localEnv, def)
+	case *containerdef.BuildDef:
+		return dockerfileContributors(ctx, f, fsRoot, configDir, def)
+	case *containerdef.ImageDef:
+		return imageContributors(ctx, f, def)
+	default:
+		return nil, nil
+	}
+}
+
+// dockerfileContributors fetches the metadata the image built from def would carry, anchored at the
+// key declaring the Dockerfile path.
+func dockerfileContributors(ctx context.Context, f *Fetcher, fsRoot *os.Root, configDir string, def *containerdef.BuildDef) ([]*contributor, error) {
+	path, anchor := def.Dockerfile, def.DockerfileDecl.KeyOffset
 	src, err := readBounded(fsRoot, filepath.Join(configDir, path), maxDockerfileBytes)
 	if err != nil {
-		return nil, true, err
+		return nil, err
 	}
-	entries, err := f.FetchDockerfileMetadata(ctx, src, build.Args, nil, build.Target)
+	entries, err := f.FetchDockerfileMetadata(ctx, src, def.Args, nil, def.Target)
 	if err != nil {
-		return nil, true, fmt.Errorf("build %s: %w", path, err)
+		return nil, fmt.Errorf("build %s: %w", path, err)
 	}
 	contribs := make([]*contributor, 0, len(entries))
 	for _, md := range entries {
 		contribs = append(contribs, &contributor{ref: path, anchor: anchor, md: md})
 	}
-	return contribs, true, nil
+	return contribs, nil
 }
 
 // readBounded reads the file at path through fsRoot, so its resolution cannot escape fsRoot's
@@ -123,26 +107,17 @@ func readBounded(fsRoot *os.Root, path string, maxBytes int64) ([]byte, error) {
 	return src, nil
 }
 
-// imageContributors fetches the "devcontainer.metadata" label of the image named by "/image",
-// anchored at the "image" key. It contributes nothing when root declares no usable image or the
-// image carries no label.
-func imageContributors(ctx context.Context, f *Fetcher, root *hujson.Value) ([]*contributor, error) {
-	obj, ok := root.Value.(*hujson.Object)
-	if !ok {
-		return nil, nil
-	}
-	image, decl, ok := containerdef.Image(obj)
-	if !ok {
-		return nil, nil
-	}
-	entries, err := f.FetchImageMetadata(ctx, image)
+// imageContributors fetches the "devcontainer.metadata" label of the image def names, anchored at
+// the "image" key. It contributes nothing when the image carries no label.
+func imageContributors(ctx context.Context, f *Fetcher, def *containerdef.ImageDef) ([]*contributor, error) {
+	entries, err := f.FetchImageMetadata(ctx, def.Ref)
 	if err != nil {
 		return nil, err
 	}
-	anchor := decl.KeyOffset
+	anchor := def.Decl.KeyOffset
 	contribs := make([]*contributor, 0, len(entries))
 	for _, md := range entries {
-		contribs = append(contribs, &contributor{ref: image, anchor: anchor, md: md})
+		contribs = append(contribs, &contributor{ref: def.Ref, anchor: anchor, md: md})
 	}
 	return contribs, nil
 }

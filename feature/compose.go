@@ -11,7 +11,6 @@ import (
 	"github.com/compose-spec/compose-go/v2/loader"
 	"github.com/compose-spec/compose-go/v2/template"
 	"github.com/compose-spec/compose-go/v2/types"
-	"github.com/tailscale/hujson"
 )
 
 // composeContributors returns the metadata contributors of the base image reached through
@@ -27,39 +26,31 @@ import (
 // "extends" and "include" against files that commonly sit outside the configuration directory (a
 // compose file named "../docker-compose.yml", or a service that extends a root-level file), so the
 // fsRoot confinement is deliberately not applied here.
-func composeContributors(ctx context.Context, f *Fetcher, fsRoot *os.Root, configDir string, localEnv map[string]string, root *hujson.Value) ([]*contributor, bool, error) {
-	obj, ok := root.Value.(*hujson.Object)
-	if !ok {
-		return nil, false, nil
+func composeContributors(ctx context.Context, f *Fetcher, fsRoot *os.Root, configDir string, localEnv map[string]string, def *containerdef.ComposeDef) ([]*contributor, error) {
+	if !def.Usable() {
+		return nil, nil
 	}
-	compose := containerdef.Compose(obj)
-	if compose == nil {
-		return nil, false, nil
-	}
-	if !compose.Usable() {
-		return nil, true, nil
-	}
-	paths, service, anchor := compose.Files, compose.Service, compose.FilesDecl.KeyOffset
+	paths, service, anchor := def.Files, def.Service, def.FilesDecl.KeyOffset
 	// The Compose files resolve relative to the referencing devcontainer.json's directory on the real
 	// filesystem, as "docker compose" itself would. The directory is made absolute so that compose-go
 	// resolves the build context to an absolute path too, which composeDisplayRef relies on.
 	baseDir, err := filepath.Abs(filepath.Join(fsRoot.Name(), configDir))
 	if err != nil {
-		return nil, true, fmt.Errorf("resolve %s: %w", configDir, err)
+		return nil, fmt.Errorf("resolve %s: %w", configDir, err)
 	}
 	svc, err := loadComposeService(ctx, baseDir, paths, service, localEnv)
 	if err != nil {
-		return nil, true, err
+		return nil, err
 	}
 	entries, ref, err := composeServiceMetadata(ctx, f, baseDir, paths[0], svc)
 	if err != nil {
-		return nil, true, err
+		return nil, err
 	}
 	contribs := make([]*contributor, 0, len(entries))
 	for _, md := range entries {
 		contribs = append(contribs, &contributor{ref: ref, anchor: anchor, md: md})
 	}
-	return contribs, true, nil
+	return contribs, nil
 }
 
 // loadComposeService reads each Compose file at baseDir and returns the named service resolved by

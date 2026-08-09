@@ -3,7 +3,7 @@
 // and nothing else — resolving it is the caller's, whether that is the merge fetching what the
 // declaration names or a lint rule reading it from the linted directory.
 //
-// Every reader returns the byte offsets of both the key and the value, so a caller can anchor at
+// A declaration carries the byte offsets of both the key and the value, so a caller can anchor at
 // whichever the reader of its output expects to see.
 package containerdef
 
@@ -17,23 +17,61 @@ type Decl struct {
 	ValueOffset int
 }
 
-// Image returns the image "image" names. ok is false when the property is absent or is not a string.
-func Image(obj *hujson.Object) (ref string, decl Decl, ok bool) {
+// Def is one form a devcontainer.json declares its container in: [*ImageDef], [*BuildDef] or
+// [*ComposeDef]. A caller tells them apart with a type switch.
+type Def interface {
+	containerDef()
+}
+
+// ImageDef is an image the configuration pulls, as "image" names it.
+type ImageDef struct {
+	// Ref is the image reference as written.
+	Ref string
+	// Decl is where "image" is written.
+	Decl Decl
+}
+
+func (*ImageDef) containerDef()   {}
+func (*BuildDef) containerDef()   {}
+func (*ComposeDef) containerDef() {}
+
+// Defs returns the container definitions obj declares, in the order the reference implementation
+// resolves them: the Compose declaration, then the Dockerfile build, then the image.
+//
+// Only one form is valid at a time, so the order matters only for a configuration declaring several
+// — which [ConflictingContainerDef] reports. A caller resolving the container the configuration
+// produces takes the first; one reading everything the configuration names takes them all.
+func Defs(obj *hujson.Object) []Def {
+	var defs []Def
+	if compose := compose(obj); compose != nil {
+		defs = append(defs, compose)
+	}
+	if build := build(obj); build != nil {
+		defs = append(defs, build)
+	}
+	if image := image(obj); image != nil {
+		defs = append(defs, image)
+	}
+	return defs
+}
+
+// image returns the image "image" names, or nil when the property is absent or is not a string.
+func image(obj *hujson.Object) *ImageDef {
 	m := memberNamed(obj, "image")
 	if m == nil {
-		return "", Decl{}, false
+		return nil
 	}
 	lit, isLit := m.Value.Value.(hujson.Literal)
 	if !isLit || lit.Kind() != '"' {
-		return "", Decl{}, false
+		return nil
 	}
-	return lit.String(), declOf(m), true
+	return &ImageDef{Ref: lit.String(), Decl: declOf(m)}
 }
 
-// BuildConfig is the Dockerfile build a devcontainer.json declares: the Dockerfile it builds and
+// BuildDef is the Dockerfile build a devcontainer.json declares: the Dockerfile it builds and
 // the options shaping what that build produces. They are read together because the options say
 // nothing without the Dockerfile they shape.
-type BuildConfig struct {
+type BuildDef struct {
 	// Dockerfile is the Dockerfile's path, relative to the devcontainer.json.
 	Dockerfile string
 	// DockerfileDecl is where the Dockerfile is named, whichever of the two properties names it.
@@ -44,7 +82,7 @@ type BuildConfig struct {
 	Target string
 }
 
-// Build returns the Dockerfile build obj declares, or nil when it declares no Dockerfile — the
+// build returns the Dockerfile build obj declares, or nil when it declares no Dockerfile — the
 // options alone build nothing.
 //
 // The specification defines two mutually exclusive ways to name the Dockerfile, the top-level
@@ -52,12 +90,12 @@ type BuildConfig struct {
 // implementation prefers it (getDockerfile: 'dockerFile' in config ? config.dockerFile :
 // config.build.dockerfile). The options are always the "build" object's, which the legacy top-level
 // form carries alongside it.
-func Build(obj *hujson.Object) *BuildConfig {
+func build(obj *hujson.Object) *BuildDef {
 	path, decl, ok := dockerfilePath(obj)
 	if !ok {
 		return nil
 	}
-	config := &BuildConfig{Dockerfile: path, DockerfileDecl: decl}
+	config := &BuildDef{Dockerfile: path, DockerfileDecl: decl}
 	build := buildObject(obj)
 	if build == nil {
 		return config
@@ -102,11 +140,11 @@ func dockerfilePath(obj *hujson.Object) (string, Decl, bool) {
 	return "", Decl{}, false
 }
 
-// ComposeConfig is the Compose declaration of a devcontainer.json: the files it names and the
+// ComposeDef is the Compose declaration of a devcontainer.json: the files it names and the
 // service the dev container runs in. The two are read together because neither settles anything
 // alone — a configuration that names files but no service says which Compose project it belongs to
 // and not which container it is.
-type ComposeConfig struct {
+type ComposeDef struct {
 	// Files are the Compose file paths, in the order declared, later ones overriding earlier ones.
 	// It is empty when the declaration names no readable path.
 	Files []string
@@ -120,25 +158,25 @@ type ComposeConfig struct {
 }
 
 // Usable reports whether the declaration settles a container: a service to attach to, and at least
-// one file that may define it. A declaration that does not is still a Compose declaration, so a
-// caller must not fall back to another form on it — see [Compose].
-func (c ComposeConfig) Usable() bool {
+// one file that may define it. A caller that resolves the container reads nothing for a declaration
+// that does not, and must not fall back to another form on it.
+func (c ComposeDef) Usable() bool {
 	return len(c.Files) > 0 && c.Service != ""
 }
 
-// Compose returns the Compose declaration of obj, or nil when "dockerComposeFile" is not there —
+// compose returns the Compose declaration of obj, or nil when "dockerComposeFile" is not there —
 // which is what tells a Compose-based configuration from one that builds or pulls an image. A
-// declaration that is there settles a container only if [ComposeConfig.Usable], and a caller must
-// not fall back to another form on one that does not.
+// declaration that is there settles a container only if [ComposeDef.Usable]; that it settles none
+// does not make the configuration any less Compose-based.
 //
 // "dockerComposeFile" is a single path or an array of them. A value, or an element, that is not a
 // string contributes no path, so a declaration can be there with no path to read.
-func Compose(obj *hujson.Object) *ComposeConfig {
+func compose(obj *hujson.Object) *ComposeDef {
 	m := memberNamed(obj, "dockerComposeFile")
 	if m == nil {
 		return nil
 	}
-	var config ComposeConfig
+	var config ComposeDef
 	switch v := m.Value.Value.(type) {
 	case hujson.Literal:
 		if v.Kind() == '"' {

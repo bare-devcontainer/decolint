@@ -450,16 +450,17 @@ func TestNoImageLatest_Dockerfile_ComposeBuild(t *testing.T) {
 		assertIssuesInDir(t, rules.NoImageLatest, linter.SeverityError, "devcontainer.json", linter.Devcontainer, `{"dockerComposeFile": "docker-compose.yml"}`, dir, nil)
 	})
 
-	t.Run("a Compose configuration is read instead of a build property beside it", func(t *testing.T) {
+	t.Run("a configuration declaring two forms is read in both", func(t *testing.T) {
 		t.Parallel()
 		dir := linter.Dir{FS: fstest.MapFS{
 			"docker-compose.yml": {Data: []byte("services:\n  app:\n    image: ubuntu:24.04\n")},
 			"Dockerfile":         {Data: []byte("FROM ubuntu:latest\n")},
 		}}
-		// A configuration declaring both is reported by conflicting-container-def; the base image
-		// resolves through Compose, as the reference implementation resolves it.
+		// Only one form is valid at a time, which conflicting-container-def reports; an unpinned
+		// image is reported wherever it is written, whichever form the tooling would build.
 		src := `{"dockerComposeFile": "docker-compose.yml", "service": "app", "build": {"dockerfile": "Dockerfile"}}`
-		assertIssuesInDir(t, rules.NoImageLatest, linter.SeverityError, "devcontainer.json", linter.Devcontainer, src, dir, nil)
+		want := []linter.Issue{{Path: "devcontainer.json", Line: 1, Col: 87, RuleID: "no-image-latest", Message: `Dockerfile "Dockerfile": image "ubuntu:latest" uses the "latest" tag; pin a specific version`}}
+		assertIssuesInDir(t, rules.NoImageLatest, linter.SeverityError, "devcontainer.json", linter.Devcontainer, src, dir, want)
 	})
 }
 

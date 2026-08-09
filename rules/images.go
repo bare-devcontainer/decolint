@@ -37,8 +37,8 @@ func configImages(dir linter.Dir, obj *hujson.Object) []pulledImage {
 	if ref, decl, ok := containerdef.Image(obj); ok {
 		images = append(images, pulledImage{ref: ref, offset: decl.ValueOffset})
 	}
-	if paths, decl, declared := containerdef.ComposeFiles(obj); declared {
-		return append(images, composeImages(dir, obj, paths, decl.ValueOffset)...)
+	if compose, declared := containerdef.Compose(obj); declared {
+		return append(images, composeImages(dir, compose)...)
 	}
 	return append(images, dockerfileImages(dir, obj)...)
 }
@@ -60,12 +60,12 @@ func dockerfileImages(dir linter.Dir, obj *hujson.Object) []pulledImage {
 
 // composeImages returns the images the Compose service the dev container runs pulls: the one it
 // runs, or the ones the Dockerfile it builds from pulls.
-func composeImages(dir linter.Dir, obj *hujson.Object, paths []string, offset int) []pulledImage {
-	service, _, ok := containerdef.ComposeService(obj)
-	if !ok {
+func composeImages(dir linter.Dir, compose containerdef.ComposeConfig) []pulledImage {
+	if !compose.Usable() {
 		return nil
 	}
-	source, ok := composeServiceSource(dir, paths, service)
+	service, offset := compose.Service, compose.FilesDecl.ValueOffset
+	source, ok := composeServiceSource(dir, compose.Files, service)
 	if !ok {
 		return nil
 	}

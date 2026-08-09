@@ -11,7 +11,7 @@ import (
 type Metadata struct {
 	// ID is the Feature's declared identifier, or "" when it declares none (as image-metadata
 	// entries do; see [contributor.hasID]).
-	ID string
+	ID      string
 	Version string
 	// DependsOn lists the Features this Feature depends on, in declaration order. Dependencies are
 	// installed before the Feature and contribute properties of their own.

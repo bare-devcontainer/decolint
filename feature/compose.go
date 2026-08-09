@@ -32,18 +32,14 @@ func composeContributors(ctx context.Context, f *Fetcher, fsRoot *os.Root, confi
 	if !ok {
 		return nil, false, nil
 	}
-	paths, decl, declared := containerdef.ComposeFiles(obj)
+	compose, declared := containerdef.Compose(obj)
 	if !declared {
 		return nil, false, nil
 	}
-	anchor := decl.KeyOffset
-	if len(paths) == 0 {
+	if !compose.Usable() {
 		return nil, true, nil
 	}
-	service, _, ok := containerdef.ComposeService(obj)
-	if !ok {
-		return nil, true, nil
-	}
+	paths, service, anchor := compose.Files, compose.Service, compose.FilesDecl.KeyOffset
 	// The Compose files resolve relative to the referencing devcontainer.json's directory on the real
 	// filesystem, as "docker compose" itself would. The directory is made absolute so that compose-go
 	// resolves the build context to an absolute path too, which composeDisplayRef relies on.

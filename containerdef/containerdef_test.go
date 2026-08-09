@@ -123,61 +123,99 @@ func TestBuildOptions(t *testing.T) {
 	}
 }
 
-func TestComposeFiles(t *testing.T) {
+func TestCompose(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
 		name         string
 		src          string
-		want         []string
+		wantFiles    []string
+		wantService  string
 		wantDeclared bool
+		wantUsable   bool
 	}{
-		{"a single path", `{"dockerComposeFile": "docker-compose.yml"}`, []string{"docker-compose.yml"}, true},
-		{"a list of paths", `{"dockerComposeFile": ["a.yml", "b.yml"]}`, []string{"a.yml", "b.yml"}, true},
-		{"not declared", `{"image": "ubuntu:24.04"}`, nil, false},
+		{
+			name:         "a single file and a service",
+			src:          `{"dockerComposeFile": "docker-compose.yml", "service": "app"}`,
+			wantFiles:    []string{"docker-compose.yml"},
+			wantService:  "app",
+			wantDeclared: true,
+			wantUsable:   true,
+		},
+		{
+			name:         "a list of files",
+			src:          `{"dockerComposeFile": ["a.yml", "b.yml"], "service": "app"}`,
+			wantFiles:    []string{"a.yml", "b.yml"},
+			wantService:  "app",
+			wantDeclared: true,
+			wantUsable:   true,
+		},
+		{name: "not declared", src: `{"image": "ubuntu:24.04"}`},
 		{
 			// The configuration says it is Compose-based, so a caller must not fall back to another
-			// form, even though there is no path to read.
-			"declared but not a path",
-			`{"dockerComposeFile": 42}`,
-			nil, true,
+			// form, even though there is nothing to attach to.
+			name:         "declared without a service",
+			src:          `{"dockerComposeFile": "docker-compose.yml"}`,
+			wantFiles:    []string{"docker-compose.yml"},
+			wantDeclared: true,
 		},
-		{"a non-string element is left out", `{"dockerComposeFile": ["a.yml", 42]}`, []string{"a.yml"}, true},
+		{
+			name:         "declared with no readable path",
+			src:          `{"dockerComposeFile": 42, "service": "app"}`,
+			wantService:  "app",
+			wantDeclared: true,
+		},
+		{
+			name:         "a non-string element is left out",
+			src:          `{"dockerComposeFile": ["a.yml", 42], "service": "app"}`,
+			wantFiles:    []string{"a.yml"},
+			wantService:  "app",
+			wantDeclared: true,
+			wantUsable:   true,
+		},
+		{
+			name:         "a non-string service is no service",
+			src:          `{"dockerComposeFile": "docker-compose.yml", "service": 42}`,
+			wantFiles:    []string{"docker-compose.yml"},
+			wantDeclared: true,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			got, _, declared := containerdef.ComposeFiles(object(t, tt.src))
-			if diff := cmp.Diff(tt.want, got); diff != "" {
-				t.Errorf("paths mismatch (-want +got):\n%s", diff)
-			}
+
+			got, declared := containerdef.Compose(object(t, tt.src))
 			if declared != tt.wantDeclared {
-				t.Errorf("declared = %v, want %v", declared, tt.wantDeclared)
+				t.Fatalf("declared = %v, want %v", declared, tt.wantDeclared)
+			}
+			if diff := cmp.Diff(tt.wantFiles, got.Files); diff != "" {
+				t.Errorf("files mismatch (-want +got):\n%s", diff)
+			}
+			if got.Service != tt.wantService {
+				t.Errorf("service = %q, want %q", got.Service, tt.wantService)
+			}
+			if got.Usable() != tt.wantUsable {
+				t.Errorf("Usable = %v, want %v", got.Usable(), tt.wantUsable)
 			}
 		})
 	}
 }
 
-func TestComposeService(t *testing.T) {
+// TestCompose_Offsets checks that both properties are located, since the merge anchors its findings
+// at the key and a rule at the value.
+func TestCompose_Offsets(t *testing.T) {
 	t.Parallel()
 
-	tests := []struct {
-		name string
-		src  string
-		want string
-		ok   bool
-	}{
-		{"a named service", `{"service": "app"}`, "app", true},
-		{"no service", `{"dockerComposeFile": "docker-compose.yml"}`, "", false},
-		{"a non-string service", `{"service": 42}`, "", false},
+	// `{"dockerComposeFile": "c.yml", "service": "app"}` — the key opens at 1 and the value at 22;
+	// "service" opens at 31 with its value at 42.
+	got, declared := containerdef.Compose(object(t, `{"dockerComposeFile": "c.yml", "service": "app"}`))
+	if !declared {
+		t.Fatal("Compose: not declared")
 	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-			got, _, ok := containerdef.ComposeService(object(t, tt.src))
-			if got != tt.want || ok != tt.ok {
-				t.Errorf("ComposeService = (%q, %v), want (%q, %v)", got, ok, tt.want, tt.ok)
-			}
-		})
+	if got.FilesDecl.KeyOffset != 1 || got.FilesDecl.ValueOffset != 22 {
+		t.Errorf("FilesDecl = %+v, want {KeyOffset:1 ValueOffset:22}", got.FilesDecl)
+	}
+	if got.ServiceDecl.KeyOffset != 31 || got.ServiceDecl.ValueOffset != 42 {
+		t.Errorf("ServiceDecl = %+v, want {KeyOffset:31 ValueOffset:42}", got.ServiceDecl)
 	}
 }

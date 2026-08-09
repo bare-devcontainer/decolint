@@ -80,45 +80,61 @@ func BuildOptions(obj *hujson.Object) (args map[string]string, target string) {
 	return args, target
 }
 
-// ComposeFiles returns the Compose file paths "dockerComposeFile" names, in the order they are
-// declared, later ones overriding earlier ones. The property is a single path or an array of them.
+// ComposeConfig is the Compose declaration of a devcontainer.json: the files it names and the
+// service the dev container runs in. The two are read together because neither settles anything
+// alone — a configuration that names files but no service says which Compose project it belongs to
+// and not which container it is.
+type ComposeConfig struct {
+	// Files are the Compose file paths, in the order declared, later ones overriding earlier ones.
+	// It is empty when the declaration names no readable path.
+	Files []string
+	// FilesDecl is where "dockerComposeFile" is written.
+	FilesDecl Decl
+	// Service is the service the dev container runs in, empty when the configuration names none or
+	// names it as something other than a string.
+	Service string
+	// ServiceDecl is where "service" is written; the zero value when the configuration has none.
+	ServiceDecl Decl
+}
+
+// Usable reports whether the declaration settles a container: a service to attach to, and at least
+// one file that may define it. A declaration that does not is still a Compose declaration, so a
+// caller must not fall back to another form on it — see [Compose].
+func (c ComposeConfig) Usable() bool {
+	return len(c.Files) > 0 && c.Service != ""
+}
+
+// Compose returns the Compose declaration of obj. declared reports whether "dockerComposeFile" is
+// there at all, which is what tells a Compose-based configuration from one that builds or pulls an
+// image; whether the declaration settles a container is [ComposeConfig.Usable].
 //
-// declared reports whether the property is there at all, which is what tells a Compose-based
-// configuration from one that builds or pulls an image. A declaration whose value, or whose element,
-// is not a string contributes no path, so declared can be true with no paths: the configuration says
-// it is Compose-based while naming nothing readable.
-func ComposeFiles(obj *hujson.Object) (paths []string, decl Decl, declared bool) {
+// "dockerComposeFile" is a single path or an array of them. A value, or an element, that is not a
+// string contributes no path, so a declaration can be there with no path to read.
+func Compose(obj *hujson.Object) (config ComposeConfig, declared bool) {
 	m := memberNamed(obj, "dockerComposeFile")
 	if m == nil {
-		return nil, Decl{}, false
+		return ComposeConfig{}, false
 	}
 	switch v := m.Value.Value.(type) {
 	case hujson.Literal:
 		if v.Kind() == '"' {
-			paths = []string{v.String()}
+			config.Files = []string{v.String()}
 		}
 	case *hujson.Array:
 		for _, e := range v.Elements {
 			if lit, isLit := e.Value.(hujson.Literal); isLit && lit.Kind() == '"' {
-				paths = append(paths, lit.String())
+				config.Files = append(config.Files, lit.String())
 			}
 		}
 	}
-	return paths, declOf(m), true
-}
+	config.FilesDecl = declOf(m)
 
-// ComposeService returns the Compose service "service" names, the one the dev container runs in. ok
-// is false when the property is absent or is not a string.
-func ComposeService(obj *hujson.Object) (name string, decl Decl, ok bool) {
-	m := memberNamed(obj, "service")
-	if m == nil {
-		return "", Decl{}, false
+	if m := memberNamed(obj, "service"); m != nil {
+		if lit, isLit := m.Value.Value.(hujson.Literal); isLit && lit.Kind() == '"' {
+			config.Service, config.ServiceDecl = lit.String(), declOf(m)
+		}
 	}
-	lit, isLit := m.Value.Value.(hujson.Literal)
-	if !isLit || lit.Kind() != '"' {
-		return "", Decl{}, false
-	}
-	return lit.String(), declOf(m), true
+	return config, true
 }
 
 // buildObject returns the "build" object, or nil when the configuration declares none or declares it

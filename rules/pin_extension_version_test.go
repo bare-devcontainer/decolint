@@ -26,6 +26,10 @@ func TestPinExtensionVersion(t *testing.T) {
 			{Path: "devcontainer.json", Line: 1, Col: 47, RuleID: "pin-extension-version", Message: `extension "golang.go@" has no explicit version; pin a specific version`},
 		}},
 		{"non-string extension entry", `{"customizations": {"vscode": {"extensions": [123]}}}`, nil},
+		// A Feature's unpinned entry, which the merge appends alongside the user's pinned one.
+		{"same extension pinned by another entry", `{"customizations": {"vscode": {"extensions": ["golang.go", "golang.go@0.54.0"]}}}`, nil},
+		{"same extension pinned by an earlier entry", `{"customizations": {"vscode": {"extensions": ["golang.go@0.54.0", "golang.go"]}}}`, nil},
+		{"same extension pinned in another case", `{"customizations": {"vscode": {"extensions": ["golang.Go", "GOLANG.go@0.54.0"]}}}`, nil},
 		{"non-array extensions", `{"customizations": {"vscode": {"extensions": "invalid"}}}`, nil},
 		{"multiple extensions mixed", `{"customizations": {"vscode": {"extensions": [
   "golang.go@0.54.0",

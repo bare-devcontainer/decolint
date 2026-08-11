@@ -243,7 +243,7 @@ func holdsFeatureRefs(fileType linter.FileType, pointer string) bool {
 }
 
 // featureRef is a Feature reference, as written for a key of a devcontainer.json "features" or a
-// Feature's "dependsOn", with how it locates the Feature and the byte offset of that key.
+// Feature's "dependsOn", with the byte offset of that key.
 type featureRef struct {
 	ref    string
 	kind   feature.RefKind
@@ -255,8 +255,7 @@ type featureRef struct {
 //
 // References are told apart by [feature.ParseRef], which is what resolves them for the merge, so a
 // rule reads the three forms the specification defines and the reference implementation accepts. One
-// that parses as none of them names no Feature to report on and is left out; a rule that can report
-// on only some kinds skips the rest by their [featureRef.kind].
+// that parses as none of them names no Feature to report on and is left out.
 //
 // A caller reading the version a reference names takes it from the reference as written, not from
 // the parsed [feature.Ref]: ParseRef normalizes a reference with no version to the "latest" tag, and

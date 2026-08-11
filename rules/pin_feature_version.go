@@ -11,7 +11,7 @@ import (
 // explicit version tag or with the "latest" tag. Such references are not reproducible: the Feature
 // they resolve to changes over time. The other two forms the specification defines — a relative path
 // (e.g. "./my-feature") and a direct HTTPS tarball URI — carry no version to pin and are not
-// checked; see [featureRefs].
+// checked.
 var PinFeatureVersion = &linter.Rule{
 	ID:          "pin-feature-version",
 	Description: `disallow a Feature reference without an explicit version or with the "latest" version`,

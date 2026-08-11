@@ -70,7 +70,7 @@ func TestPinFeatureExactVersion(t *testing.T) {
 		{"registry port with a full version", `{"features": {"localhost:5000/features/foo:1.0.0": {}}}`, nil},
 		{
 			// "dependsOn" is a Feature's property; a devcontainer.json asks for Features under
-			// "features" alone, so a member spelled that way holds no Feature reference.
+			// "features" alone.
 			"a dependsOn member of a devcontainer.json is not a Feature reference",
 			`{"dependsOn": {"ghcr.io/devcontainers/features/go": {}}}`,
 			nil,
@@ -105,7 +105,7 @@ func TestPinFeatureExactVersion_DependsOn(t *testing.T) {
 		{"no dependsOn property", `{"id": "my-feature"}`, nil},
 		{
 			// A Feature declares its dependencies under "dependsOn"; the specification gives it no
-			// "features" property, so a member spelled that way holds no Feature reference.
+			// "features" property.
 			"a features member of a Feature is not a Feature reference",
 			`{"features": {"ghcr.io/devcontainers/features/common-utils": {}}}`,
 			nil,

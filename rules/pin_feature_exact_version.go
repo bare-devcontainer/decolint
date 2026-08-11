@@ -10,9 +10,10 @@ import (
 )
 
 // exactFeatureVersion matches a full "major.minor.patch" Feature version, with the optional
-// prerelease suffix semver allows. A component with a leading zero is not one: semver forbids it, so
-// no Feature is published under it. Neither is the build metadata semver allows, "+" being no legal
-// character in a tag.
+// prerelease suffix semver allows. Two spellings are left out because no Feature is published under
+// them:
+//   - a component with a leading zero, which semver forbids;
+//   - the build metadata semver allows, "+" being no legal character in a tag.
 var exactFeatureVersion = regexp.MustCompile(`^(?:0|[1-9][0-9]*)(?:\.(?:0|[1-9][0-9]*)){2}(?:-[0-9A-Za-z.-]+)?$`)
 
 // PinFeatureExactVersion reports a Feature reference that names something other than one published
@@ -58,8 +59,7 @@ A reference pinned by digest is accepted as it already names exact content.`,
 `},
 			},
 		},
-		Note: "A Feature's own `dependsOn` entries are checked the same way, so a Feature pins the\n" +
-			"Features it pulls in as tightly as a project pins the ones it asks for.",
+		Note: "A Feature's own `dependsOn` entries are checked the same way.",
 	},
 	Check: checkPinFeatureExactVersion,
 }

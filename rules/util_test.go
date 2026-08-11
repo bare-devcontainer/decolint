@@ -9,15 +9,17 @@ import (
 	"github.com/tailscale/hujson"
 )
 
-// TestFeatureRefs covers each form the specification defines, and the references that are none of
-// them: a rule selects the kinds it can report on and must be handed nothing outside the three.
+// TestFeatureRefs covers each form the specification defines and the references that are none of
+// them, which belong to no kind and are left out.
 func TestFeatureRefs(t *testing.T) {
 	t.Parallel()
 
 	// One object carrying every form, so each kind is seen alongside the ones it is told apart from.
-	// An absolute path, a bare name and an upper-case registry are none of the three forms: the
-	// specification's local form is a relative path, and an OCI reference needs a registry it can be
-	// fetched from. The tarball form is an HTTPS URI; the "http://" spelling is not one.
+	// The references left out are none of the three forms:
+	//   - "http://...": the tarball form is an HTTPS URI;
+	//   - "/absolute/feature": the local form is a relative path;
+	//   - "no-slash": an OCI reference needs a registry to be fetched from;
+	//   - "GHCR.IO/UPPER/CASE": an OCI reference is lower-case.
 	const src = `{
   "ghcr.io/devcontainers/features/go:1.3.2": {},
   "localhost:5000/features/foo": {},
@@ -55,8 +57,8 @@ func TestFeatureRefs(t *testing.T) {
 	}
 }
 
-// TestFeatureRefs_NotAnObject covers the value a rule is handed when the property holding the
-// references is misspelled as something else.
+// TestFeatureRefs_NotAnObject covers a property whose value is not an object of references, which a
+// rule is offered as readily as a well-formed one.
 func TestFeatureRefs_NotAnObject(t *testing.T) {
 	t.Parallel()
 

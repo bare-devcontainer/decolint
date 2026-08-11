@@ -23,9 +23,14 @@ func TestPinFeatureVersion(t *testing.T) {
 			{Path: "devcontainer.json", Line: 1, Col: 15, RuleID: "pin-feature-version", Message: `feature "ghcr.io/devcontainers/features/node:latest" uses the "latest" version; pin a specific version`},
 		}},
 		{"pinned version", `{"features": {"ghcr.io/devcontainers/features/node:1": {}}}`, nil},
-		{"pinned digest", `{"features": {"ghcr.io/devcontainers/features/node@sha256:abc123": {}}}`, nil},
+		{"pinned digest", `{"features": {"ghcr.io/devcontainers/features/node@sha256:0000000000000000000000000000000000000000000000000000000000000000": {}}}`, nil},
 		{"local path feature", `{"features": {"./local-feature": {}}}`, nil},
 		{"tarball uri feature", `{"features": {"https://example.com/devcontainer-feature.tgz": {}}}`, nil},
+		// A reference in none of the three forms the specification defines names no Feature, so
+		// there is no version to pin in it.
+		{"absolute path", `{"features": {"/absolute/feature": {}}}`, nil},
+		{"no registry", `{"features": {"no-slash": {}}}`, nil},
+		{"upper-case registry", `{"features": {"GHCR.IO/UPPER/CASE": {}}}`, nil},
 		{"registry port without tag", `{"features": {"localhost:5000/features/foo": {}}}`, []linter.Issue{
 			{Path: "devcontainer.json", Line: 1, Col: 15, RuleID: "pin-feature-version", Message: `feature "localhost:5000/features/foo" has no explicit version; pin a specific version`},
 		}},

@@ -245,6 +245,16 @@ func TestFinishCustomizations(t *testing.T) {
 			want: `{"customizations": {"vscode": {"extensions": ["feature.ext", "user.ext"], "settings": {"a": "user", "b": "feature"}}}}`,
 		},
 		{
+			// Entries are deduplicated as written, so pinning an extension a Feature contributes
+			// unpinned leaves the list holding both spellings of it.
+			name: "an entry pinning a contributed extension is kept alongside it",
+			user: `{"customizations": {"vscode": {"extensions": ["golang.go@0.54.0"]}}}`,
+			features: []string{
+				`{"id": "f", "customizations": {"vscode": {"extensions": ["golang.go"]}}}`,
+			},
+			want: `{"customizations": {"vscode": {"extensions": ["golang.go", "golang.go@0.54.0"]}}}`,
+		},
+		{
 			name:     "accumulated customizations are added when the user has none",
 			user:     `{}`,
 			features: []string{`{"id": "f", "customizations": {"vscode": {"extensions": ["e"]}}}`},

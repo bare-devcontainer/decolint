@@ -11,7 +11,7 @@ import (
 // explicit version tag or with the "latest" tag. Such references are not reproducible: the Feature
 // they resolve to changes over time. The other two forms the specification defines — a relative path
 // (e.g. "./my-feature") and a direct HTTPS tarball URI — carry no version to pin and are not
-// checked; see [featureRefsOfKind].
+// checked; see [featureRefs].
 var PinFeatureVersion = &linter.Rule{
 	ID:          "pin-feature-version",
 	Description: `disallow a Feature reference without an explicit version or with the "latest" version`,
@@ -55,7 +55,10 @@ devcontainer.json changing at all. Features are published under their full versi
 
 func checkPinFeatureVersion(_ *linter.Context, node *linter.Node) []linter.Finding {
 	var findings []linter.Finding
-	for _, f := range featureRefsOfKind(node.Value, feature.KindOCI) {
+	for _, f := range featureRefs(node.Value) {
+		if f.kind != feature.KindOCI {
+			continue
+		}
 		tag, hasTag := refTag(f.ref)
 		switch {
 		case !hasTag:

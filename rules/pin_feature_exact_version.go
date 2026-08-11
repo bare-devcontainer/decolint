@@ -70,7 +70,10 @@ func checkPinFeatureExactVersion(ctx *linter.Context, node *linter.Node) []linte
 	}
 
 	var findings []linter.Finding
-	for _, f := range featureRefsOfKind(node.Value, feature.KindOCI) {
+	for _, f := range featureRefs(node.Value) {
+		if f.kind != feature.KindOCI {
+			continue
+		}
 		// A digest names the content itself, whatever tag it is written alongside.
 		if strings.Contains(f.ref, "@") {
 			continue

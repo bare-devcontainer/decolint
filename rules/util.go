@@ -242,25 +242,26 @@ func holdsFeatureRefs(fileType linter.FileType, pointer string) bool {
 	}
 }
 
-// featureRef is an OCI Feature reference, as written for a key of a devcontainer.json "features" or
-// a Feature's "dependsOn", with the byte offset of that key.
+// featureRef is a Feature reference, as written for a key of a devcontainer.json "features" or a
+// Feature's "dependsOn", with how it locates the Feature and the byte offset of that key.
 type featureRef struct {
 	ref    string
+	kind   feature.RefKind
 	offset int
 }
 
-// featureRefsOfKind returns the Feature references of the given kind the members of v are keyed by,
-// for a v that is an object of them. It returns none for a value that is not one.
+// featureRefs returns the Feature references the members of v are keyed by, for a v that is an
+// object of them. It returns none for a value that is not one.
 //
 // References are told apart by [feature.ParseRef], which is what resolves them for the merge, so a
 // rule reads the three forms the specification defines and the reference implementation accepts. One
-// that parses as none of them names no Feature to report on, and is left out along with the kinds
-// not asked for.
+// that parses as none of them names no Feature to report on and is left out; a rule that can report
+// on only some kinds skips the rest by their [featureRef.kind].
 //
 // A caller reading the version a reference names takes it from the reference as written, not from
 // the parsed [feature.Ref]: ParseRef normalizes a reference with no version to the "latest" tag, and
 // a rule telling those two apart would lose the distinction.
-func featureRefsOfKind(v *hujson.Value, kind feature.RefKind) []featureRef {
+func featureRefs(v *hujson.Value) []featureRef {
 	obj, ok := v.Value.(*hujson.Object)
 	if !ok {
 		return nil
@@ -273,10 +274,10 @@ func featureRefsOfKind(v *hujson.Value, kind feature.RefKind) []featureRef {
 		}
 		ref := name.String()
 		parsed, err := feature.ParseRef(ref)
-		if err != nil || parsed.Kind != kind {
+		if err != nil {
 			continue
 		}
-		refs = append(refs, featureRef{ref: ref, offset: m.Name.StartOffset})
+		refs = append(refs, featureRef{ref: ref, kind: parsed.Kind, offset: m.Name.StartOffset})
 	}
 	return refs
 }

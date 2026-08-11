@@ -25,8 +25,39 @@ func TestPinExtensionVersion(t *testing.T) {
 		{"trailing @ with empty version", `{"customizations": {"vscode": {"extensions": ["golang.go@"]}}}`, []linter.Issue{
 			{Path: "devcontainer.json", Line: 1, Col: 47, RuleID: "pin-extension-version", Message: `extension "golang.go@" has no explicit version; pin a specific version`},
 		}},
+		{"pinned pre-release build", `{"customizations": {"vscode": {"extensions": ["golang.go@0.54.0-beta.1"]}}}`, nil},
+		{"prerelease extension", `{"customizations": {"vscode": {"extensions": ["golang.go@prerelease"]}}}`, []linter.Issue{
+			{Path: "devcontainer.json", Line: 1, Col: 47, RuleID: "pin-extension-version", Message: `extension "golang.go@prerelease" uses the "prerelease" version; pin a specific version`},
+		}},
 		{"non-string extension entry", `{"customizations": {"vscode": {"extensions": [123]}}}`, nil},
+		// A contributed unpinned entry, which the merge appends alongside the user's pinned one.
+		{"same extension pinned by another entry", `{"customizations": {"vscode": {"extensions": ["golang.go", "golang.go@0.54.0"]}}}`, nil},
+		{"same extension pinned by an earlier entry", `{"customizations": {"vscode": {"extensions": ["golang.go@0.54.0", "golang.go"]}}}`, nil},
+		{"same extension pinned in another case", `{"customizations": {"vscode": {"extensions": ["golang.Go", "GOLANG.go@0.54.0"]}}}`, nil},
+		{"prerelease does not pin the extension", `{"customizations": {"vscode": {"extensions": [
+  "golang.go",
+  "golang.go@prerelease"
+]}}}`, []linter.Issue{
+			{Path: "devcontainer.json", Line: 2, Col: 3, RuleID: "pin-extension-version", Message: `extension "golang.go" has no explicit version; pin a specific version`},
+			{Path: "devcontainer.json", Line: 3, Col: 3, RuleID: "pin-extension-version", Message: `extension "golang.go@prerelease" uses the "prerelease" version; pin a specific version`},
+		}},
+		// A suffix the editor does not read as a version belongs to the ID, so it names another
+		// extension entirely and the pinned entry does not cover it.
+		{"unread version suffix", `{"customizations": {"vscode": {"extensions": [
+  "golang.go@latest",
+  "golang.go@0.54.0"
+]}}}`, []linter.Issue{
+			{Path: "devcontainer.json", Line: 2, Col: 3, RuleID: "pin-extension-version", Message: `extension "golang.go@latest" has no explicit version; pin a specific version`},
+		}},
+		{"version without an extension ID", `{"customizations": {"vscode": {"extensions": [
+  "",
+  "@0.54.0"
+]}}}`, []linter.Issue{
+			{Path: "devcontainer.json", Line: 2, Col: 3, RuleID: "pin-extension-version", Message: `extension "" has no explicit version; pin a specific version`},
+			{Path: "devcontainer.json", Line: 3, Col: 3, RuleID: "pin-extension-version", Message: `extension "@0.54.0" has no explicit version; pin a specific version`},
+		}},
 		{"non-array extensions", `{"customizations": {"vscode": {"extensions": "invalid"}}}`, nil},
+		{"object extensions", `{"customizations": {"vscode": {"extensions": {"golang.go": true}}}}`, nil},
 		{"multiple extensions mixed", `{"customizations": {"vscode": {"extensions": [
   "golang.go@0.54.0",
   "EditorConfig.EditorConfig"

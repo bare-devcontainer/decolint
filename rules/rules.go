@@ -60,6 +60,7 @@ var builtinRuleList = []*linter.Rule{
 	NoSeccompOverride,
 	NoSeccompUnconfined,
 	PinExtensionVersion,
+	PinFeatureExactVersion,
 	PinFeatureVersion,
 	PinImageDigest,
 	RequireCapDropAll,

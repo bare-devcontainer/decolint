@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/bare-devcontainer/decolint/dockerargs"
+	"github.com/bare-devcontainer/decolint/feature"
 	"github.com/bare-devcontainer/decolint/linter"
 	"github.com/tailscale/hujson"
 )
@@ -224,6 +225,60 @@ func stringMember(obj *hujson.Object, name string) (string, bool) {
 		return lit.String(), true
 	}
 	return "", false
+}
+
+// holdsFeatureRefs reports whether pointer names the property that holds Feature references in a
+// file of the given type: "features" in a devcontainer.json, "dependsOn" in a Feature. A rule
+// declares its paths for every file type it applies to, so one covering both properties is offered
+// each of them in each file — including the combinations the specification does not define.
+func holdsFeatureRefs(fileType linter.FileType, pointer string) bool {
+	switch fileType {
+	case linter.Devcontainer:
+		return pointer == "/features"
+	case linter.Feature:
+		return pointer == "/dependsOn"
+	default:
+		return false
+	}
+}
+
+// featureRef is a Feature reference, as written for a key of a devcontainer.json "features" or a
+// Feature's "dependsOn", with the byte offset of that key.
+type featureRef struct {
+	ref    string
+	kind   feature.RefKind
+	offset int
+}
+
+// featureRefs returns the Feature references the members of v are keyed by, for a v that is an
+// object of them. It returns none for a value that is not one.
+//
+// References are told apart by [feature.ParseRef], which is what resolves them for the merge, so a
+// rule reads the three forms the specification defines and the reference implementation accepts. One
+// that parses as none of them names no Feature to report on and is left out.
+//
+// A caller reading the version a reference names takes it from the reference as written, not from
+// the parsed [feature.Ref]: ParseRef normalizes a reference with no version to the "latest" tag, and
+// a rule telling those two apart would lose the distinction.
+func featureRefs(v *hujson.Value) []featureRef {
+	obj, ok := v.Value.(*hujson.Object)
+	if !ok {
+		return nil
+	}
+	var refs []featureRef
+	for _, m := range obj.Members {
+		name, ok := m.Name.Value.(hujson.Literal)
+		if !ok || name.Kind() != '"' {
+			continue
+		}
+		ref := name.String()
+		parsed, err := feature.ParseRef(ref)
+		if err != nil {
+			continue
+		}
+		refs = append(refs, featureRef{ref: ref, kind: parsed.Kind, offset: m.Name.StartOffset})
+	}
+	return refs
 }
 
 // refTag extracts the tag from an OCI-style reference, e.g. a container image or Feature reference.

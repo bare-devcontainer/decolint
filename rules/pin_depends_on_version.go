@@ -61,7 +61,10 @@ without the Feature's version changing.`,
 
 func checkPinDependsOnVersion(_ *linter.Context, node *linter.Node) []linter.Finding {
 	var findings []linter.Finding
-	for _, f := range featureRefsOfKind(node.Value, feature.KindOCI) {
+	for _, f := range featureRefs(node.Value) {
+		if f.kind != feature.KindOCI {
+			continue
+		}
 		tag, hasTag := refTag(f.ref)
 		switch {
 		case !hasTag:

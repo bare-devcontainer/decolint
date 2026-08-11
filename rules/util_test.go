@@ -11,12 +11,17 @@ import (
 	"github.com/tailscale/hujson"
 )
 
-// TestFeatureRefsOfKind covers each form the specification defines, and the references that are none
-// of them: a rule asks for the kind it can report on and must be handed nothing else.
-func TestFeatureRefsOfKind(t *testing.T) {
+// TestFeatureRefs covers each form the specification defines and the references that are none of
+// them, which belong to no kind and are left out.
+func TestFeatureRefs(t *testing.T) {
 	t.Parallel()
 
-	// One object carrying every form, so each case sees the ones it must leave behind.
+	// One object carrying every form, so each kind is seen alongside the ones it is told apart from.
+	// The references left out are none of the three forms:
+	//   - "http://...": the tarball form is an HTTPS URI;
+	//   - "/absolute/feature": the local form is a relative path;
+	//   - "no-slash": an OCI reference needs a registry to be fetched from;
+	//   - "GHCR.IO/UPPER/CASE": an OCI reference is lower-case.
 	const src = `{
   "ghcr.io/devcontainers/features/go:1.3.2": {},
   "localhost:5000/features/foo": {},
@@ -29,60 +34,43 @@ func TestFeatureRefsOfKind(t *testing.T) {
   "GHCR.IO/UPPER/CASE": {}
 }`
 
-	tests := []struct {
-		name string
+	type kindOf struct {
+		ref  string
 		kind feature.RefKind
-		want []string
-	}{
-		{
-			// An absolute path, a bare name and an upper-case registry are none of the three forms:
-			// the specification's local form is a relative path, and an OCI reference needs a
-			// registry it can be fetched from.
-			name: "OCI",
-			kind: feature.KindOCI,
-			want: []string{"ghcr.io/devcontainers/features/go:1.3.2", "localhost:5000/features/foo"},
-		},
-		{
-			name: "local",
-			kind: feature.KindLocal,
-			want: []string{"./local-feature", "../sibling-feature"},
-		},
-		{
-			// The tarball form is an HTTPS URI; the "http://" spelling is not one.
-			name: "tarball",
-			kind: feature.KindTarball,
-			want: []string{"https://example.invalid/devcontainer-feature.tgz"},
-		},
 	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-
-			value, err := hujson.Parse([]byte(src))
-			if err != nil {
-				t.Fatalf("parse: %v", err)
-			}
-			var got []string
-			for _, ref := range featureRefsOfKind(&value, tt.kind) {
-				got = append(got, ref.ref)
-			}
-			if !slices.Equal(got, tt.want) {
-				t.Errorf("featureRefsOfKind(%v) = %q, want %q", tt.kind, got, tt.want)
-			}
-		})
+	want := []kindOf{
+		{"ghcr.io/devcontainers/features/go:1.3.2", feature.KindOCI},
+		{"localhost:5000/features/foo", feature.KindOCI},
+		{"./local-feature", feature.KindLocal},
+		{"../sibling-feature", feature.KindLocal},
+		{"https://example.invalid/devcontainer-feature.tgz", feature.KindTarball},
 	}
 
-	t.Run("a value that is not an object", func(t *testing.T) {
-		t.Parallel()
+	value, err := hujson.Parse([]byte(src))
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	var got []kindOf
+	for _, ref := range featureRefs(&value) {
+		got = append(got, kindOf{ref.ref, ref.kind})
+	}
+	if !slices.Equal(got, want) {
+		t.Errorf("featureRefs = %+v, want %+v", got, want)
+	}
+}
 
-		value, err := hujson.Parse([]byte(`"not an object"`))
-		if err != nil {
-			t.Fatalf("parse: %v", err)
-		}
-		if got := featureRefsOfKind(&value, feature.KindOCI); got != nil {
-			t.Errorf("featureRefsOfKind = %v, want none", got)
-		}
-	})
+// TestFeatureRefs_NotAnObject covers a property whose value is not an object of references, which a
+// rule is offered as readily as a well-formed one.
+func TestFeatureRefs_NotAnObject(t *testing.T) {
+	t.Parallel()
+
+	value, err := hujson.Parse([]byte(`"not an object"`))
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	if got := featureRefs(&value); got != nil {
+		t.Errorf("featureRefs = %+v, want none", got)
+	}
 }
 
 // TestHoldsFeatureRefs covers every file type, including the one no rule declaring these paths

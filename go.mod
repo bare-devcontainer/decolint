@@ -3,7 +3,7 @@ module github.com/bare-devcontainer/decolint
 go 1.26.5
 
 require (
-	github.com/compose-spec/compose-go/v2 v2.13.0
+	github.com/compose-spec/compose-go/v2 v2.14.0
 	github.com/google/go-cmp v0.7.0
 	github.com/moby/buildkit v0.32.0
 	github.com/olareg/olareg v0.2.2

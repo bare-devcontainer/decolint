@@ -5,7 +5,7 @@ go 1.27.0
 require (
 	github.com/compose-spec/compose-go/v2 v2.14.0
 	github.com/google/go-cmp v0.7.0
-	github.com/moby/buildkit v0.32.0
+	github.com/moby/buildkit v0.32.2
 	github.com/olareg/olareg v0.2.2
 	github.com/opencontainers/go-digest v1.0.0
 	github.com/opencontainers/image-spec v1.1.1

@@ -7,7 +7,6 @@ import (
 
 	"github.com/bare-devcontainer/decolint/ocitest"
 	"github.com/opencontainers/go-digest"
-	specs "github.com/opencontainers/image-spec/specs-go"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 	"oras.land/oras-go/v2/registry/remote"
 )
@@ -58,8 +57,8 @@ func TestFetchOCI_EmptyIndex(t *testing.T) {
 	repo.PlainHTTP = true
 
 	indexBytes := mustMarshal(t, ocispec.Index{
-		Versioned: specs.Versioned{SchemaVersion: 2},
-		MediaType: ocispec.MediaTypeImageIndex,
+		SchemaVersion: 2,
+		MediaType:     ocispec.MediaTypeImageIndex,
 	})
 	indexDesc := ocispec.Descriptor{
 		MediaType: ocispec.MediaTypeImageIndex,
@@ -106,10 +105,10 @@ func TestFetchOCI_RejectsNonFeatureConfig(t *testing.T) {
 	layerDesc := push(featureLayerMediaType, ocitest.FeatureArchive(t, `{"id": "notafeature"}`, false))
 
 	manBytes := mustMarshal(t, ocispec.Manifest{
-		Versioned: specs.Versioned{SchemaVersion: 2},
-		MediaType: ocispec.MediaTypeImageManifest,
-		Config:    configDesc,
-		Layers:    []ocispec.Descriptor{layerDesc},
+		SchemaVersion: 2,
+		MediaType:     ocispec.MediaTypeImageManifest,
+		Config:        configDesc,
+		Layers:        []ocispec.Descriptor{layerDesc},
 	})
 	manDesc := ocispec.Descriptor{
 		MediaType: ocispec.MediaTypeImageManifest,
@@ -156,10 +155,10 @@ func TestFetchOCI_RejectsOversizedLayer(t *testing.T) {
 	layerDesc.Size = maxArchiveBytes + 1
 
 	manBytes := mustMarshal(t, ocispec.Manifest{
-		Versioned: specs.Versioned{SchemaVersion: 2},
-		MediaType: ocispec.MediaTypeImageManifest,
-		Config:    configDesc,
-		Layers:    []ocispec.Descriptor{layerDesc},
+		SchemaVersion: 2,
+		MediaType:     ocispec.MediaTypeImageManifest,
+		Config:        configDesc,
+		Layers:        []ocispec.Descriptor{layerDesc},
 	})
 	manDesc := ocispec.Descriptor{
 		MediaType: ocispec.MediaTypeImageManifest,
@@ -204,10 +203,10 @@ func TestFetchOCI_RejectsOversizedManifest(t *testing.T) {
 	configDesc := push("application/vnd.devcontainers", []byte("{}"))
 	layerDesc := push(featureLayerMediaType, ocitest.FeatureArchive(t, `{"id": "bigmanifest"}`, false))
 	manBytes := mustMarshal(t, ocispec.Manifest{
-		Versioned: specs.Versioned{SchemaVersion: 2},
-		MediaType: ocispec.MediaTypeImageManifest,
-		Config:    configDesc,
-		Layers:    []ocispec.Descriptor{layerDesc},
+		SchemaVersion: 2,
+		MediaType:     ocispec.MediaTypeImageManifest,
+		Config:        configDesc,
+		Layers:        []ocispec.Descriptor{layerDesc},
 	})
 	manDesc := push(ocispec.MediaTypeImageManifest, manBytes)
 	// Declare a manifest larger than the cap while the stored blob is unchanged: the size guard must
@@ -215,9 +214,9 @@ func TestFetchOCI_RejectsOversizedManifest(t *testing.T) {
 	manDesc.Size = maxManifestBytes + 1
 
 	indexBytes := mustMarshal(t, ocispec.Index{
-		Versioned: specs.Versioned{SchemaVersion: 2},
-		MediaType: ocispec.MediaTypeImageIndex,
-		Manifests: []ocispec.Descriptor{manDesc},
+		SchemaVersion: 2,
+		MediaType:     ocispec.MediaTypeImageIndex,
+		Manifests:     []ocispec.Descriptor{manDesc},
 	})
 	indexDesc := ocispec.Descriptor{
 		MediaType: ocispec.MediaTypeImageIndex,

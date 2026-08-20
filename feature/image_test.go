@@ -7,7 +7,6 @@ import (
 
 	"github.com/bare-devcontainer/decolint/ocitest"
 	"github.com/opencontainers/go-digest"
-	specs "github.com/opencontainers/image-spec/specs-go"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 	"oras.land/oras-go/v2/registry/remote"
 )
@@ -231,10 +230,10 @@ func TestFetchImageMetadata_RejectsOversizedConfig(t *testing.T) {
 	configDesc.Size = maxImageConfigBytes + 1
 
 	manBytes := mustMarshal(t, ocispec.Manifest{
-		Versioned: specs.Versioned{SchemaVersion: 2},
-		MediaType: ocispec.MediaTypeImageManifest,
-		Config:    configDesc,
-		Layers:    []ocispec.Descriptor{layerDesc},
+		SchemaVersion: 2,
+		MediaType:     ocispec.MediaTypeImageManifest,
+		Config:        configDesc,
+		Layers:        []ocispec.Descriptor{layerDesc},
 	})
 	manDesc := ocispec.Descriptor{
 		MediaType: ocispec.MediaTypeImageManifest,

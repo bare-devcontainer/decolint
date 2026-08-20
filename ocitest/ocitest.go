@@ -15,7 +15,6 @@ import (
 	"github.com/olareg/olareg"
 	oConfig "github.com/olareg/olareg/config"
 	"github.com/opencontainers/go-digest"
-	specs "github.com/opencontainers/image-spec/specs-go"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 	"oras.land/oras-go/v2/registry/remote"
 )
@@ -130,10 +129,10 @@ func pushArtifact(t *testing.T, host, repo, tag string,
 	layerDesc := push(layerMediaType, layer)
 
 	manBytes := marshal(t, ocispec.Manifest{
-		Versioned: specs.Versioned{SchemaVersion: 2},
-		MediaType: ocispec.MediaTypeImageManifest,
-		Config:    configDesc,
-		Layers:    []ocispec.Descriptor{layerDesc},
+		SchemaVersion: 2,
+		MediaType:     ocispec.MediaTypeImageManifest,
+		Config:        configDesc,
+		Layers:        []ocispec.Descriptor{layerDesc},
 	})
 	manDesc := ocispec.Descriptor{
 		MediaType: ocispec.MediaTypeImageManifest,
@@ -153,9 +152,9 @@ func pushArtifact(t *testing.T, host, repo, tag string,
 		t.Fatal(err)
 	}
 	indexBytes := marshal(t, ocispec.Index{
-		Versioned: specs.Versioned{SchemaVersion: 2},
-		MediaType: ocispec.MediaTypeImageIndex,
-		Manifests: []ocispec.Descriptor{manDesc},
+		SchemaVersion: 2,
+		MediaType:     ocispec.MediaTypeImageIndex,
+		Manifests:     []ocispec.Descriptor{manDesc},
 	})
 	indexDesc := ocispec.Descriptor{
 		MediaType: ocispec.MediaTypeImageIndex,

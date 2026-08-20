@@ -2,7 +2,7 @@
 // main.go.
 module github.com/bare-devcontainer/decolint/cmd/dockerflagsgen
 
-go 1.26.5
+go 1.27.0
 
 require (
 	github.com/bare-devcontainer/decolint v0.0.0-00010101000000-000000000000

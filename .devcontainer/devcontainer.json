@@ -1,6 +1,6 @@
 {
   "name": "Go",
-  "image": "ghcr.io/bare-devcontainer/golang:1.26-trixie@sha256:37eaf48886f6e9ac3a7327228af0c960d416cfdd9000bac2a34c26206853b779",
+  "image": "ghcr.io/bare-devcontainer/golang:1.27-trixie@sha256:ef804c36a9e4840e3c080da8af3a9d8d6b7a5536b061809a24c206a67a205eb0",
   "features": {
     "ghcr.io/bare-devcontainer/features/claude-code:1.1.0": {}
   },

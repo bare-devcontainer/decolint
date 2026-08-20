@@ -6,7 +6,6 @@ import (
 
 	"github.com/moby/buildkit/client/llb/sourceresolver"
 	"github.com/moby/buildkit/frontend/dockerfile/dockerfile2llb"
-	"github.com/moby/buildkit/frontend/dockerui"
 	"github.com/opencontainers/go-digest"
 )
 
@@ -18,11 +17,9 @@ import (
 // built image would carry no such label.
 func (f *Fetcher) FetchDockerfileMetadata(ctx context.Context, dockerfile []byte, buildArgs, labels map[string]string, target string) ([]*Metadata, error) {
 	res, err := dockerfile2llb.Dockerfile2LLB(ctx, dockerfile, dockerfile2llb.ConvertOpt{
-		Config: dockerui.Config{
-			BuildArgs: buildArgs,
-			Labels:    labels,
-			Target:    target,
-		},
+		BuildArgs:    buildArgs,
+		Labels:       labels,
+		Target:       target,
 		MetaResolver: fetcherMetaResolver{f: f},
 	})
 	if err != nil {

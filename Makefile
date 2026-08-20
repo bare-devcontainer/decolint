@@ -2,7 +2,7 @@ export CGO_ENABLED := 0
 export GOEXPERIMENT := jsonv2
 
 # renovate: datasource=github-releases depName=golangci/golangci-lint
-GOLANGCI_LINT_VERSION := v2.12.2
+GOLANGCI_LINT_VERSION := v2.13.0
 
 # Hugo is a tool dependency (see the tool directive in go.mod), so the version the site is built
 # with is pinned there and needs nothing installed. HUGO overrides it with another binary.

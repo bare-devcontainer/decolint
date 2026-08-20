@@ -1,6 +1,6 @@
 module github.com/bare-devcontainer/decolint
 
-go 1.26.5
+go 1.27.0
 
 require (
 	github.com/compose-spec/compose-go/v2 v2.14.0

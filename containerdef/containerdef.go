@@ -3,8 +3,8 @@
 // and nothing else — resolving it is the caller's, whether that is the merge fetching what the
 // declaration names or a lint rule reading it from the linted directory.
 //
-// Each declaration carries the byte offset of the property name declaring it, so a caller can
-// anchor what it reports at where the declaration is written.
+// Each declaration carries the byte offsets of the property name declaring it and of its value, so
+// a caller can anchor what it reports at whichever the reader of its output expects to see.
 package containerdef
 
 import (
@@ -25,6 +25,8 @@ type ImageDef struct {
 	Ref string
 	// KeyOffset is the byte offset of the "image" property name.
 	KeyOffset int
+	// ValueOffset is the byte offset of the reference.
+	ValueOffset int
 }
 
 func (*ImageDef) containerDef()   {}
@@ -62,7 +64,7 @@ func image(obj *hujson.Object) *ImageDef {
 	if !isLit || lit.Kind() != '"' {
 		return nil
 	}
-	return &ImageDef{Ref: lit.String(), KeyOffset: m.Name.StartOffset}
+	return &ImageDef{Ref: lit.String(), KeyOffset: m.Name.StartOffset, ValueOffset: m.Value.StartOffset}
 }
 
 // BuildDef is the Dockerfile build a devcontainer.json declares: the Dockerfile it builds and
@@ -74,6 +76,8 @@ type BuildDef struct {
 	// DockerfileKeyOffset is the byte offset of the property naming the Dockerfile, whichever of the
 	// two names it.
 	DockerfileKeyOffset int
+	// DockerfileValueOffset is the byte offset of that property's value.
+	DockerfileValueOffset int
 	// Args are the arguments passed to the build, nil when it declares none.
 	Args map[string]string
 	// Target is the stage the build stops at, empty when it declares none.
@@ -89,11 +93,11 @@ type BuildDef struct {
 // config.build.dockerfile). The options are always the "build" object's, which the legacy top-level
 // form carries alongside it.
 func build(obj *hujson.Object) *BuildDef {
-	path, keyOffset, ok := dockerfilePath(obj)
+	path, keyOffset, valueOffset, ok := dockerfilePath(obj)
 	if !ok {
 		return nil
 	}
-	config := &BuildDef{Dockerfile: path, DockerfileKeyOffset: keyOffset}
+	config := &BuildDef{Dockerfile: path, DockerfileKeyOffset: keyOffset, DockerfileValueOffset: valueOffset}
 	build := buildObject(obj)
 	if build == nil {
 		return config
@@ -123,20 +127,20 @@ func build(obj *hujson.Object) *BuildDef {
 
 // dockerfilePath returns the path the configuration names its Dockerfile by, in either form, with
 // the byte offset of the naming property.
-func dockerfilePath(obj *hujson.Object) (string, int, bool) {
+func dockerfilePath(obj *hujson.Object) (path string, keyOffset, valueOffset int, ok bool) {
 	if m := memberNamed(obj, "dockerFile"); m != nil {
 		if lit, isLit := m.Value.Value.(hujson.Literal); isLit && lit.Kind() == '"' {
-			return lit.String(), m.Name.StartOffset, true
+			return lit.String(), m.Name.StartOffset, m.Value.StartOffset, true
 		}
 	}
 	if build := buildObject(obj); build != nil {
 		if m := memberNamed(build, "dockerfile"); m != nil {
 			if lit, isLit := m.Value.Value.(hujson.Literal); isLit && lit.Kind() == '"' {
-				return lit.String(), m.Name.StartOffset, true
+				return lit.String(), m.Name.StartOffset, m.Value.StartOffset, true
 			}
 		}
 	}
-	return "", 0, false
+	return "", 0, 0, false
 }
 
 // ComposeDef is the Compose declaration of a devcontainer.json: the files it names and the
@@ -149,6 +153,8 @@ type ComposeDef struct {
 	Files []string
 	// FilesKeyOffset is the byte offset of the "dockerComposeFile" property name.
 	FilesKeyOffset int
+	// FilesValueOffset is the byte offset of that property's value.
+	FilesValueOffset int
 	// Service is the service the dev container runs in, empty when the configuration names none or
 	// names it as something other than a string.
 	Service string
@@ -186,7 +192,7 @@ func compose(obj *hujson.Object) *ComposeDef {
 			}
 		}
 	}
-	config.FilesKeyOffset = m.Name.StartOffset
+	config.FilesKeyOffset, config.FilesValueOffset = m.Name.StartOffset, m.Value.StartOffset
 
 	if m := memberNamed(obj, "service"); m != nil {
 		if lit, isLit := m.Value.Value.(hujson.Literal); isLit && lit.Kind() == '"' {

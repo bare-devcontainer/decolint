@@ -2,6 +2,8 @@ package rules
 
 import (
 	"encoding/csv"
+	"io"
+	"io/fs"
 	"iter"
 	"path"
 	"strings"
@@ -225,6 +227,42 @@ func stringMember(obj *hujson.Object, name string) (string, bool) {
 		return lit.String(), true
 	}
 	return "", false
+}
+
+// maxConfigFileBytes caps a file a rule reads from the directory it lints in, mirroring the Feature
+// pipeline's per-file cap. A larger file is not read at all, rather than read in part: a rule that
+// judged a truncated Dockerfile or Compose file would report on configuration that is not there.
+const maxConfigFileBytes = 4 << 20 // 4 MB
+
+// readConfigFile reads the file another configuration file references by name, a slash-separated
+// path relative to the directory being linted, and reports whether it could be read.
+//
+// It reports false rather than an error because a rule reads such a file to say something about it,
+// and can say nothing when it is absent, unreadable, or too large (see maxConfigFileBytes). A path
+// leading outside the directory is also not read: access is confined to the boundary discovery hands
+// the rule the directory through, so a rule reports nothing on configuration that names a file
+// decolint may not open.
+func readConfigFile(dir linter.Dir, name string) ([]byte, bool) {
+	if dir.FS == nil {
+		return nil, false
+	}
+	p := path.Clean(name)
+	if !fs.ValidPath(p) || p == "." {
+		return nil, false
+	}
+	f, err := dir.FS.Open(p)
+	if err != nil {
+		return nil, false
+	}
+	// The file is only read from, so a close error is inconsequential.
+	defer func() { _ = f.Close() }()
+	// One byte past the cap is read so that a file over it is recognized as too large rather than
+	// silently truncated to exactly the cap.
+	data, err := io.ReadAll(io.LimitReader(f, maxConfigFileBytes+1))
+	if err != nil || len(data) > maxConfigFileBytes {
+		return nil, false
+	}
+	return data, true
 }
 
 // holdsFeatureRefs reports whether pointer names the property that holds Feature references in a

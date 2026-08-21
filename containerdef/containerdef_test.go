@@ -224,9 +224,9 @@ func TestDefs_Compose(t *testing.T) {
 	}
 }
 
-// TestDefs_KeyOffsets checks that each form is located at the property declaring it, which is where
-// a caller anchors what it reports.
-func TestDefs_KeyOffsets(t *testing.T) {
+// TestDefs_Offsets checks that each form is located at the property declaring it and at that
+// property's value, which is where a caller anchors what it reports.
+func TestDefs_Offsets(t *testing.T) {
 	t.Parallel()
 
 	// One configuration declaring every form, so each offset is read from the same source.
@@ -239,6 +239,9 @@ func TestDefs_KeyOffsets(t *testing.T) {
 	if want := strings.Index(src, `"dockerComposeFile"`); compose.FilesKeyOffset != want {
 		t.Errorf("FilesKeyOffset = %d, want %d", compose.FilesKeyOffset, want)
 	}
+	if want := strings.Index(src, `"c.yml"`); compose.FilesValueOffset != want {
+		t.Errorf("FilesValueOffset = %d, want %d", compose.FilesValueOffset, want)
+	}
 
 	build := defOf[*containerdef.BuildDef](t, src)
 	if build == nil {
@@ -246,6 +249,9 @@ func TestDefs_KeyOffsets(t *testing.T) {
 	}
 	if want := strings.Index(src, `"dockerfile"`); build.DockerfileKeyOffset != want {
 		t.Errorf("DockerfileKeyOffset = %d, want %d", build.DockerfileKeyOffset, want)
+	}
+	if want := strings.Index(src, `"Dockerfile"`); build.DockerfileValueOffset != want {
+		t.Errorf("DockerfileValueOffset = %d, want %d", build.DockerfileValueOffset, want)
 	}
 
 	image := defOf[*containerdef.ImageDef](t, src)
@@ -255,14 +261,17 @@ func TestDefs_KeyOffsets(t *testing.T) {
 	if want := strings.Index(src, `"image"`); image.KeyOffset != want {
 		t.Errorf("KeyOffset = %d, want %d", image.KeyOffset, want)
 	}
+	if want := strings.Index(src, `"ubuntu:24.04"`); image.ValueOffset != want {
+		t.Errorf("ValueOffset = %d, want %d", image.ValueOffset, want)
+	}
 }
 
-// TestDefs_LegacyDockerfileKeyOffset checks that the legacy form anchors at its own property, not at
+// TestDefs_LegacyDockerfileOffsets checks that the legacy form anchors at its own property, not at
 // the "build" object the options come from.
-func TestDefs_LegacyDockerfileKeyOffset(t *testing.T) {
+func TestDefs_LegacyDockerfileOffsets(t *testing.T) {
 	t.Parallel()
 
-	const src = `{"dockerFile": "Dockerfile", "build": {"target": "dev"}}`
+	const src = `{"dockerFile": "top", "build": {"dockerfile": "nested"}}`
 
 	got := defOf[*containerdef.BuildDef](t, src)
 	if got == nil {
@@ -270,6 +279,9 @@ func TestDefs_LegacyDockerfileKeyOffset(t *testing.T) {
 	}
 	if want := strings.Index(src, `"dockerFile"`); got.DockerfileKeyOffset != want {
 		t.Errorf("DockerfileKeyOffset = %d, want %d", got.DockerfileKeyOffset, want)
+	}
+	if want := strings.Index(src, `"top"`); got.DockerfileValueOffset != want {
+		t.Errorf("DockerfileValueOffset = %d, want %d", got.DockerfileValueOffset, want)
 	}
 }
 

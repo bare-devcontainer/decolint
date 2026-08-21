@@ -59,6 +59,7 @@ var builtinRuleList = []*linter.Rule{
 	NoPrivilegedContainer,
 	NoSeccompOverride,
 	NoSeccompUnconfined,
+	PinDependsOnVersion,
 	PinExtensionVersion,
 	PinFeatureExactVersion,
 	PinFeatureVersion,

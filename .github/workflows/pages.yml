@@ -30,6 +30,12 @@ on:
 
 permissions: {}
 
+# The runner's default shell adds only -e, so an unset variable or a failure
+# mid-pipeline would otherwise pass silently.
+defaults:
+  run:
+    shell: bash -euo pipefail {0}
+
 jobs:
   build:
     runs-on: ubuntu-latest

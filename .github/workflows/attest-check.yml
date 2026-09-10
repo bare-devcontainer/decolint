@@ -12,6 +12,12 @@ env:
   CERT_IDENTITY_REGEXP: ^https://github\.com/bare-devcontainer/decolint/\.github/workflows/release\.yml@.*$
   CERT_OIDC_ISSUER: https://token.actions.githubusercontent.com
 
+# The runner's default shell adds only -e, so an unset variable or a failure
+# mid-pipeline would otherwise pass silently.
+defaults:
+  run:
+    shell: bash -euo pipefail {0}
+
 jobs:
   prepare:
     permissions:

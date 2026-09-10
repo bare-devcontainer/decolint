@@ -19,6 +19,12 @@ env:
   TOOL_NAME: decolint
   FIXTURE: cmd/decolint/testdata/e2e/violations
 
+# The runner's default shell adds only -e, so an unset variable or a failure
+# mid-pipeline would otherwise pass silently.
+defaults:
+  run:
+    shell: bash -euo pipefail {0}
+
 jobs:
   upload-check:
     runs-on: ubuntu-latest

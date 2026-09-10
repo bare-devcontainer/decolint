@@ -17,6 +17,12 @@ env:
   RELEASE_REF: ${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.pull_request.number) || github.ref_name }}
   CHECKSUMS_FILE: decolint_${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.pull_request.number) || github.ref_name }}_checksums.txt
 
+# The runner's default shell adds only -e, so an unset variable or a failure
+# mid-pipeline would otherwise pass silently.
+defaults:
+  run:
+    shell: bash -euo pipefail {0}
+
 jobs:
   prepare:
     permissions:
@@ -271,6 +277,4 @@ jobs:
             dist/* "$CHECKSUMS_FILE" "$CHECKSUMS_FILE.sigstore.json" \
             --title "$TAG_NAME" \
             --generate-notes
-          gh workflow run attest-check.yml \
-            --repo "${REPO}" \
-            --ref main
+          gh workflow run attest-check.yml --ref main

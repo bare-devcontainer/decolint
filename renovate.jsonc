@@ -56,5 +56,16 @@
       ],
       "versioningTemplate": "{{#if versioning}}{{{versioning}}}{{else}}semver{{/if}}"
     }
+  ],
+  "packageRules": [
+    {
+      "description": "Limit Claude Code updates to one pull request a week, since upstream tags releases several times a day.",
+      "matchPackageNames": [
+        "anthropics/claude-code"
+      ],
+      "schedule": [
+        "* * * * 4"
+      ]
+    }
   ]
 }

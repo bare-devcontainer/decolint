@@ -1,6 +1,6 @@
 {
   "name": "Go",
-  "image": "ghcr.io/bare-devcontainer/golang:1.27-trixie@sha256:ef804c36a9e4840e3c080da8af3a9d8d6b7a5536b061809a24c206a67a205eb0",
+  "image": "ghcr.io/bare-devcontainer/golang:1.27-trixie@sha256:7a34090cd9cba9ed877f5447fe0bba073eabf9c160f5f32e8d27fe1d3232f2a0",
   "features": {
     "ghcr.io/bare-devcontainer/features/claude-code:1.1.0": {}
   },
@@ -25,6 +25,12 @@
     {
       "source": "${devcontainerId}-golang-build-cache",
       "target": "/home/dev/.cache/go-build",
+      "type": "volume"
+    },
+    // Persist the shell history the image keeps in this directory.
+    {
+      "source": "${devcontainerId}-bash-history",
+      "target": "/home/dev/.local/state/bash",
       "type": "volume"
     }
   ],

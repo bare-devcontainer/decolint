@@ -11,7 +11,7 @@ require (
 	github.com/opencontainers/image-spec v1.1.1
 	github.com/spf13/pflag v1.0.10
 	github.com/tailscale/hujson v0.0.0-20260727124030-b80ff77dac4f
-	golang.org/x/sys v0.47.0
+	golang.org/x/sys v0.48.0
 	golang.org/x/term v0.45.0
 	oras.land/oras-go/v2 v2.6.2
 )

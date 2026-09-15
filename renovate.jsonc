@@ -16,7 +16,9 @@
     ],
     "minimumReleaseAge": null
   },
-  "postUpdateOptions": ["gomodTidy"],
+  // gomodTidyAll, not gomodTidy: cmd/dockerflagsgen replaces the root module with a local path,
+  // so a root go.mod bump leaves its go.mod/go.sum stale until that module is tidied too.
+  "postUpdateOptions": ["gomodTidyAll"],
   "customManagers": [
     {
       "customType": "regex",

@@ -6,7 +6,7 @@ go 1.27.1
 
 require (
 	github.com/bare-devcontainer/decolint v0.0.0-00010101000000-000000000000
-	github.com/docker/cli v29.7.2+incompatible
+	github.com/docker/cli v29.8.0+incompatible
 	github.com/spf13/cobra v1.10.2
 	github.com/spf13/pflag v1.0.10
 )
@@ -70,11 +70,9 @@ require (
 	github.com/prometheus/client_model v0.6.1 // indirect
 	github.com/prometheus/common v0.62.0 // indirect
 	github.com/prometheus/procfs v0.15.1 // indirect
+	github.com/santhosh-tekuri/jsonschema/v6 v6.0.2 // indirect
 	github.com/sirupsen/logrus v1.10.1 // indirect
 	github.com/tonistiigi/go-rosetta v0.0.0-20220804170347-3f4430f2d346 // indirect
-	github.com/xeipuuv/gojsonpointer v0.0.0-20180127040702-4e3ac2762d5f // indirect
-	github.com/xeipuuv/gojsonreference v0.0.0-20180127040603-bd5ef7bd5415 // indirect
-	github.com/xeipuuv/gojsonschema v1.2.0 // indirect
 	go.etcd.io/raft/v3 v3.6.0 // indirect
 	go.opentelemetry.io/auto/sdk v1.2.1 // indirect
 	go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.70.0 // indirect

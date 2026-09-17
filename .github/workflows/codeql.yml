@@ -8,6 +8,9 @@ on:
   schedule:
     - cron: '37 18 * * 1'
 
+permissions: {}
+cache-mode: none
+
 env:
   GOEXPERIMENT: "jsonv2"
 
@@ -21,6 +24,7 @@ jobs:
   analyze:
     permissions:
       security-events: write
+    cache-mode: write
     name: Analyze (${{ matrix.language }})
     runs-on: ubuntu-latest
     strategy:

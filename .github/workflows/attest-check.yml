@@ -7,6 +7,7 @@ on:
   workflow_dispatch:
 
 permissions: {}
+cache-mode: none
 
 env:
   CERT_IDENTITY_REGEXP: ^https://github\.com/bare-devcontainer/decolint/\.github/workflows/release\.yml@.*$

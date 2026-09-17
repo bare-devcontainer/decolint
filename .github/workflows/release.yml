@@ -12,6 +12,7 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions: {}
+cache-mode: none
 
 env:
   RELEASE_REF: ${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.pull_request.number) || github.ref_name }}
@@ -70,6 +71,7 @@ jobs:
   build:
     permissions:
       contents: read
+    cache-mode: read
     needs: prepare
     if: needs.prepare.outputs.skip_build != 'true'
     strategy:

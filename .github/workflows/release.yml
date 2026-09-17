@@ -196,6 +196,7 @@ jobs:
       packages: write
       id-token: write
       attestations: write
+    cache-mode: read
     needs: prepare
     if: needs.prepare.outputs.skip_build != 'true'
     runs-on: ubuntu-latest

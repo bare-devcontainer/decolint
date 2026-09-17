@@ -29,6 +29,9 @@
   e.g. `uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0`.
 - Set workflow-level permissions to empty (`permissions: {}`) and grant
   the minimum required permissions per job.
+- Set workflow-level cache access to none (`cache-mode: none`) and grant
+  the minimum required mode per job: `read` when a job only restores
+  caches, `write` when it also saves ones later runs restore.
 - Set `persist-credentials: false` on `actions/checkout`.
 
 ## Dev Container Specification

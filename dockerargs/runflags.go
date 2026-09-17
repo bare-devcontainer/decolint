@@ -2,7 +2,7 @@
 
 package dockerargs
 
-// RunFlags is every flag "docker run" registers, as of github.com/docker/cli v29.7.2+incompatible.
+// RunFlags is every flag "docker run" registers, as of github.com/docker/cli v29.8.0+incompatible.
 // It includes the hidden and deprecated ones, which Docker still parses.
 //
 // A flag is identified by its name, never by the spelling an argv uses: "--net" is not the
@@ -108,6 +108,7 @@ var RunFlags = []Flag{
 	{Name: "tmpfs", Type: "list"},
 	{Name: "tty", Shorthand: "t", Type: "bool", NoOptDefVal: "true"},
 	{Name: "ulimit", Type: "ulimit"},
+	{Name: "umask", Type: "umask"},
 	{Name: "use-api-socket", Type: "bool", NoOptDefVal: "true"},
 	{Name: "user", Shorthand: "u", Type: "string"},
 	{Name: "userns", Type: "string"},

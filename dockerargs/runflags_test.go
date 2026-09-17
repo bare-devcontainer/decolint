@@ -112,6 +112,7 @@ var wantRunFlags = []string{
 	"tmpfs list",
 	"tty/t bool=true",
 	"ulimit ulimit",
+	"umask umask",
 	"use-api-socket bool=true",
 	"user/u string",
 	"userns string",

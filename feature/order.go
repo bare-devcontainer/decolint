@@ -326,16 +326,16 @@ func satisfiesSoftDependency(node, soft *contributor) bool {
 
 // ociNamespace returns the repository without its final path segment (the identifier).
 func ociNamespace(repository string) string {
-	if i := strings.LastIndex(repository, "/"); i >= 0 {
-		return repository[:i]
+	if namespace, _, found := strings.CutLast(repository, "/"); found {
+		return namespace
 	}
 	return ""
 }
 
 // ociID returns the final path segment of the repository, the Feature's identifier.
 func ociID(repository string) string {
-	if i := strings.LastIndex(repository, "/"); i >= 0 {
-		return repository[i+1:]
+	if _, id, found := strings.CutLast(repository, "/"); found {
+		return id
 	}
 	return repository
 }

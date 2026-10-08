@@ -23,10 +23,7 @@ var noImageLatestRule = &Rule{
 			return nil
 		}
 		image := lit.String()
-		tag, hasTag := "", false
-		if i := strings.LastIndex(image, ":"); i >= 0 {
-			tag, hasTag = image[i+1:], true
-		}
+		_, tag, hasTag := strings.CutLast(image, ":")
 		switch {
 		case !hasTag:
 			return []Finding{{Message: fmt.Sprintf("image %q has no explicit tag", image), Offset: node.Value.StartOffset}}

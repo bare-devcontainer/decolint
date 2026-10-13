@@ -8,7 +8,6 @@ import (
 	"github.com/bare-devcontainer/decolint/ocitest"
 	"github.com/opencontainers/go-digest"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
-	"oras.land/oras-go/v2/registry/remote"
 )
 
 func TestParseImageRef(t *testing.T) {
@@ -209,11 +208,7 @@ func TestFetchImageMetadata_RejectsOversizedConfig(t *testing.T) {
 
 	host := ocitest.Registry(t)
 	ctx := t.Context()
-	repo, err := remote.NewRepository(host + "/big")
-	if err != nil {
-		t.Fatal(err)
-	}
-	repo.PlainHTTP = true
+	repo := ocitest.Repository(t, host, "big")
 
 	push := func(mediaType string, data []byte) ocispec.Descriptor {
 		desc := ocispec.Descriptor{MediaType: mediaType, Digest: digest.FromBytes(data), Size: int64(len(data))}
@@ -244,7 +239,7 @@ func TestFetchImageMetadata_RejectsOversizedConfig(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	_, err = NewFetcher().FetchImageMetadata(ctx, host+"/big:1")
+	_, err := NewFetcher().FetchImageMetadata(ctx, host+"/big:1")
 	if err == nil {
 		t.Fatal("FetchImageMetadata of an oversized config: got nil error")
 	}

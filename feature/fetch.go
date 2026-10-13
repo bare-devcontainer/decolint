@@ -71,6 +71,10 @@ func WithLogWriter(w io.Writer) Option {
 func NewFetcher(opts ...Option) *Fetcher {
 	f := &Fetcher{
 		client: &http.Client{
+			// A private transport isolates the Fetcher from CloseIdleConnections calls on
+			// http.DefaultTransport (httptest.Server.Close makes one), which can break a request
+			// that is just reusing a pooled connection.
+			Transport:     http.DefaultTransport.(*http.Transport).Clone(),
 			Timeout:       30 * time.Second,
 			CheckRedirect: refuseInsecureRedirect,
 		},

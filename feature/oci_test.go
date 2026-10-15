@@ -8,6 +8,7 @@ import (
 	"github.com/bare-devcontainer/decolint/ocitest"
 	"github.com/opencontainers/go-digest"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
+	"oras.land/oras-go/v2/registry/remote"
 )
 
 func TestFeatureLayer(t *testing.T) {
@@ -49,7 +50,11 @@ func TestFetchOCI_EmptyIndex(t *testing.T) {
 
 	host := ocitest.Registry(t)
 	ctx := t.Context()
-	repo := ocitest.Repository(t, host, "devcontainers/features/empty")
+	repo, err := remote.NewRepository(host + "/devcontainers/features/empty")
+	if err != nil {
+		t.Fatal(err)
+	}
+	repo.PlainHTTP = true
 
 	indexBytes := mustMarshal(t, ocispec.Index{
 		SchemaVersion: 2,
@@ -64,7 +69,7 @@ func TestFetchOCI_EmptyIndex(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	_, err := NewFetcher().Fetch(ctx, host+"/devcontainers/features/empty:1", nil, "")
+	_, err = NewFetcher().Fetch(ctx, host+"/devcontainers/features/empty:1", nil, "")
 	if err == nil {
 		t.Fatal("Fetch of an index with no manifests: got nil error")
 	}
@@ -81,7 +86,11 @@ func TestFetchOCI_RejectsNonFeatureConfig(t *testing.T) {
 
 	host := ocitest.Registry(t)
 	ctx := t.Context()
-	repo := ocitest.Repository(t, host, "devcontainers/features/notafeature")
+	repo, err := remote.NewRepository(host + "/devcontainers/features/notafeature")
+	if err != nil {
+		t.Fatal(err)
+	}
+	repo.PlainHTTP = true
 
 	push := func(mediaType string, data []byte) ocispec.Descriptor {
 		desc := ocispec.Descriptor{MediaType: mediaType, Digest: digest.FromBytes(data), Size: int64(len(data))}
@@ -110,7 +119,7 @@ func TestFetchOCI_RejectsNonFeatureConfig(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	_, err := NewFetcher().Fetch(ctx, host+"/devcontainers/features/notafeature:1", nil, "")
+	_, err = NewFetcher().Fetch(ctx, host+"/devcontainers/features/notafeature:1", nil, "")
 	if err == nil {
 		t.Fatal("Fetch of a manifest with a non-Feature config media type: got nil error")
 	}
@@ -124,7 +133,11 @@ func TestFetchOCI_RejectsOversizedLayer(t *testing.T) {
 
 	host := ocitest.Registry(t)
 	ctx := t.Context()
-	repo := ocitest.Repository(t, host, "devcontainers/features/big")
+	repo, err := remote.NewRepository(host + "/devcontainers/features/big")
+	if err != nil {
+		t.Fatal(err)
+	}
+	repo.PlainHTTP = true
 
 	push := func(mediaType string, data []byte) ocispec.Descriptor {
 		desc := ocispec.Descriptor{MediaType: mediaType, Digest: digest.FromBytes(data), Size: int64(len(data))}
@@ -156,7 +169,7 @@ func TestFetchOCI_RejectsOversizedLayer(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	_, err := NewFetcher().Fetch(ctx, host+"/devcontainers/features/big:1", nil, "")
+	_, err = NewFetcher().Fetch(ctx, host+"/devcontainers/features/big:1", nil, "")
 	if err == nil {
 		t.Fatal("Fetch of an oversized layer: got nil error")
 	}
@@ -173,7 +186,11 @@ func TestFetchOCI_RejectsOversizedManifest(t *testing.T) {
 
 	host := ocitest.Registry(t)
 	ctx := t.Context()
-	repo := ocitest.Repository(t, host, "devcontainers/features/bigmanifest")
+	repo, err := remote.NewRepository(host + "/devcontainers/features/bigmanifest")
+	if err != nil {
+		t.Fatal(err)
+	}
+	repo.PlainHTTP = true
 
 	push := func(mediaType string, data []byte) ocispec.Descriptor {
 		desc := ocispec.Descriptor{MediaType: mediaType, Digest: digest.FromBytes(data), Size: int64(len(data))}
@@ -210,7 +227,7 @@ func TestFetchOCI_RejectsOversizedManifest(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	_, err := NewFetcher().Fetch(ctx, host+"/devcontainers/features/bigmanifest:1", nil, "")
+	_, err = NewFetcher().Fetch(ctx, host+"/devcontainers/features/bigmanifest:1", nil, "")
 	if err == nil {
 		t.Fatal("Fetch of an oversized manifest: got nil error")
 	}

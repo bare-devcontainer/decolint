@@ -307,8 +307,6 @@ func TestFetchOCI_ThroughIndex(t *testing.T) {
 // authentic. Config blobs and manifests are JSON and pass through unchanged.
 func tamperingProxy(t *testing.T, host string, replacement []byte) string {
 	t.Helper()
-	// Not http.DefaultClient: see NewFetcher for why the default transport is avoided.
-	client := &http.Client{Transport: http.DefaultTransport.(*http.Transport).Clone()}
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		req, err := http.NewRequestWithContext(r.Context(), r.Method, "http://"+host+r.URL.RequestURI(), r.Body)
 		if err != nil {
@@ -318,7 +316,7 @@ func tamperingProxy(t *testing.T, host string, replacement []byte) string {
 		// Forward request headers, notably Accept, which the registry uses for manifest content
 		// negotiation; without it manifest resolution fails before the layer is ever fetched.
 		maps.Copy(req.Header, r.Header)
-		resp, err := client.Do(req)
+		resp, err := http.DefaultClient.Do(req)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadGateway)
 			return

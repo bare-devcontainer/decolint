@@ -8,7 +8,6 @@ import (
 	"bytes"
 	"compress/gzip"
 	"encoding/json"
-	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
@@ -29,11 +28,6 @@ const (
 
 // metadataFileName is the name of the metadata file a Feature archive carries.
 const metadataFileName = "devcontainer-feature.json"
-
-// client is the HTTP client for registry requests made by this package. It does not use
-// [http.DefaultTransport]: every [httptest.Server.Close] in the test binary closes that transport's
-// idle connections, which can break a request concurrently picking one up in a parallel test.
-var client = &http.Client{Transport: http.DefaultTransport.(*http.Transport).Clone()}
 
 // Registry starts an ephemeral, in-memory OCI registry on a loopback address and returns its host
 // (host:port). Loopback hosts are reached over plain HTTP, which the Feature fetcher permits. The
@@ -105,18 +99,6 @@ func PushImage(t *testing.T, host, repo, tag string, labels map[string]string, a
 		ocispec.MediaTypeImageLayer, []byte("layer"), asIndex)
 }
 
-// Repository returns a client for host/name on a registry started by [Registry].
-func Repository(t *testing.T, host, name string) *remote.Repository {
-	t.Helper()
-	repository, err := remote.NewRepository(host + "/" + name)
-	if err != nil {
-		t.Fatal(err)
-	}
-	repository.PlainHTTP = true
-	repository.Client = client
-	return repository
-}
-
 // pushArtifact publishes a single-layer manifest built from the given config and layer blobs at
 // host/repo:tag. When asIndex is true the tag resolves to an image index that points at the
 // manifest, exercising the index-following path.
@@ -125,7 +107,11 @@ func pushArtifact(t *testing.T, host, repo, tag string,
 	layerMediaType string, layer []byte, asIndex bool) {
 	t.Helper()
 	ctx := t.Context()
-	repository := Repository(t, host, repo)
+	repository, err := remote.NewRepository(host + "/" + repo)
+	if err != nil {
+		t.Fatal(err)
+	}
+	repository.PlainHTTP = true
 
 	push := func(mediaType string, data []byte) ocispec.Descriptor {
 		desc := ocispec.Descriptor{

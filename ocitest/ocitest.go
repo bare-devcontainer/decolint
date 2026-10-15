@@ -8,6 +8,7 @@ import (
 	"bytes"
 	"compress/gzip"
 	"encoding/json"
+	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
@@ -17,6 +18,7 @@ import (
 	"github.com/opencontainers/go-digest"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 	"oras.land/oras-go/v2/registry/remote"
+	"oras.land/oras-go/v2/registry/remote/auth"
 )
 
 // The media types the Features distribution specification mandates for a Feature artifact's config
@@ -112,6 +114,11 @@ func pushArtifact(t *testing.T, host, repo, tag string,
 		t.Fatal(err)
 	}
 	repository.PlainHTTP = true
+	// A private transport keeps this push alive when a parallel test's httptest.Server.Close
+	// closes the idle connections of http.DefaultTransport, which oras-go uses by default.
+	transport := http.DefaultTransport.(*http.Transport).Clone()
+	t.Cleanup(transport.CloseIdleConnections)
+	repository.Client = &auth.Client{Client: &http.Client{Transport: transport}}
 
 	push := func(mediaType string, data []byte) ocispec.Descriptor {
 		desc := ocispec.Descriptor{

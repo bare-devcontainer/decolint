@@ -241,3 +241,21 @@ PR titles must follow the [Conventional
 Commits](https://www.conventionalcommits.org/) format with one of the
 types `feat`, `fix`, `ci`, `chore`, `test`, or `docs`, e.g.
 `feat(cli): add new feature`. Keep external dependencies to a minimum.
+The title becomes the commit message on `main`, and its type decides
+the next release: `feat` bumps the minor version, `fix` the patch
+version, and the other types do not cut a release. Use `fix` for a
+dependency update that ships in the binary or image.
+
+## Releasing
+
+Releases are cut by
+[release-please](https://github.com/googleapis/release-please). It keeps
+a release PR open that bumps the version and updates `CHANGELOG.md`;
+merging it builds, signs and publishes the release. To release a
+version other than the computed one, add a `Release-As: x.y.z` footer
+to a commit on `main`.
+
+release-please runs as a GitHub App, so that CI runs on the release
+PR. The App needs read and write access to contents, issues and pull
+requests, with its client ID in the `RELEASE_APP_CLIENT_ID` repository
+variable and a private key in the `RELEASE_APP_PRIVATE_KEY` secret.

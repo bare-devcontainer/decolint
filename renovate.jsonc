@@ -3,7 +3,8 @@
   "extends": [
     "config:best-practices",
     ":semanticCommits",
-    ":semanticCommitTypeAll(chore)"
+    // fix(deps) for what ships in the binary and image, so release-please cuts a release for it.
+    ":semanticPrefixFixDepsChoreOthers"
   ],
   "minimumReleaseAge": "14 days",
   "labels": [
@@ -60,6 +61,21 @@
     }
   ],
   "packageRules": [
+    {
+      "description": "dockerflagsgen is a code generator; its dependencies do not ship.",
+      "matchFileNames": [
+        "cmd/dockerflagsgen/go.mod"
+      ],
+      "semanticCommitType": "chore"
+    },
+    {
+      "description": "The Go toolchain builds the binary and image, so its updates ship.",
+      "matchPackageNames": [
+        "go",
+        "golang"
+      ],
+      "semanticCommitType": "fix"
+    },
     {
       "description": "Limit Claude Code updates to one pull request a week, since upstream tags releases several times a day.",
       "matchPackageNames": [

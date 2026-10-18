@@ -257,5 +257,6 @@ to a commit on `main`.
 
 release-please runs as a GitHub App, so that CI runs on the release
 PR. The App needs read and write access to contents, issues and pull
-requests, with its client ID in the `RELEASE_APP_CLIENT_ID` repository
-variable and a private key in the `RELEASE_APP_PRIVATE_KEY` secret.
+requests, with its client ID in the `RELEASE_PLEASE_CLIENT_ID` variable
+and a private key in the `RELEASE_PLEASE_PRIVATE_KEY` secret of the
+`release` environment.

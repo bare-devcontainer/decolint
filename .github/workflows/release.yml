@@ -28,10 +28,11 @@ jobs:
   # releases reject later uploads. If a later job fails, re-run the failed
   # jobs: a fresh run would not create the release again.
   #
-  # The job runs on pull requests too, with its steps skipped, so that the
-  # jobs after it are not skipped with it.
+  # The job runs on pull requests too, with its steps skipped and outside the
+  # release environment, so that the jobs after it are not skipped with it.
   release-please:
     permissions: {}
+    environment: ${{ github.event_name == 'push' && 'release' || '' }}
     runs-on: ubuntu-slim
     outputs:
       release_created: ${{ steps.release.outputs.release_created }}
@@ -43,8 +44,8 @@ jobs:
         if: github.event_name == 'push'
         id: app-token
         with:
-          client-id: ${{ vars.RELEASE_APP_CLIENT_ID }}
-          private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
+          client-id: ${{ vars.RELEASE_PLEASE_CLIENT_ID }}
+          private-key: ${{ secrets.RELEASE_PLEASE_PRIVATE_KEY }}
           permission-contents: write
           permission-issues: write
           permission-pull-requests: write

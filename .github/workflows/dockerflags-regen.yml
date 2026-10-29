@@ -1,0 +1,74 @@
+name: Regenerate dockerflags
+
+# Renovate bumps docker/cli in cmd/dockerflagsgen but cannot run "make dockerflags", so the CI
+# "dockerflags" job fails on every such pull request. This commits the regenerated table to the
+# Renovate branch, where it is still reviewed as part of the pull request.
+on:
+  pull_request:
+    paths:
+      - cmd/dockerflagsgen/go.mod
+
+permissions: {}
+cache-mode: none
+
+defaults:
+  run:
+    shell: bash -euo pipefail {0}
+
+jobs:
+  # Runs the generator, and with it docker/cli's code, without any credential that can write to
+  # the repository.
+  generate:
+    if: >-
+      github.event.pull_request.user.login == 'renovate[bot]' &&
+      github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    cache-mode: read
+    outputs:
+      patch: ${{ steps.diff.outputs.patch }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+      - run: make dockerflags
+      - id: diff
+        run: echo "patch=$(git diff --binary dockerargs/runflags.go | base64 -w0)" >> "$GITHUB_OUTPUT"
+
+  push:
+    needs: generate
+    if: needs.generate.outputs.patch != ''
+    runs-on: ubuntu-latest
+    permissions: {}
+    steps:
+      # A push made with GITHUB_TOKEN does not trigger workflows, which would leave the new
+      # commit without CI.
+      - id: token
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        with:
+          client-id: ${{ vars.BOT_CLIENT_ID }}
+          private-key: ${{ secrets.BOT_PRIVATE_KEY }}
+          permission-contents: write
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      # The author is listed in Renovate's gitIgnoredAuthors, so Renovate keeps updating the branch.
+      # If the branch moved since generation, the push fails as non-fast-forward; the run for the
+      # newer commit regenerates from there.
+      - env:
+          PATCH: ${{ needs.generate.outputs.patch }}
+          TOKEN: ${{ steps.token.outputs.token }}
+          REPOSITORY: ${{ github.repository }}
+          HEAD_REF: ${{ github.event.pull_request.head.ref }}
+        run: |
+          base64 -d <<<"$PATCH" | git apply
+          git -c user.name='github-actions[bot]' \
+            -c user.email='41898828+github-actions[bot]@users.noreply.github.com' \
+            commit -m 'chore(deps): regenerate dockerargs/runflags.go' dockerargs/runflags.go
+          git push "https://x-access-token:${TOKEN}@github.com/${REPOSITORY}.git" "HEAD:refs/heads/${HEAD_REF}"

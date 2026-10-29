@@ -19,6 +19,9 @@
   // gomodTidyAll, not gomodTidy: cmd/dockerflagsgen replaces the root module with a local path,
   // so a root go.mod bump leaves its go.mod/go.sum stale until that module is tidied too.
   "postUpdateOptions": ["gomodTidyAll"],
+  // .github/workflows/dockerflags-regen.yml commits to Renovate branches as this author; ignoring
+  // it keeps Renovate rebasing and updating those branches instead of treating them as edited.
+  "gitIgnoredAuthors": ["41898828+github-actions[bot]@users.noreply.github.com"],
   "customManagers": [
     {
       "customType": "regex",

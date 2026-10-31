@@ -3,10 +3,14 @@ name: Regenerate dockerflags
 # Renovate bumps docker/cli in cmd/dockerflagsgen but cannot run "make dockerflags", so the CI
 # "dockerflags" job fails on every such pull request. This commits the regenerated table to the
 # Renovate branch, where it is still reviewed as part of the pull request.
+#
+# On any other pull request, such as one editing this workflow, the push is a dry run: it still
+# checks that the App token can write to the branch, without changing it.
 on:
   pull_request:
     paths:
       - cmd/dockerflagsgen/go.mod
+      - .github/workflows/dockerflags-regen.yml
 
 permissions: {}
 cache-mode: none
@@ -19,9 +23,8 @@ jobs:
   # Runs the generator, and with it docker/cli's code, without any credential that can write to
   # the repository.
   generate:
-    if: >-
-      github.event.pull_request.user.login == 'renovate[bot]' &&
-      github.event.pull_request.head.repo.full_name == github.repository
+    # A fork's pull request gets no secrets, and its branch is not ours to push to.
+    if: github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -42,7 +45,9 @@ jobs:
 
   push:
     needs: generate
-    if: needs.generate.outputs.patch != ''
+    if: >-
+      needs.generate.outputs.patch != '' ||
+      github.event.pull_request.user.login != 'renovate[bot]'
     runs-on: ubuntu-latest
     permissions: {}
     steps:
@@ -66,9 +71,16 @@ jobs:
           TOKEN: ${{ steps.token.outputs.token }}
           REPOSITORY: ${{ github.repository }}
           HEAD_REF: ${{ github.event.pull_request.head.ref }}
+          PR_AUTHOR: ${{ github.event.pull_request.user.login }}
         run: |
-          base64 -d <<<"$PATCH" | git apply
-          git -c user.name='github-actions[bot]' \
-            -c user.email='41898828+github-actions[bot]@users.noreply.github.com' \
-            commit -m 'chore(deps): regenerate dockerargs/runflags.go' dockerargs/runflags.go
-          git push "https://x-access-token:${TOKEN}@github.com/${REPOSITORY}.git" "HEAD:refs/heads/${HEAD_REF}"
+          if [[ -n "$PATCH" ]]; then
+            base64 -d <<<"$PATCH" | git apply
+            git -c user.name='github-actions[bot]' \
+              -c user.email='41898828+github-actions[bot]@users.noreply.github.com' \
+              commit -m 'chore(deps): regenerate dockerargs/runflags.go' dockerargs/runflags.go
+          fi
+          push_flags=()
+          if [[ "$PR_AUTHOR" != 'renovate[bot]' ]]; then
+            push_flags=(--dry-run)
+          fi
+          git push "${push_flags[@]}" "https://x-access-token:${TOKEN}@github.com/${REPOSITORY}.git" "HEAD:refs/heads/${HEAD_REF}"

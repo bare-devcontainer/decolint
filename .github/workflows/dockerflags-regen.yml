@@ -4,8 +4,8 @@ name: Regenerate dockerflags
 # "dockerflags" job fails on every such pull request. This commits the regenerated table to the
 # Renovate branch, where it is still reviewed as part of the pull request.
 #
-# On any other pull request, such as one editing this workflow, the push is a dry run: it still
-# checks that the App token can write to the branch, without changing it.
+# On any other pull request, such as one editing this workflow, only the App token is created: it
+# still checks that the App can write to the repository, without changing the branch.
 on:
   pull_request:
     paths:
@@ -30,7 +30,7 @@ jobs:
       contents: read
     cache-mode: read
     outputs:
-      patch: ${{ steps.diff.outputs.patch }}
+      contents: ${{ steps.diff.outputs.contents }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -41,46 +41,50 @@ jobs:
           go-version-file: go.mod
       - run: make dockerflags
       - id: diff
-        run: echo "patch=$(git diff --binary dockerargs/runflags.go | base64 -w0)" >> "$GITHUB_OUTPUT"
+        run: |
+          if ! git diff --quiet dockerargs/runflags.go; then
+            echo "contents=$(base64 -w0 dockerargs/runflags.go)" >> "$GITHUB_OUTPUT"
+          fi
 
-  push:
+  commit:
     needs: generate
     if: >-
-      needs.generate.outputs.patch != '' ||
+      needs.generate.outputs.contents != '' ||
       github.event.pull_request.user.login != 'renovate[bot]'
     runs-on: ubuntu-latest
     permissions: {}
     steps:
-      # A push made with GITHUB_TOKEN does not trigger workflows, which would leave the new
-      # commit without CI.
+      # A commit made with GITHUB_TOKEN does not trigger workflows, which would leave it without CI.
       - id: token
         uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
         with:
           client-id: ${{ secrets.HOUSEKEEPER_CLIENT_ID }}
           private-key: ${{ secrets.HOUSEKEEPER_PRIVATE_KEY }}
           permission-contents: write
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          ref: ${{ github.event.pull_request.head.sha }}
-          persist-credentials: false
-      # The author is listed in Renovate's gitIgnoredAuthors, so Renovate keeps updating the branch.
-      # If the branch moved since generation, the push fails as non-fast-forward; the run for the
-      # newer commit regenerates from there.
-      - env:
-          PATCH: ${{ needs.generate.outputs.patch }}
-          TOKEN: ${{ steps.token.outputs.token }}
+      # Committing through the API, not "git push", makes GitHub sign the commit and attribute it
+      # to the App, as the main ruleset requires. The App's bot is listed in Renovate's
+      # gitIgnoredAuthors, so Renovate keeps updating the branch. If the branch moved since
+      # generation, expectedHeadOid fails the commit; the run for the newer commit regenerates.
+      - if: github.event.pull_request.user.login == 'renovate[bot]'
+        env:
+          GH_TOKEN: ${{ steps.token.outputs.token }}
+          CONTENTS: ${{ needs.generate.outputs.contents }}
           REPOSITORY: ${{ github.repository }}
           HEAD_REF: ${{ github.event.pull_request.head.ref }}
-          PR_AUTHOR: ${{ github.event.pull_request.user.login }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
-          if [[ -n "$PATCH" ]]; then
-            base64 -d <<<"$PATCH" | git apply
-            git -c user.name='github-actions[bot]' \
-              -c user.email='41898828+github-actions[bot]@users.noreply.github.com' \
-              commit -m 'chore(deps): regenerate dockerargs/runflags.go' dockerargs/runflags.go
-          fi
-          push_flags=()
-          if [[ "$PR_AUTHOR" != 'renovate[bot]' ]]; then
-            push_flags=(--dry-run)
-          fi
-          git push "${push_flags[@]}" "https://x-access-token:${TOKEN}@github.com/${REPOSITORY}.git" "HEAD:refs/heads/${HEAD_REF}"
+          jq -n \
+            --arg repository "$REPOSITORY" \
+            --arg branch "$HEAD_REF" \
+            --arg head "$HEAD_SHA" \
+            --arg contents "$CONTENTS" \
+            '{
+              query: "mutation($input: CreateCommitOnBranchInput!) { createCommitOnBranch(input: $input) { commit { oid } } }",
+              variables: {input: {
+                branch: {repositoryNameWithOwner: $repository, branchName: $branch},
+                expectedHeadOid: $head,
+                message: {headline: "chore(deps): regenerate dockerargs/runflags.go"},
+                fileChanges: {additions: [{path: "dockerargs/runflags.go", contents: $contents}]}
+              }}
+            }' |
+            gh api graphql --input -

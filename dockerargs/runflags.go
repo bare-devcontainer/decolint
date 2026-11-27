@@ -2,7 +2,7 @@
 
 package dockerargs
 
-// RunFlags is every flag "docker run" registers, as of github.com/docker/cli v29.9.3+incompatible.
+// RunFlags is every flag "docker run" registers, as of github.com/docker/cli v29.10.0+incompatible.
 // It includes the hidden and deprecated ones, which Docker still parses.
 //
 // A flag is identified by its name, never by the spelling an argv uses: "--net" is not the
